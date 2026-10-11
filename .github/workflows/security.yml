@@ -2,7 +2,7 @@ name: Security
 
 on:
   push:
-    branches: [main]
+    branches: [legacy]
   pull_request:
   schedule:
     # Four times a day, so a new advisory is noticed on the day it is published

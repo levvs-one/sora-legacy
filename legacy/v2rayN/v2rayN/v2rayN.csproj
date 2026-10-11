@@ -10,7 +10,7 @@
     <Product>Sora</Product>
     <AssemblyTitle>Sora</AssemblyTitle>
     <PackageId>sora-client</PackageId>
-    <RepositoryUrl>https://github.com/levvs-one/sora-client</RepositoryUrl>
+    <RepositoryUrl>https://github.com/levvs-one/sora-legacy</RepositoryUrl>
     <Description>Sora — клиент подключений для Windows</Description>
     <Company>Сообщество Sora</Company>
     <Copyright>Copyright © 2019-2022 v2rayN contributors; 2026 Sora contributors (GPLv3)</Copyright>

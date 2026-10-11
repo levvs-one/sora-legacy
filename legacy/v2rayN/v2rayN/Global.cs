@@ -9,12 +9,12 @@ namespace v2rayN
 
         //public const string DownloadFileName = "v2ray-windows.zip";
         public const string v2rayWebsiteUrl = @"https://www.v2fly.org/";
-        public const string AboutUrl = @"https://github.com/levvs-one/sora-client";
-        public const string UpdateUrl = @"https://github.com/levvs-one/sora-client/releases";
+        public const string AboutUrl = @"https://github.com/levvs-one/sora-legacy";
+        public const string UpdateUrl = @"https://github.com/levvs-one/sora-legacy/releases";
         public const string v2flyCoreUrl = "https://github.com/v2fly/v2ray-core/releases";
         public const string xrayCoreUrl = "https://github.com/XTLS/Xray-core/releases";
         public const string SagerNetCoreUrl = "https://github.com/SagerNet/v2ray-core/releases";
-        public const string NUrl = @"https://github.com/levvs-one/sora-client/releases";
+        public const string NUrl = @"https://github.com/levvs-one/sora-legacy/releases";
         public const string clashCoreUrl = "https://github.com/Dreamacro/clash/releases";
         public const string clashMetaCoreUrl = "https://github.com/MetaCubeX/mihomo/releases";
         public const string hysteriaCoreUrl = "https://github.com/HyNetwork/hysteria/releases";

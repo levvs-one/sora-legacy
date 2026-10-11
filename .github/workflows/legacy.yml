@@ -24,6 +24,32 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  core:
+    name: Legacy core and workflow checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: core/go.mod
+          cache: false
+      - name: Check workflows
+        run: |
+          bash <(curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/v1.7.7/scripts/download-actionlint.bash) 1.7.7
+          ./actionlint -color
+      - name: Check formatting and static errors
+        working-directory: core
+        run: |
+          test -z "$(gofmt -l .)"
+          go vet ./...
+      - name: Test the core with the race detector
+        working-directory: core
+        run: go test -race ./...
+      - uses: golangci/golangci-lint-action@v8
+        with:
+          version: v2.14.0
+          working-directory: core
+
   control-windows:
     name: Legacy RPC (${{ matrix.platform }})
     runs-on: windows-latest
