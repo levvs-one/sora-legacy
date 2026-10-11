@@ -9,6 +9,7 @@ using System.Security.Principal;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using Google.Protobuf.WellKnownTypes;
 using Newtonsoft.Json.Linq;
 using Sora.Core.V1;
 using Sora.Legacy.Control;
@@ -71,6 +72,7 @@ internal static class Program
                             }
                         }
                         language.SelectedValue = "ru";
+                        await CheckJournal(form, fields, args[0], cycle);
                         Console.WriteLine("PASS GUI cycle " + cycle + ": service, one add button, 31 real language resources");
                     }
                     catch (Exception exception) { failure = exception; }
@@ -104,5 +106,58 @@ internal static class Program
             yield return child;
             foreach (var nested in Descendants(child)) yield return nested;
         }
+    }
+
+    private static async Task CheckJournal(Form form, Dictionary<string, object> fields, string screenshots, int cycle)
+    {
+        var page = (FormsControl)fields["logsPage"]!;
+        var type = page.GetType();
+        var flags = BindingFlags.Instance | BindingFlags.NonPublic;
+        var home = (AntdUI.Button)fields["homeNavigation"]!;
+        var logs = (AntdUI.Button)fields["logsNavigation"]!;
+        var categories = (Dictionary<string, AntdUI.Button>)type.GetField("categories", flags)!.GetValue(page)!;
+        for (var i = 0; i < 12; i++)
+        {
+            logs.PerformClick();
+            categories[i % 2 == 0 ? "core" : "all"].PerformClick();
+            home.PerformClick();
+        }
+        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+        while (type.GetField("reading", flags)!.GetValue(page) != null || type.GetField("watch", flags)!.GetValue(page) != null)
+            await Task.Delay(25, deadline.Token);
+        logs.PerformClick();
+        categories["all"].PerformClick();
+        while (type.GetField("watch", flags)!.GetValue(page) == null || (bool)type.GetField("loading", flags)!.GetValue(page)!)
+            await Task.Delay(25, deadline.Token);
+        if (!page.Visible || ((Label)type.GetField("message", flags)!.GetValue(page)!).Text == "Не удалось связаться с ядром")
+            throw new Exception("The journal did not finish querying the real service after navigation races.");
+        await (Task)type.GetMethod("StopAsync")!.Invoke(page, null)!;
+        var entries = (SortedList<ulong, LogEntry>)type.GetField("entries", flags)!.GetValue(page)!;
+        var list = (ListView)type.GetField("list", flags)!.GetValue(page)!;
+        var arrive = type.GetMethod("Arrive", flags)!;
+        for (var i = 0; i < 300; i++) arrive.Invoke(page, new object[] { new LogEntry
+        { Sequence = (ulong)(1000000 + i), Time = Timestamp.FromDateTime(DateTime.UtcNow), Source = "core", Message = "Viewport test " + i } });
+        list.TopItem = list.Items[30];
+        var top = list.TopItem!.Index;
+        var anchor = entries.Keys[entries.Count - top - 1];
+        var position = list.GetItemRect(top).Y;
+        for (var i = 300; i < 450; i++) arrive.Invoke(page, new object[] { new LogEntry
+        { Sequence = (ulong)(1000000 + i), Time = Timestamp.FromDateTime(DateTime.UtcNow), Source = "core", Message = "Viewport test " + i } });
+        top = list.TopItem!.Index;
+        if (entries.Keys[entries.Count - top - 1] != anchor || list.GetItemRect(top).Y != position)
+            throw new Exception("New journal entries moved the row being read.");
+        list.TopItem = list.Items[0];
+        arrive.Invoke(page, new object[] { new LogEntry
+        { Sequence = 1000450, Time = Timestamp.FromDateTime(DateTime.UtcNow), Source = "core", Message = "Viewport test latest" } });
+        if (list.TopItem!.Index != 0) throw new Exception("The journal stopped following at the top.");
+        if (cycle == 0)
+        {
+            form.Refresh();
+            using var screenshot = new Bitmap(form.Width, form.Height);
+            form.DrawToBitmap(screenshot, new Rectangle(Point.Empty, form.Size));
+            screenshot.Save(Path.Combine(screenshots, "legacy-logs-viewport-test.png"), ImageFormat.Png);
+        }
+        home.PerformClick();
+        Console.WriteLine("PASS journal: real RPC query/watch after 12 navigation races; 150 incoming fixture rows preserve the viewport; top follows latest");
     }
 }

@@ -35,6 +35,10 @@ internal sealed class MainForm : Form
     private readonly AntdUI.Input search = new() { Dock = DockStyle.Top, Height = 44, Radius = 8 };
     private readonly System.Windows.Forms.Timer poll = new() { Interval = 1000 };
     private readonly Button orb, add, addAbove, retry, modes, apply;
+    private readonly Button homeNavigation, logsNavigation;
+    private readonly Panel mainView = new() { Dock = DockStyle.Fill };
+    private readonly LogsPage logsPage;
+    private readonly ToolTip navigationHints = new();
     private CoreConnection? core;
     private SessionRequests? requests;
     private Task? subscriptionWatch;
@@ -88,11 +92,46 @@ internal sealed class MainForm : Form
             foreach (FormsControl control in center.Controls)
             {
                 if (control == state) control.Width = width;
+                if (control == apply) control.Width = Math.Min(340, Math.Max(160, width));
                 control.Margin = new Padding(Math.Max(0, (width - control.Width) / 2), 8, 0, 8);
             }
         };
-        Controls.Add(center);
-        Controls.Add(left);
+        mainView.Controls.Add(center);
+        mainView.Controls.Add(left);
+        logsPage = new LogsPage(text, body, strong) { Dock = DockStyle.Fill, Visible = false };
+        var content = new Panel { Dock = DockStyle.Fill };
+        content.Controls.Add(mainView);
+        content.Controls.Add(logsPage);
+        var navigation = new FlowLayoutPanel { Dock = DockStyle.Left, Width = 64, BackColor = Color.White,
+            FlowDirection = FlowDirection.TopDown, WrapContents = false, Padding = new Padding(10, 16, 10, 8) };
+        navigation.Controls.Add(new PictureBox { Width = 44, Height = 44, Image = text.Image("logo.png"), SizeMode = PictureBoxSizeMode.Zoom,
+            Padding = new Padding(8), Margin = new Padding(0, 0, 0, 20) });
+        homeNavigation = MakeButton("home", 44);
+        homeNavigation.IconSvg = Strings.Read("Icons.house-bold.svg");
+        logsNavigation = MakeButton("logs", 44);
+        logsNavigation.IconSvg = Strings.Read("Icons.terminal-window-bold.svg");
+        foreach (var button in new[] { homeNavigation, logsNavigation })
+        {
+            button.IconSize = new Size(22, 22);
+            navigation.Controls.Add(button);
+        }
+        homeNavigation.Click += async (_, _) => await Run(async () =>
+        {
+            logsPage.Visible = false;
+            mainView.Visible = true;
+            await logsPage.StopAsync();
+            ApplyText();
+        });
+        logsNavigation.Click += async (_, _) => await Run(async () =>
+        {
+            mainView.Visible = false;
+            logsPage.Visible = true;
+            logsPage.BringToFront();
+            ApplyText();
+            await logsPage.LoadAsync(core);
+        });
+        Controls.Add(content);
+        Controls.Add(navigation);
         Shown += async (_, _) => await Run(OpenCore);
         poll.Tick += async (_, _) =>
         {
@@ -146,6 +185,15 @@ internal sealed class MainForm : Form
         foreach (var button in new[] { add, addAbove, retry, modes, apply }) button.Text = text[(string)button.Tag];
         search.PlaceholderText = text["search"];
         state.Font = heading;
+        foreach (var button in new[] { homeNavigation, logsNavigation })
+        {
+            button.Text = "";
+            button.AccessibleName = text[(string)button.Tag];
+            navigationHints.SetToolTip(button, button.AccessibleName);
+        }
+        homeNavigation.BackColor = mainView.Visible ? Field : Color.White;
+        logsNavigation.BackColor = logsPage.Visible ? Field : Color.White;
+        logsPage.ApplyText();
         RenderStatus();
         RenderSubscriptions();
     }
@@ -190,8 +238,8 @@ internal sealed class MainForm : Form
         retry.Visible = false;
         error.Text = "";
         poll.Start();
-        RenderSubscriptions();
-        RenderStatus();
+        ApplyText();
+        if (logsPage.Visible) await logsPage.LoadAsync(connected);
     }
 
     private async Task ObserveSubscriptionWatch(Task watch, CoreConnection connected)
@@ -207,6 +255,7 @@ internal sealed class MainForm : Form
         orb.Enabled = false;
         error.Text = text["errCore"];
         retry.Visible = true;
+        await logsPage.LoadAsync(null);
         if (worker != null) await worker.StopAsync();
         connected.Dispose();
     }
@@ -436,6 +485,7 @@ internal sealed class MainForm : Form
         lifetime.Cancel();
         try
         {
+            await logsPage.StopAsync();
             if (requests != null) await requests.StopAsync();
             if (subscriptionWatch != null) await subscriptionWatch;
         }
@@ -453,6 +503,7 @@ internal sealed class MainForm : Form
         base.Dispose(disposing);
         if (!disposing) return;
         poll.Dispose();
+        navigationHints.Dispose();
         lifetime.Dispose();
         text.Dispose();
         body.Dispose();
