@@ -72,6 +72,7 @@ internal static class Program
                             }
                         }
                         language.SelectedValue = "ru";
+                        await CheckConnectionIntent(form, formType);
                         await CheckJournal(form, fields, args[0], cycle);
                         Console.WriteLine("PASS GUI cycle " + cycle + ": service, one add button, 31 real language resources");
                     }
@@ -106,6 +107,28 @@ internal static class Program
             yield return child;
             foreach (var nested in Descendants(child)) yield return nested;
         }
+    }
+
+    private static async Task CheckConnectionIntent(Form form, System.Type type)
+    {
+        var flags = BindingFlags.Instance | BindingFlags.NonPublic;
+        var desired = type.GetField("desiredConnected", flags)!;
+        var pending = type.GetField("connectionPending", flags)!;
+        var read = type.GetMethod("ReadStatus", flags)!;
+        desired.SetValue(form, true);
+        pending.SetValue(form, false);
+        await (Task)read.Invoke(form, null)!;
+        if ((bool)desired.GetValue(form)!) throw new Exception("The disconnected service left a stale disconnect intent in the connection button.");
+        desired.SetValue(form, true);
+        pending.SetValue(form, true);
+        try
+        {
+            await (Task)read.Invoke(form, null)!;
+            if (!(bool)desired.GetValue(form)!) throw new Exception("Status polling cancelled a pending connection intent.");
+        }
+        finally { pending.SetValue(form, false); }
+        await (Task)read.Invoke(form, null)!;
+        Console.WriteLine("PASS connection intent: the real service clears stale disconnected intent and preserves a pending connection");
     }
 
     private static async Task CheckJournal(Form form, Dictionary<string, object> fields, string screenshots, int cycle)

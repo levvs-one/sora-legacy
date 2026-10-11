@@ -263,11 +263,18 @@ internal sealed class MainForm : Form
     private async Task ReadStatus()
     {
         var connected = core ?? throw new InvalidOperationException("core.error.unavailable");
+        var current = revision;
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);
         timeout.CancelAfter(TimeSpan.FromSeconds(5));
         var answer = await connected.CallAsync(new GetStatusRequest { ApiVersion = connected.Version }, GetStatusResponse.Parser, timeout.Token);
+        if (closing || current != revision || !ReferenceEquals(core, connected)) return;
         Check(answer.Error);
         status = answer.Status;
+        if (!connectionPending)
+        {
+            desiredConnected = status?.Connection.Value is ConnectionStateValue.Connected or ConnectionStateValue.Connecting or ConnectionStateValue.Reconnecting;
+            if (!desiredConnected) apply.Visible = false;
+        }
         RenderStatus();
     }
 
