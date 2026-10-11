@@ -1097,7 +1097,7 @@ namespace v2rayN.Forms
                 {
                     Location = new Point(176, 45),
                     Size = new Size(244, 42),
-                    Text = "github.com/levvs-one/sora-client",
+                    Text = "github.com/levvs-one/sora-legacy",
                     LinkColor = HappText,
                     ActiveLinkColor = HappMuted,
                     VisitedLinkColor = HappText,
@@ -1108,7 +1108,7 @@ namespace v2rayN.Forms
                     Cursor = Cursors.Hand,
                     AccessibleName = "Открыть исходный код Sora на GitHub"
                 };
-                sourceValue.LinkClicked += (sender, args) => OpenSoraCommunityLink("https://github.com/levvs-one/sora-client");
+                sourceValue.LinkClicked += (sender, args) => OpenSoraCommunityLink("https://github.com/levvs-one/sora-legacy");
                 var telegramDivider = new Panel { Location = new Point(0, 87), Size = new Size(436, 1), BackColor = Color.FromArgb(76, 76, 80) };
                 var telegramName = new Label { Location = new Point(16, 89), Size = new Size(160, 42), Text = "Telegram", ForeColor = HappText, TextAlign = ContentAlignment.MiddleLeft, Font = new Font("Segoe UI", 9F) };
                 var telegramValue = new LinkLabel
