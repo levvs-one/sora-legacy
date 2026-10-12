@@ -28,8 +28,8 @@ jobs:
     name: Legacy core and workflow checks
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version-file: core/go.mod
           cache: false
@@ -45,7 +45,7 @@ jobs:
       - name: Test the core with the race detector
         working-directory: core
         run: go test -race ./...
-      - uses: golangci/golangci-lint-action@v8
+      - uses: golangci/golangci-lint-action@v9
         with:
           version: v2.14.0
           working-directory: core
@@ -63,12 +63,12 @@ jobs:
           - arch: amd64
             platform: x64
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version: 1.26.9
           cache: false
-      - uses: actions/setup-dotnet@v5
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 8.0.424
       - name: Build verified Windows 7 SDK
@@ -149,12 +149,12 @@ jobs:
             & $core --uninstall-service
             if ($LASTEXITCODE -ne 0) { throw 'Legacy service removal failed' }
           }
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@v7
         with:
           name: sora-legacy-core-${{ matrix.platform }}
           path: legacy/artifacts/sora-legacy-core-${{ matrix.platform }}.exe
           if-no-files-found: error
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: sora-legacy-client-development-${{ matrix.platform }}
@@ -182,8 +182,8 @@ jobs:
           - target: win11
             executable: sora_win11.exe
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-dotnet@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 8.0.424
       - name: Restore
@@ -208,7 +208,7 @@ jobs:
             & $powershell -NoProfile -Command '$parseErrors = $null; [System.Management.Automation.Language.Parser]::ParseFile($env:SORA_QA_SCRIPT, [ref]$null, [ref]$parseErrors) | Out-Null; if ($parseErrors.Count) { $parseErrors | Out-String | Write-Error; exit 1 }'
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@v7
         with:
           name: sora-legacy-${{ matrix.target }}-x86
           path: legacy\v2rayN\v2rayN\bin\x86\Release\net48\win7-x86
