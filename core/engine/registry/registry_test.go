@@ -2,6 +2,8 @@ package registry
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/pem"
 	"net/http"
 	"net/http/httptest"
@@ -198,5 +200,62 @@ func TestXrayBridgeRequiresTheInstalledPacketEngineBeforeConstruction(t *testing
 	}
 	if p.Tun.Stack != "mips" {
 		t.Fatal("factory mutated the caller's TUN stack")
+	}
+}
+
+// TestVerifyTpwsChecksTheManifestWhenItListsTpws is the regression test for
+// R5-LG-1-3: zapret's proxy used to skip the SHA256SUMS check the engine
+// binaries get. A manifest that lists tpws with a wrong digest must
+// disqualify the binary; a manifest that does not cover tpws keeps the old
+// behavior so separately-shipped zapret keeps working.
+func TestVerifyTpwsChecksTheManifestWhenItListsTpws(t *testing.T) {
+	write := func(t *testing.T, dir, name, content string, executable bool) string {
+		t.Helper()
+		path := filepath.Join(dir, name)
+		perm := os.FileMode(0o644)
+		if executable {
+			perm = 0o755
+		}
+		if err := os.WriteFile(path, []byte(content), perm); err != nil {
+			t.Fatal(err)
+		}
+		return path
+	}
+	sum := func(raw []byte) string {
+		h := sha256.Sum256(raw)
+		return hex.EncodeToString(h[:])
+	}
+	for _, tc := range []struct {
+		name     string
+		manifest string
+		wantOK   bool
+	}{
+		{"no manifest", "", true},
+		{"manifest without tpws", "0000000000000000000000000000000000000000000000000000000000000000 *sing-box\n", true},
+		{"manifest lists tpws, digest matches", "match", true},
+		{"manifest lists tpws, digest mismatch", "0000000000000000000000000000000000000000000000000000000000000000 *tpws\n", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			candidate := write(t, dir, "tpws", "zapret-binary", true)
+			manifest := tc.manifest
+			if manifest == "match" {
+				raw, err := os.ReadFile(candidate)
+				if err != nil {
+					t.Fatal(err)
+				}
+				manifest = sum(raw) + " *tpws\n"
+			}
+			if manifest != "" {
+				write(t, dir, "SHA256SUMS", manifest, false)
+			}
+			got := verifyTpws(dir, candidate)
+			if tc.wantOK && got != candidate {
+				t.Errorf("verifyTpws() rejected a usable tpws")
+			}
+			if !tc.wantOK && got != "" {
+				t.Errorf("verifyTpws() accepted a tpws with a mismatched digest")
+			}
+		})
 	}
 }

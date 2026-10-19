@@ -71,7 +71,7 @@ func Discover(ctx context.Context, enginesDir string, base supervise.Config) *Re
 	if enginesDir != "" {
 		candidate := filepath.Join(enginesDir, "tpws")
 		if info, err := os.Stat(candidate); err == nil && info.Mode().IsRegular() && info.Mode().Perm()&0o111 != 0 { //nolint:gosec // the engines directory is set by the service, not by a client
-			r.tpws = candidate
+			r.tpws = verifyTpws(enginesDir, candidate)
 		}
 	}
 	for _, kind := range engine.DefaultPreference {
@@ -90,6 +90,27 @@ func Discover(ctx context.Context, enginesDir string, base supervise.Config) *Re
 		r.availability = append(r.availability, engine.Availability{Kind: kind, Path: b.Path, Version: b.Version, BuildTags: b.BuildTags, Usable: true})
 	}
 	return r
+}
+
+// verifyTpws returns candidate when zapret's proxy may be trusted. Engine
+// binaries are digest-checked against the shipped SHA256SUMS manifest, and
+// tpws gets the same treatment when the manifest lists it. A manifest that
+// does not cover tpws (the packager ships zapret separately) keeps the
+// previous behavior instead of disabling bypass; a listed digest that does
+// not match disqualifies the binary.
+func verifyTpws(enginesDir, candidate string) string {
+	digests, err := supervise.LoadDigests(enginesDir)
+	if err != nil {
+		return candidate
+	}
+	expected, ok := digests["tpws"]
+	if !ok {
+		return candidate
+	}
+	if err := (supervise.Binary{Kind: "tpws", Path: candidate}).VerifyDigest(expected); err != nil {
+		return ""
+	}
+	return candidate
 }
 
 // Availability returns discovery results for all known engines.
