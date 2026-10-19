@@ -94,9 +94,13 @@ func New(opts Options) *Fetcher {
 	}
 	client := opts.HTTPClient
 	if client == nil {
+		// Bound each dial by the fetcher's timeout: a fixed dial budget
+		// would cut slow networks short even when the caller asked for
+		// more time, and would outlive a shorter requested timeout.
+		dial := dialChecked(opts.Timeout)
 		transport := &http.Transport{
 			Proxy:                 http.ProxyFromEnvironment,
-			DialContext:           dialChecked,
+			DialContext:           dial,
 			ForceAttemptHTTP2:     true,
 			MaxIdleConns:          8,
 			IdleConnTimeout:       30 * time.Second,
@@ -110,7 +114,7 @@ func New(opts Options) *Fetcher {
 				// the transport's own TLS handshake: proxies, HTTP/2
 				// and certificate verification keep working untouched.
 				transport.DialContext = func(ctx context.Context, network, address string) (net.Conn, error) {
-					conn, err := dialChecked(ctx, network, address)
+					conn, err := dial(ctx, network, address)
 					if err != nil {
 						return nil, err
 					}
@@ -361,26 +365,40 @@ func publicAddr(addr netip.Addr) bool {
 
 // specialUse mirrors the prober's blocklist; the two must stay identical.
 var specialUse = []netip.Prefix{
+	netip.MustParsePrefix("0.0.0.0/8"),
 	netip.MustParsePrefix("100.64.0.0/10"),
 	netip.MustParsePrefix("192.0.0.0/24"),
 	netip.MustParsePrefix("192.0.2.0/24"),
 	netip.MustParsePrefix("198.18.0.0/15"),
 	netip.MustParsePrefix("198.51.100.0/24"),
 	netip.MustParsePrefix("203.0.113.0/24"),
+	netip.MustParsePrefix("240.0.0.0/4"),
 	netip.MustParsePrefix("2001:db8::/32"),
 }
 
-// dialChecked rejects private resolved addresses unless the subscription is
-// local. Checking the actual dial target after DNS prevents rebinding bypasses.
-func dialChecked(ctx context.Context, network, address string) (net.Conn, error) {
-	allowPrivate, _ := ctx.Value(privateKey{}).(bool)
-	dialer := &net.Dialer{
-		Timeout: 30 * time.Second,
+// dialChecked returns the dial function for subscription fetches: it rejects
+// private resolved addresses unless the subscription is local, and bounds each
+// dial by the fetcher's timeout. Checking the actual dial target after DNS
+// prevents rebinding bypasses.
+func dialChecked(timeout time.Duration) func(ctx context.Context, network, address string) (net.Conn, error) {
+	if timeout <= 0 {
+		timeout = DefaultTimeout
+	}
+	return func(ctx context.Context, network, address string) (net.Conn, error) {
+		allowPrivate, _ := ctx.Value(privateKey{}).(bool)
+		return checkedDialer(timeout, allowPrivate).DialContext(ctx, network, address)
+	}
+}
+
+// checkedDialer builds one dialer with the private-target policy baked into
+// its control hook.
+func checkedDialer(timeout time.Duration, allowPrivate bool) *net.Dialer {
+	return &net.Dialer{
+		Timeout: timeout,
 		Control: func(_, address string, _ syscall.RawConn) error {
 			return checkDial(allowPrivate, address)
 		},
 	}
-	return dialer.DialContext(ctx, network, address)
 }
 
 // checkDial validates one resolved address using dialChecked's policy.

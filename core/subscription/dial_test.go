@@ -1,6 +1,10 @@
 package subscription
 
-import "testing"
+import (
+	"context"
+	"testing"
+	"time"
+)
 
 func TestAFetchFromTheInternetNeverReachesALocalAddress(t *testing.T) {
 	for _, address := range []string{"127.0.0.1:443", "[::1]:443", "10.0.0.5:443", "192.168.1.1:443", "169.254.169.254:80", "[fe80::1]:443", "0.0.0.0:443",
@@ -27,5 +31,25 @@ func TestALocalSubscriptionIsRecognised(t *testing.T) {
 		if got := isPrivateHost(ctx, host); got != want {
 			t.Errorf("isPrivateHost(%q) = %v, want %v", host, got, want)
 		}
+	}
+}
+
+func TestTheDialerHonoursTheFetcherTimeout(t *testing.T) {
+	for _, timeout := range []time.Duration{time.Second, 42 * time.Second} {
+		if got := checkedDialer(timeout, false).Timeout; got != timeout {
+			t.Errorf("checkedDialer(%v).Timeout = %v", timeout, got)
+		}
+	}
+}
+
+func TestADialIsBoundByTheFetcherTimeout(t *testing.T) {
+	// 10.255.255.1 never answers: the dial must die on the 300ms budget,
+	// not on the old fixed 30s dial timeout.
+	dial := dialChecked(300 * time.Millisecond)
+	ctx := context.WithValue(t.Context(), privateKey{}, true)
+	start := time.Now()
+	_, _ = dial(ctx, "tcp", "10.255.255.1:443")
+	if elapsed := time.Since(start); elapsed > 5*time.Second {
+		t.Errorf("a dial with a 300ms budget took %v", elapsed)
 	}
 }
