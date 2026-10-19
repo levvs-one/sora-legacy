@@ -191,6 +191,8 @@ type SecretStore interface {
 type redactorCache struct {
 	mu    sync.Mutex
 	byRef map[string]*engine.Redactor
+	// order tracks insertion for oldest-first eviction.
+	order []string
 }
 
 // Config configures the control plane. Only Sessions is required; missing
@@ -381,17 +383,24 @@ func (s *Server) mask(plan *engine.Plan) func(string) string {
 }
 
 // put caches a session redactor for responses after the plan is discarded.
+// When the cache is full the oldest entry is evicted; unlike the previous
+// clear-everything behavior, the current session's redactor always survives.
 func (c *redactorCache) put(sessionID string, redactor *engine.Redactor) {
 	if sessionID == "" {
 		return
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if len(c.byRef) >= maxCachedRedactors {
-		// Clear the cache at the bound to limit memory across repeated
-		// sessions.
-		clear(c.byRef)
+	if _, ok := c.byRef[sessionID]; ok {
+		c.byRef[sessionID] = redactor
+		return
 	}
+	for len(c.byRef) >= maxCachedRedactors && len(c.order) > 0 {
+		oldest := c.order[0]
+		c.order = c.order[1:]
+		delete(c.byRef, oldest)
+	}
+	c.order = append(c.order, sessionID)
 	c.byRef[sessionID] = redactor
 }
 
@@ -407,6 +416,19 @@ func (c *redactorCache) drop(sessionID string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	delete(c.byRef, sessionID)
+	for i, id := range c.order {
+		if id == sessionID {
+			c.order = append(c.order[:i], c.order[i+1:]...)
+			break
+		}
+	}
+}
+
+// sessions lists cached session identifiers for maintenance.
+func (c *redactorCache) sessions() []string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return append([]string(nil), c.order...)
 }
 
 // maxCachedRedactors limits memory usage across sessions in a long-running
@@ -529,6 +551,14 @@ func (s *Server) Connect(ctx context.Context, req *corev1.ConnectRequest) (*core
 	if err != nil {
 		return &corev1.ConnectResponse{Error: toWire(err, mask, id)}, nil
 	}
+	// A new session replaces the previous one: its redactor no longer has
+	// live data to mask, so forget it instead of letting it linger in the
+	// cache.
+	for _, cached := range s.redactors.sessions() {
+		if cached != started.Status().SessionID {
+			s.redactors.drop(cached)
+		}
+	}
 	return &corev1.ConnectResponse{
 		Status: &corev1.SessionStatus{
 			Connection:        wireStatus(started.Status()),
@@ -557,14 +587,20 @@ func (s *Server) Disconnect(ctx context.Context, req *corev1.DisconnectRequest) 
 	}
 	ctx, cancel := requestDeadline(ctx, disconnectTimeout)
 	defer cancel()
+	// Capture the doomed session's ID before Disconnect clears it, so its
+	// redactor is forgotten even if the status is already reset.
+	doomed := ""
+	if current := s.sessions.Current(); current != nil {
+		doomed = current.ID()
+	}
 	if err := s.sessions.Disconnect(ctx); err != nil {
 		return &corev1.DisconnectResponse{
 			Status: &corev1.SessionStatus{Connection: wireStatus(s.sessions.Status())},
 			Error:  toWire(err, nil, id),
 		}, nil
 	}
-	if finished := s.sessions.Status().SessionID; finished != "" {
-		s.redactors.drop(finished)
+	if doomed != "" {
+		s.redactors.drop(doomed)
 	}
 	return &corev1.DisconnectResponse{
 		Status: &corev1.SessionStatus{Connection: wireStatus(s.sessions.Status())},
