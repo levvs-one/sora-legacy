@@ -83,6 +83,25 @@ func TestSecretsAndWarnings(t *testing.T) {
 	}
 }
 
+// TestRedactorMasksServerIdentifiers is the regression test for LEGACY-M3:
+// the shared redactor must mask server hosts and host:port pairs from engine
+// logs, not just credentials, because diagnostics archives claim
+// values_masked.
+func TestRedactorMasksServerIdentifiers(t *testing.T) {
+	plan := validPlan()
+	// Seed exactly like Supervisor.Apply does.
+	redactor := NewRedactor()
+	redactor.Add(plan.Secrets()...)
+	redactor.Add(plan.Identifiers()...)
+	line := "xray: dialing a.example.com:443 via b.example.com:8443"
+	masked := redactor.String(line)
+	for _, secret := range []string{"a.example.com", "a.example.com:443", "b.example.com", "b.example.com:8443"} {
+		if strings.Contains(masked, secret) {
+			t.Errorf("server identifier %q survived redaction: %q", secret, masked)
+		}
+	}
+}
+
 func TestSelectEnginePicksByCapability(t *testing.T) {
 	plan := validPlan()
 	plan.Outbounds = append(plan.Outbounds, Outbound{

@@ -307,7 +307,11 @@ func (s *Supervisor) Apply(ctx context.Context, p *engine.Plan) error {
 		return s.redactor.Err(err)
 	}
 	s.mu.Lock()
+	// Seed both secrets and server identifiers: engine logs name hosts and
+	// host:port pairs, and the diagnostics archive claims values_masked, so
+	// identifiers must be masked like credentials.
 	s.redactor.Add(p.Secrets()...)
+	s.redactor.Add(p.Identifiers()...)
 	s.plan = p
 	s.stopping = false
 	proc, rt := s.proc, s.rt
