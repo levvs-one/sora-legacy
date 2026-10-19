@@ -57,6 +57,35 @@ func TestLimit(t *testing.T) {
 		t.Fatalf("%#v", r.Report)
 	}
 }
+
+// TestLimitAppliesToEveryFormat is the regression test for LEGACY-M5: the
+// item limit must cap JSON, YAML and WireGuard inputs, not just link lists.
+func TestLimitAppliesToEveryFormat(t *testing.T) {
+	jsonPayload := `[{"type":"vless","server":"a.example.com","port":443,"uuid":"123e4567-e89b-12d3-a456-426614174000"},` +
+		`{"type":"vless","server":"b.example.com","port":443,"uuid":"123e4567-e89b-12d3-a456-426614174001"}]`
+	yamlPayload := "proxies:\n" +
+		"  - {name: a, type: vless, server: a.example.com, port: 443, uuid: 123e4567-e89b-12d3-a456-426614174000}\n" +
+		"  - {name: b, type: vless, server: b.example.com, port: 443, uuid: 123e4567-e89b-12d3-a456-426614174001}\n"
+	wgPayload := "[Interface]\nPrivateKey = aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa=\n" +
+		"[Peer]\nPublicKey = bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb=\nEndpoint = a.example.com:51820\n" +
+		"[Peer]\nPublicKey = ccccccccccccccccccccccccccccccccccccccccccc=\nEndpoint = b.example.com:51820\n"
+	for name, payload := range map[string]string{"json": jsonPayload, "yaml": yamlPayload, "wireguard": wgPayload} {
+		r, err := (LinkParser{MaxItems: 1}).Parse([]byte(payload))
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if name == "wireguard" {
+			if len(r.Servers) != 1 || len(r.Servers[0].Peers) > 1 {
+				t.Errorf("%s: peers not capped: %+v", name, r.Servers)
+			}
+		} else if len(r.Servers) > 1 {
+			t.Errorf("%s: %d servers accepted with MaxItems=1", name, len(r.Servers))
+		}
+		if r.Report.Unsupported == 0 {
+			t.Errorf("%s: excess items were not reported as unsupported: %#v", name, r.Report)
+		}
+	}
+}
 func FuzzDetect(f *testing.F) {
 	f.Add([]byte("vless://x.example:443"))
 	f.Fuzz(func(_ *testing.T, b []byte) { _, _ = (ImportDetector{}).Detect(b) })

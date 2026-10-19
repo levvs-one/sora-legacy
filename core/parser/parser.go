@@ -607,7 +607,12 @@ func (p LinkParser) parseJSON(b []byte, f Format) (ImportResult, error) {
 	if m, ok := v.(map[string]any); ok && isXrayConfig(m) {
 		items = []any{m}
 	}
-	for _, it := range items {
+	for i, it := range items {
+		if len(r.Servers) >= p.limit() {
+			r.Report.Unsupported++
+			r.Report.UnsupportedItems = append(r.Report.UnsupportedItems, ItemReason{i, "item limit exceeded"})
+			continue
+		}
 		m, ok := it.(map[string]any)
 		if !ok {
 			continue
@@ -724,7 +729,12 @@ func (p LinkParser) parseYAML(b []byte) (ImportResult, error) {
 		return ImportResult{Format: FormatClash}, ErrInvalid
 	}
 	r := ImportResult{Format: FormatClash}
-	for _, m := range root.Proxies {
+	for i, m := range root.Proxies {
+		if len(r.Servers) >= p.limit() {
+			r.Report.Unsupported++
+			r.Report.UnsupportedItems = append(r.Report.UnsupportedItems, ItemReason{i, "item limit exceeded"})
+			continue
+		}
 		o, e := mapJSONSpec(m, "")
 		if e != nil {
 			r.Report.Invalid++
@@ -740,11 +750,16 @@ func (p LinkParser) parseWG(s string) (ImportResult, error) {
 	o := OutboundSpec{Protocol: "wireguard", Transport: "udp", Options: map[string]string{}}
 	section := ""
 	var peer WireGuardPeer
+	r := ImportResult{Format: FormatWireGuard}
 	for _, line := range strings.Split(s, "\n") {
 		line = strings.TrimSpace(line)
 		if strings.HasPrefix(line, "[") {
 			if section == "[peer]" {
-				o.Peers = append(o.Peers, peer)
+				if len(o.Peers) >= p.limit() {
+					r.Report.Unsupported++
+				} else {
+					o.Peers = append(o.Peers, peer)
+				}
 				peer = WireGuardPeer{}
 			}
 			section = strings.ToLower(line)
@@ -780,10 +795,16 @@ func (p LinkParser) parseWG(s string) (ImportResult, error) {
 		}
 	}
 	if section == "[peer]" {
-		o.Peers = append(o.Peers, peer)
+		if len(o.Peers) >= p.limit() {
+			r.Report.Unsupported++
+		} else {
+			o.Peers = append(o.Peers, peer)
+		}
 	}
 	if e := o.validate(); e != nil {
 		return ImportResult{Format: FormatWireGuard}, e
 	}
-	return ImportResult{Format: FormatWireGuard, Servers: []OutboundSpec{o}, Report: ImportReport{Imported: 1}}, nil
+	r.Servers = []OutboundSpec{o}
+	r.Report.Imported = 1
+	return r, nil
 }
