@@ -233,9 +233,6 @@ func applyTLS(px *proxy, o engine.Outbound) error {
 	if len(o.TLS.ALPN) > 0 {
 		px.ALPN = o.TLS.ALPN
 	}
-	if o.TLS.Fingerprint != "" {
-		px.Fingerprint = o.TLS.Fingerprint
-	}
 	if o.TLS.Insecure {
 		skip := true
 		px.SkipCertVerify = &skip
@@ -244,7 +241,12 @@ func applyTLS(px *proxy, o engine.Outbound) error {
 		if o.TLS.RealityPublicKey == "" {
 			return fmt.Errorf("mihomo: outbound %s uses reality without a public key", o.ID)
 		}
+		// REALITY only works behind a uTLS fingerprint; default to chrome
+		// like the sing-box and Xray renderers do.
+		px.Fingerprint = orDefault(o.TLS.Fingerprint, "chrome")
 		px.Reality = &reality{PublicKey: o.TLS.RealityPublicKey, ShortID: o.TLS.RealityShortID}
+	} else if o.TLS.Fingerprint != "" {
+		px.Fingerprint = o.TLS.Fingerprint
 	}
 	return nil
 }

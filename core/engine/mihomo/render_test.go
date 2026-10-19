@@ -324,3 +324,69 @@ func TestEveryBuiltInTargetRenders(t *testing.T) {
 		}
 	}
 }
+
+// TestRenderRealityForcesAClientFingerprint is the regression test for the
+// mihomo REALITY gap: sing-box and Xray fall back to the chrome uTLS
+// fingerprint for REALITY, while mihomo rendered reality-opts without any
+// client-fingerprint, leaving REALITY without the uTLS handshake it needs.
+func TestRenderRealityForcesAClientFingerprint(t *testing.T) {
+	reality := func(fp string) *engine.Plan {
+		p := testPlan()
+		p.Outbounds[0] = engine.Outbound{
+			ID: "srv-1", Name: "Reality 01", Protocol: engine.ProtocolVLESS,
+			Server: "re.example.com", Port: 443, UUID: "11111111-2222-3333-4444-555555555555",
+			TLS: engine.TLS{Enabled: true, ServerName: "www.example.com", Fingerprint: fp,
+				Reality: true, RealityPublicKey: "QUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVo"},
+		}
+		p.Groups = []engine.Group{{Name: "sel", Type: engine.GroupSelect, Outbounds: []string{"srv-1"}}}
+		p.Rules = []engine.Rule{{Type: engine.RuleMatchAll, Target: "srv-1"}}
+		return p
+	}
+	fingerprintOf := func(t *testing.T, out string) (string, bool) {
+		t.Helper()
+		var cfg struct {
+			Proxies []map[string]any `yaml:"proxies"`
+		}
+		if err := yaml.Unmarshal([]byte(out), &cfg); err != nil {
+			t.Fatal(err)
+		}
+		for _, px := range cfg.Proxies {
+			if px["name"] == "Reality_01" {
+				fp, ok := px["client-fingerprint"].(string)
+				return fp, ok
+			}
+		}
+		t.Fatal("reality proxy is missing from the rendered config")
+		return "", false
+	}
+
+	// Positive: no fingerprint in the plan still renders one for REALITY.
+	out, err := Render(reality(""), testRuntime(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fp, ok := fingerprintOf(t, out); !ok || fp != "chrome" {
+		t.Errorf("REALITY without a fingerprint must default to chrome, got %q (present=%v)", fp, ok)
+	}
+
+	// Negative: an explicit fingerprint wins over the default.
+	out, err = Render(reality("firefox"), testRuntime(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fp, ok := fingerprintOf(t, out); !ok || fp != "firefox" {
+		t.Errorf("an explicit REALITY fingerprint must be kept, got %q (present=%v)", fp, ok)
+	}
+
+	// Negative: plain TLS without REALITY and without a fingerprint stays
+	// fingerprint-free.
+	p := reality("")
+	p.Outbounds[0].TLS.Reality = false
+	out, err = Render(p, testRuntime(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fp, ok := fingerprintOf(t, out); ok {
+		t.Errorf("plain TLS must not gain a client-fingerprint, got %q", fp)
+	}
+}
