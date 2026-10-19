@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Drawing;
@@ -900,6 +900,13 @@ namespace v2rayN.Forms
                 ConfigHandler.SaveConfig(ref config, false);
                 UI.ShowWarning("TUN не включён: запрос прав администратора отменён.");
             }
+            catch (Exception exception)
+            {
+                config.soraReconnectOnStart = false;
+                ConfigHandler.SaveConfig(ref config, false);
+                UI.ShowWarning("Не удалось перезапустить приложение с правами администратора: " + exception.Message);
+            }
+        }
 
         /// <summary>
         /// LEGACY-H2: каталог приложения доступен для записи текущему пользователю
@@ -917,13 +924,6 @@ namespace v2rayN.Forms
             catch
             {
                 return false;
-            }
-        }
-            catch (Exception exception)
-            {
-                config.soraReconnectOnStart = false;
-                ConfigHandler.SaveConfig(ref config, false);
-                UI.ShowWarning("Не удалось перезапустить приложение с правами администратора: " + exception.Message);
             }
         }
 
