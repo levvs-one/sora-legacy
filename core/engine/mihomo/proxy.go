@@ -57,6 +57,18 @@ func buildProxy(o engine.Outbound) (proxy, error) {
 		px.Type = "tuic"
 		px.UUID = o.UUID
 		px.Password = o.Password
+	case engine.ProtocolAnyTLS:
+		// AnyTLS mandates TLS on the wire; the plan carries the SNI and
+		// the uTLS client fingerprint in TLS. Stream transports do not
+		// apply to it.
+		px.Type = "anytls"
+		px.Password = o.Password
+		if err := applyTLS(&px, o); err != nil {
+			return proxy{}, err
+		}
+		tls := true
+		px.TLS = &tls
+		return px, nil
 	case engine.ProtocolWireGuard:
 		px.Type = "wireguard"
 		px.PrivateKey = o.PrivateKey
