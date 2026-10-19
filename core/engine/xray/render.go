@@ -129,10 +129,11 @@ func sessionInbounds(p *engine.Plan, rt supervise.Runtime) []obj {
 	if p.Tun.Enabled {
 		// Xray creates TUN with default MTU 1500 when unset; Route
 		// installs routes. Sniffing recovers domain names for
-		// packet-based routing rules.
+		// packet-based routing rules. An unset MTU is omitted so the
+		// engine default applies instead of a literal zero.
 		inbounds = append(inbounds, obj{
 			"tag": tagTun, "protocol": "tun",
-			"settings": obj{"name": orDefault(p.Tun.DeviceName, engine.TunDevice), "MTU": p.Tun.MTU},
+			"settings": obj{"name": orDefault(p.Tun.DeviceName, engine.TunDevice)}.set("MTU", p.Tun.MTU),
 			"sniffing": obj{"enabled": true, "destOverride": []string{"http", "tls", "quic"}, "routeOnly": true},
 		})
 	}

@@ -49,8 +49,8 @@ func (t Tun) validate() error {
 	default:
 		errs = append(errs, fmt.Errorf("tun: unknown stack %q", t.Stack))
 	}
-	if t.MTU != 0 && (t.MTU < 576 || t.MTU > 1500) {
-		errs = append(errs, fmt.Errorf("tun: mtu %d out of range 576..1500", t.MTU))
+	if t.MTU != 0 && (t.MTU < 576 || t.MTU > 9000) {
+		errs = append(errs, fmt.Errorf("tun: mtu %d out of range 576..9000", t.MTU))
 	}
 	errs = append(errs, validateDisplayName("tun", t.DeviceName))
 	return errors.Join(errs...)

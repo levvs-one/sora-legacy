@@ -229,3 +229,39 @@ func TestEveryBuiltInTargetRenders(t *testing.T) {
 		}
 	}
 }
+
+func TestRenderTunOmitsUnsetMTU(t *testing.T) {
+	tunMTU := func(mtu int) (any, bool) {
+		p := enginetest.Plan(engine.ProtocolDirect)
+		p.Tun = engine.Tun{Enabled: true, MTU: mtu}
+		raw, err := Render(p, testRuntime, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var cfg struct {
+			Inbounds []map[string]any `json:"inbounds"`
+		}
+		if err := json.Unmarshal(raw, &cfg); err != nil {
+			t.Fatal(err)
+		}
+		for _, in := range cfg.Inbounds {
+			if in["tag"] != tagTun {
+				continue
+			}
+			settings, _ := in["settings"].(map[string]any)
+			v, ok := settings["MTU"]
+			return v, ok
+		}
+		t.Fatal("tun inbound is missing from the rendered config")
+		return nil, false
+	}
+	// Negative: an unset MTU must be omitted so Xray applies its own
+	// default instead of receiving a literal zero.
+	if v, ok := tunMTU(0); ok {
+		t.Errorf("unset MTU must be omitted, got %v", v)
+	}
+	// Positive: an explicit MTU passes through.
+	if v, ok := tunMTU(9000); !ok || v != float64(9000) {
+		t.Errorf("explicit MTU must render, got %v (present=%v)", v, ok)
+	}
+}

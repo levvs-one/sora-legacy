@@ -102,3 +102,18 @@ func TestParseAmneziaMagic(t *testing.T) {
 		t.Fatal("parseAmneziaMagic(garbage) = nil, want error")
 	}
 }
+
+func TestValidateTunMTUAcceptsTheRendererDefault(t *testing.T) {
+	// The sing-box and mihomo renderers default an unset MTU to 9000, so
+	// validation must accept that value explicitly too.
+	for _, mtu := range []int{576, 1500, 9000} {
+		if err := (Tun{Enabled: true, MTU: mtu}).validate(); err != nil {
+			t.Errorf("MTU %d: validate = %v, want nil", mtu, err)
+		}
+	}
+	for _, mtu := range []int{575, 9001} {
+		if err := (Tun{Enabled: true, MTU: mtu}).validate(); err == nil {
+			t.Errorf("MTU %d: validate = nil, want an error", mtu)
+		}
+	}
+}
