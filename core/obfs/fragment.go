@@ -10,10 +10,13 @@ import (
 // ClientHello fragmentation. It returns conn unchanged when conn is nil
 // or the profile disables fragmentation.
 //
-// Only the first write is ever touched, and only when it looks like a
-// TLS handshake record (content type 0x16, major version 0x03). Anything
-// else — plain HTTP, a proxy handshake, a short write — passes through
-// untouched, so wrapping a connection that never carries TLS is harmless.
+// Only the first write that looks like a TLS handshake record (content
+// type 0x16, major version 0x03) is ever fragmented. Earlier plaintext
+// writes — e.g. a proxy CONNECT request — pass through untouched without
+// disarming the one-shot, so the ClientHello that follows them is still
+// fragmented. A connection that never carries TLS passes through with
+// only a 5-byte sniff per write, so wrapping a non-TLS connection is
+// harmless.
 func (p Profile) WrapConn(conn net.Conn) net.Conn {
 	if conn == nil || !p.Fragmentation() {
 		return conn
@@ -26,9 +29,11 @@ func (p Profile) WrapConn(conn net.Conn) net.Conn {
 	}
 }
 
-// fragmentConn splits the first TLS record written on the connection
-// into chunks, defeating DPI that expects the whole ClientHello in one
-// TCP segment. Everything after the first write passes through.
+// fragmentConn splits the first TLS handshake record written on the
+// connection into chunks, defeating DPI that expects the whole
+// ClientHello in one TCP segment. Writes before the first TLS-looking
+// one pass through untouched; everything after the fragmented record
+// passes through as well.
 type fragmentConn struct {
 	net.Conn
 	sizes []int
@@ -37,7 +42,17 @@ type fragmentConn struct {
 }
 
 func (c *fragmentConn) Write(b []byte) (int, error) {
-	if c.done.Swap(true) {
+	if c.done.Load() {
+		return c.Conn.Write(b)
+	}
+	// Wait for the first TLS-looking write instead of blindly taking the
+	// first write: a plaintext preamble (e.g. a proxy CONNECT request)
+	// must not disarm the one-shot, or the ClientHello behind a proxy
+	// would silently go out whole.
+	if tlsRecordEnd(b) <= 0 {
+		return c.Conn.Write(b)
+	}
+	if !c.done.CompareAndSwap(false, true) {
 		return c.Conn.Write(b)
 	}
 	return c.writeFirst(b)

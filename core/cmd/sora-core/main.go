@@ -253,9 +253,10 @@ func New(ctx context.Context, opts Options) (*App, error) {
 	// panels stay reachable where SNI-based DPI runs. Only the
 	// fragmentation knobs of the profile apply here: http.Transport
 	// owns the TLS handshake and cannot use uTLS fingerprints.
-	// The profile is copied: later mutations of the preset cannot leak
-	// into the fetcher.
+	// The profile is deep-copied: later mutations of the preset (or of
+	// its FragSizes slice) cannot leak into the fetcher.
 	fetchObfs := obfs.PresetBalanced
+	fetchObfs.FragSizes = append([]int(nil), obfs.PresetBalanced.FragSizes...)
 	plane, err := control.New(control.Config{
 		Version:       Version,
 		Authenticator: auth,

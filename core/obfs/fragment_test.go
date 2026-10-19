@@ -122,6 +122,36 @@ func TestFragmentSkipsShortWrite(t *testing.T) {
 	}
 }
 
+// TestFragmentAfterPlaintextPreamble simulates an HTTP CONNECT proxy:
+// the plaintext proxy handshake goes out whole and must not disarm the
+// one-shot — the ClientHello that follows is still fragmented.
+func TestFragmentAfterPlaintextPreamble(t *testing.T) {
+	inner := &recordConn{}
+	conn := Profile{FragSizes: []int{10}}.WrapConn(inner)
+	preamble := []byte("CONNECT example.com:443 HTTP/1.1\r\n\r\n")
+	if _, err := conn.Write(preamble); err != nil {
+		t.Fatalf("preamble Write() = %v", err)
+	}
+	rec := clientHelloRecord(50) // 55 bytes: chunks of 10 and 45
+	if _, err := conn.Write(rec); err != nil {
+		t.Fatalf("record Write() = %v", err)
+	}
+	chunks := inner.writes()
+	if len(chunks) != 3 {
+		t.Fatalf("got %d chunks, want 3 (preamble + 2 fragments)", len(chunks))
+	}
+	if !bytes.Equal(chunks[0], preamble) {
+		t.Error("proxy preamble was not passed through untouched")
+	}
+	if len(chunks[1]) != 10 || len(chunks[2]) != 45 {
+		t.Errorf("ClientHello fragments = %d+%d bytes, want 10+45",
+			len(chunks[1]), len(chunks[2]))
+	}
+	if got := bytes.Join(chunks[1:], nil); !bytes.Equal(got, rec) {
+		t.Error("reassembled fragments differ from the original record")
+	}
+}
+
 func TestFragmentPartialRecord(t *testing.T) {
 	inner := &recordConn{}
 	conn := Profile{FragSizes: []int{10, 20}}.WrapConn(inner)

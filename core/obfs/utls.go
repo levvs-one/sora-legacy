@@ -38,6 +38,19 @@ func (p Profile) FingerprintID() (utls.ClientHelloID, error) {
 // fingerprint (the fingerprint comes from FingerprintID). It returns nil
 // when the profile disables uTLS.
 //
+// Fingerprint precedence: when the handshake runs, uTLS applies the
+// fingerprint's own version range and cipher suites over the config
+// (ApplyPreset overwrites MinVersion/MaxVersion), so base MinVersion,
+// MaxVersion and CipherSuites are advisory — a chrome fingerprint
+// advertises chrome's ranges even if base pins TLS 1.3. CipherSuites are
+// therefore not copied at all.
+//
+// Not carried over (uTLS defines its own callback/chain types, so these
+// would need adapters): GetCertificate, GetClientCertificate,
+// VerifyPeerCertificate, VerifyConnection and Renegotiation. Callers
+// relying on client-certificate selection or custom verification must
+// not use the uTLS path until adapters exist.
+//
 // The caller must ensure base is non-nil; a nil base yields a config with
 // only the defaults.
 func (p Profile) UTLSConfig(base *tls.Config) *utls.Config {

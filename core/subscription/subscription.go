@@ -68,6 +68,8 @@ type Options struct {
 	// settings of the profile apply: http.Transport owns the TLS
 	// handshake and cannot use uTLS fingerprints (see the obfs package
 	// doc). Nil disables obfuscation. An invalid profile is ignored.
+	// Obfs applies only to the default transport built here; an injected
+	// HTTPClient dials untouched.
 	Obfs *obfs.Profile
 }
 
