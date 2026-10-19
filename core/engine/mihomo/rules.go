@@ -147,16 +147,22 @@ func buildDNS(d engine.DNS, o engine.Options, byID map[string]string) (*dnsConfi
 	return out, nil
 }
 
-// buildTun defaults to the upstream-recommended mixed stack: system TCP and
-// gVisor UDP.
+// buildTun mirrors Sora's measured TUN defaults: the mips userspace stack on
+// Windows (loopback transfer tests show substantially less packet overhead
+// than mixed there) and mixed elsewhere. MTU follows the upstream mihomo
+// default (9000): the TUN device never touches a wire MTU limit, so larger
+// packets only cut the packet rate through the userspace stack.
 func buildTun(t engine.Tun, d engine.DNS) *tunConfig {
 	stack := orDefault(t.Stack, "mixed")
+	if t.Stack == "" && runtime.GOOS == "windows" {
+		stack = "mips"
+	}
 	out := &tunConfig{
 		Name:      "sora-tun",
 		Type:      "tun",
 		Stack:     stack,
 		Device:    t.DeviceName,
-		MTU:       orDefaultInt(t.MTU, 1500),
+		MTU:       orDefaultInt(t.MTU, 9000),
 		DNSHijack: orDefaultList(d.HijackTun, []string{"any:53"}),
 	}
 	auto := t.AutoRoute && runtime.GOOS != "linux"
