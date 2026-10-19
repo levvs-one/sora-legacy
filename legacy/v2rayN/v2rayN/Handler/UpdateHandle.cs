@@ -496,32 +496,39 @@ namespace v2rayN.Handler
                     return "";
                 }
 
-                Process p = new Process();
-                p.StartInfo.FileName = filePath;
-                p.StartInfo.Arguments = coreInfo.versionArg;
-                p.StartInfo.WorkingDirectory = Utils.StartupPath();
-                p.StartInfo.UseShellExecute = false;
-                p.StartInfo.RedirectStandardOutput = true;
-                p.StartInfo.CreateNoWindow = true;
-                p.StartInfo.StandardOutputEncoding = Encoding.UTF8;
-                p.Start();
-                p.WaitForExit(5000);
-                string echo = p.StandardOutput.ReadToEnd();
-                string version = string.Empty;
-                switch (type)
+                // LEGACY-M10: using + Kill при таймауте, чтобы не копить процессы.
+                using (Process p = new Process())
                 {
-                    case ECoreType.v2fly:
-                    case ECoreType.SagerNet:
-                    case ECoreType.Xray:
-                    case ECoreType.v2fly_v5:
-                        version = Regex.Match(echo, $"{coreInfo.match} ([0-9.]+) \\(").Groups[1].Value;
-                        break;
-                    case ECoreType.clash:
-                    case ECoreType.clash_meta:
-                        version = Regex.Match(echo, $"v[0-9.]+").Groups[0].Value;
-                        break;
+                    p.StartInfo.FileName = filePath;
+                    p.StartInfo.Arguments = coreInfo.versionArg;
+                    p.StartInfo.WorkingDirectory = Utils.StartupPath();
+                    p.StartInfo.UseShellExecute = false;
+                    p.StartInfo.RedirectStandardOutput = true;
+                    p.StartInfo.CreateNoWindow = true;
+                    p.StartInfo.StandardOutputEncoding = Encoding.UTF8;
+                    p.Start();
+                    if (!p.WaitForExit(5000))
+                    {
+                        try { p.Kill(); } catch (Exception killEx) { Utils.SaveLog(killEx.Message, killEx); }
+                        p.WaitForExit(1000);
+                    }
+                    string echo = p.StandardOutput.ReadToEnd();
+                    string version = string.Empty;
+                    switch (type)
+                    {
+                        case ECoreType.v2fly:
+                        case ECoreType.SagerNet:
+                        case ECoreType.Xray:
+                        case ECoreType.v2fly_v5:
+                            version = Regex.Match(echo, $"{coreInfo.match} ([0-9.]+) \\(").Groups[1].Value;
+                            break;
+                        case ECoreType.clash:
+                        case ECoreType.clash_meta:
+                            version = Regex.Match(echo, $"v[0-9.]+").Groups[0].Value;
+                            break;
+                    }
+                    return version;
                 }
-                return version;
             }
             catch (Exception ex)
             {
