@@ -279,13 +279,55 @@ namespace v2rayN.Handler
         {
             try
             {
-                Process _p = Process.GetProcessById(pid);
-                KillProcess(_p);
+                using (Process _p = Process.GetProcessById(pid))
+                {
+                    // LEGACY-M9: защита от PID-reuse — убиваем только известный бинарь ядра.
+                    if (!IsKnownCoreProcess(_p))
+                    {
+                        Utils.SaveLog($"V2rayStopPid: refusing to kill PID {pid}, image mismatch (possible PID reuse).");
+                        return;
+                    }
+                    KillProcess(_p);
+                }
             }
             catch (Exception ex)
             {
                 Utils.SaveLog(ex.Message, ex);
             }
+        }
+
+        /// <summary>
+        /// LEGACY-M9: процесс является известным бинарником ядра из каталога приложения.
+        /// </summary>
+        private static bool IsKnownCoreProcess(Process p)
+        {
+            string imagePath;
+            try
+            {
+                imagePath = p.MainModule?.FileName;
+            }
+            catch (Exception ex) when (ex is Win32Exception || ex is InvalidOperationException)
+            {
+                return false;
+            }
+            if (Utils.IsNullOrEmpty(imagePath))
+            {
+                return false;
+            }
+            foreach (ECoreType coreType in Enum.GetValues(typeof(ECoreType)))
+            {
+                var info = LazyConfig.Instance.GetCoreInfo(coreType);
+                if (info?.coreExes == null) continue;
+                foreach (string exe in info.coreExes)
+                {
+                    if (string.Equals(imagePath, Utils.GetPath(exe) + ".exe", StringComparison.OrdinalIgnoreCase)
+                        || string.Equals(imagePath, Utils.GetPath(exe), StringComparison.OrdinalIgnoreCase))
+                    {
+                        return true;
+                    }
+                }
+            }
+            return false;
         }
 
         private string V2rayFindexe(List<string> lstCoreTemp)
