@@ -20,13 +20,22 @@ const DefaultNetworkInterval = 2 * time.Second
 // addresses, and global IPv6 /64 prefixes. It detects network or lease changes,
 // ignoring same-network privacy address rotation. Empty means offline.
 func NetworkFingerprint() string {
+	return networkFingerprint(engine.TunDevice)
+}
+
+// networkFingerprint is NetworkFingerprint excluding the named tunnel device,
+// so adapter state changes do not read as network changes. A session whose
+// plan names its own device passes that name; the default entry point keeps
+// excluding the default device name.
+func networkFingerprint(tunnelDevice string) string {
 	interfaces, err := net.Interfaces()
 	if err != nil {
 		return ""
 	}
 	var parts []string
 	for _, iface := range interfaces {
-		if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagLoopback != 0 || iface.Name == engine.TunDevice {
+		if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagLoopback != 0 ||
+			(tunnelDevice != "" && iface.Name == tunnelDevice) {
 			continue
 		}
 		addrs, err := iface.Addrs()
@@ -93,6 +102,19 @@ func (w *networkWatch) changed() string {
 		return "the network changed"
 	}
 	return ""
+}
+
+// networkProbe returns the fingerprint function for the network watch. A
+// plan that names its own tunnel device gets a probe excluding that device:
+// the package-level NetworkFingerprint only excludes the default name, and a
+// tunnel interface leaking into the fingerprint would report every adapter
+// state change as a network change.
+func (s *Session) networkProbe() func() string {
+	if tun := s.cfg.Plan.Tun; tun.Enabled && tun.DeviceName != "" && tun.DeviceName != engine.TunDevice {
+		device := tun.DeviceName
+		return func() string { return networkFingerprint(device) }
+	}
+	return s.cfg.Network
 }
 
 // renewConnections closes stale network flows so applications reconnect

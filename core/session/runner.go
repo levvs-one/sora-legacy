@@ -28,8 +28,7 @@ const (
 // Config requires Plan and Engine; other fields have usable defaults.
 type Config struct {
 	// Plan is the engine-independent description of the session. The
-	// session
-	// never mutates it after Start.
+	// session never mutates it after Start.
 	Plan *engine.Plan
 	// Engine must be constructed but not applied. Start calls Apply.
 	Engine engine.Engine
@@ -394,7 +393,7 @@ func (s *Session) supervise(events <-chan engine.Event) {
 		network <-chan time.Time
 	)
 	if s.cfg.Network != nil {
-		watch = newNetworkWatch(s.cfg.Network, s.cfg.NetworkInterval)
+		watch = newNetworkWatch(s.networkProbe(), s.cfg.NetworkInterval)
 		looks := time.NewTicker(s.cfg.NetworkInterval)
 		defer looks.Stop()
 		network = looks.C

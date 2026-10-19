@@ -2,6 +2,7 @@ package session
 
 import (
 	"context"
+	"reflect"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -130,4 +131,38 @@ func TestAnEngineThatCannotDropConnectionsStartsOver(t *testing.T) {
 		time.Sleep(5 * time.Millisecond)
 	}
 	t.Error("the engine was not moved onto the plan again after the network changed")
+}
+
+func TestNetworkProbeExcludesThePlansOwnTunnelDevice(t *testing.T) {
+	sentinel := func() string { return "sentinel" }
+	cfg := testConfig(newFakeEngine(), &fakeGuard{})
+	cfg.Plan.Tun = engine.Tun{Enabled: true, DeviceName: "custom9"}
+	cfg.Network = sentinel
+	s, err := New(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reflect.ValueOf(s.networkProbe()).Pointer() == reflect.ValueOf(sentinel).Pointer() {
+		t.Error("the watch would use the injected probe, leaking the custom tunnel device into the fingerprint")
+	}
+}
+
+func TestNetworkProbeKeepsTheInjectedProbeForTheDefaultDevice(t *testing.T) {
+	sentinel := func() string { return "sentinel" }
+	for _, tun := range []engine.Tun{
+		{},
+		{Enabled: true, DeviceName: engine.TunDevice},
+		{Enabled: true, DeviceName: ""},
+	} {
+		cfg := testConfig(newFakeEngine(), &fakeGuard{})
+		cfg.Plan.Tun = tun
+		cfg.Network = sentinel
+		s, err := New(cfg)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if reflect.ValueOf(s.networkProbe()).Pointer() != reflect.ValueOf(sentinel).Pointer() {
+			t.Errorf("the injected probe was replaced for tun %+v", tun)
+		}
+	}
 }
