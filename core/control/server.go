@@ -446,6 +446,12 @@ const (
 // Handshake negotiates the API version without a token so clients can
 // initialize. Incompatible clients still receive the core's version to
 // determine the required update.
+//
+// The returned control authenticator is issued to every peer the transport
+// admits: it distinguishes fresh clients from stale ones but does not
+// authenticate the caller beyond the transport's peer allow-list. Tightening
+// that boundary (for example requiring the peer's executable to match the
+// installed UI) is future work; see the Authenticator documentation.
 func (s *Server) Handshake(_ context.Context, req *corev1.HandshakeRequest) (*corev1.HandshakeResponse, error) {
 	negotiated, err := s.checkVersion(req.GetClientVersion())
 	if err != nil {

@@ -1,7 +1,10 @@
 // Package ipc carries the control API over account-restricted local pipes or
-// Unix sockets, with no network ports. Tokens further restrict same-account
-// processes. It exposes listeners and connections independently of gRPC so
-// transport security and API contracts evolve separately.
+// Unix sockets, with no network ports. The transport's peer allow-list is the
+// authorization boundary: only admitted peers may speak to the core. The
+// control token handed out by Handshake does not add a same-account boundary —
+// every admitted peer receives it — it only distinguishes fresh clients from
+// stale or accidental ones. It exposes listeners and connections independently
+// of gRPC so transport security and API contracts evolve separately.
 package ipc
 
 import (

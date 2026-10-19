@@ -22,9 +22,13 @@ const TokenLen = 32
 // read access for client authentication.
 const tokenFile = "control.token"
 
-// Authenticator checks tokens in constant time. The OS-generated token protects
-// the local endpoint from unauthenticated same-account processes and stale
-// clients.
+// Authenticator checks tokens in constant time. The token distinguishes the
+// client that performed Handshake from stale or accidental clients; it is NOT
+// a security boundary against other processes of the same account. Handshake
+// issues the token to every peer the transport admits, so any same-account
+// process can obtain it. The real authorization boundary is the transport's
+// peer allow-list (Unix socket permissions / SO_PEERCRED, Windows pipe ACL,
+// polkit policy): see the ipc package.
 type Authenticator struct {
 	mu    sync.RWMutex
 	token []byte
@@ -95,8 +99,9 @@ func (a *Authenticator) Check(presented []byte) error {
 		"control: the presented authenticator does not match")
 }
 
-// Token returns a copy of the token for Handshake clients admitted by the
-// transport.
+// Token returns a copy of the token for Handshake. Every peer admitted by
+// the transport receives it, so possession of the token proves only that the
+// presenter once completed Handshake, not that it is the legitimate UI.
 func (a *Authenticator) Token() []byte {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
