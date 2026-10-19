@@ -28,15 +28,22 @@ jobs:
     name: Legacy core and workflow checks
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version-file: core/go.mod
           cache: false
       - name: Check workflows
+        # actionlint is fetched as a release archive and verified by SHA-256
+        # instead of executing a remote install script (supply-chain hardening).
         run: |
-          bash <(curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/v1.7.7/scripts/download-actionlint.bash) 1.7.7
-          ./actionlint -color
+          set -euo pipefail
+          archive="$RUNNER_TEMP/actionlint_1.7.7_linux_amd64.tar.gz"
+          curl -sSfL -o "$archive" https://github.com/rhysd/actionlint/releases/download/v1.7.7/actionlint_1.7.7_linux_amd64.tar.gz
+          printf '%s  %s\n' '023070a287cd8cccd71515fedc843f1985bf96c436b7effaecce67290e7e0757' "$(basename "$archive")" > "$archive.sha256"
+          (cd "$RUNNER_TEMP" && sha256sum -c "$archive.sha256")
+          tar -xzf "$archive" -C "$RUNNER_TEMP" actionlint
+          "$RUNNER_TEMP/actionlint" -color
       - name: Check formatting and static errors
         working-directory: core
         run: |
@@ -45,7 +52,7 @@ jobs:
       - name: Test the core with the race detector
         working-directory: core
         run: go test -race ./...
-      - uses: golangci/golangci-lint-action@v8
+      - uses: golangci/golangci-lint-action@4afd733a84b1f43292c63897423277bb7f4313a9 # v8
         with:
           version: v2.14.0
           working-directory: core
@@ -63,12 +70,12 @@ jobs:
           - arch: amd64
             platform: x64
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version: 1.26.9
           cache: false
-      - uses: actions/setup-dotnet@v5
+      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
         with:
           dotnet-version: 8.0.424
       - name: Build verified Windows 7 SDK
@@ -149,12 +156,12 @@ jobs:
             & $core --uninstall-service
             if ($LASTEXITCODE -ne 0) { throw 'Legacy service removal failed' }
           }
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: sora-legacy-core-${{ matrix.platform }}
           path: legacy/artifacts/sora-legacy-core-${{ matrix.platform }}.exe
           if-no-files-found: error
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         if: always()
         with:
           name: sora-legacy-client-development-${{ matrix.platform }}
@@ -182,8 +189,8 @@ jobs:
           - target: win11
             executable: sora_win11.exe
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-dotnet@v5
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
         with:
           dotnet-version: 8.0.424
       - name: Restore
@@ -208,7 +215,7 @@ jobs:
             & $powershell -NoProfile -Command '$parseErrors = $null; [System.Management.Automation.Language.Parser]::ParseFile($env:SORA_QA_SCRIPT, [ref]$null, [ref]$parseErrors) | Out-Null; if ($parseErrors.Count) { $parseErrors | Out-String | Write-Error; exit 1 }'
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: sora-legacy-${{ matrix.target }}-x86
           path: legacy\v2rayN\v2rayN\bin\x86\Release\net48\win7-x86
