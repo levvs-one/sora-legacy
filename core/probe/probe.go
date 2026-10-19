@@ -11,6 +11,7 @@ import (
 	"net/netip"
 	"strconv"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/levvs-one/sora-client/core/errs"
@@ -175,8 +176,16 @@ func (p *Prober) dial(ctx context.Context, host string, port uint32) (time.Durat
 			"probe: the request has no time left")
 	}
 	start := time.Now()
+	dialer := func() *net.Dialer {
+		return &net.Dialer{
+			Timeout: timeout,
+			Control: func(_, address string, _ syscall.RawConn) error {
+				return checkDialTarget(p.allowPrivate, address)
+			},
+		}
+	}
 	if !p.tls {
-		connection, err := (&net.Dialer{Timeout: timeout}).DialContext(ctx, "tcp", address)
+		connection, err := dialer().DialContext(ctx, "tcp", address)
 		if err != nil {
 			return 0, errs.From(err)
 		}
@@ -185,11 +194,11 @@ func (p *Prober) dial(ctx context.Context, host string, port uint32) (time.Durat
 	}
 	// Include TLS in the measurement to distinguish certificate failures
 	// from TCP reachability. The context cancels stalled handshakes.
-	dialer := &tls.Dialer{
-		NetDialer: &net.Dialer{Timeout: timeout},
+	tlsDialer := &tls.Dialer{
+		NetDialer: dialer(),
 		Config:    p.tlsConfig(host),
 	}
-	connection, err := dialer.DialContext(ctx, "tcp", address)
+	connection, err := tlsDialer.DialContext(ctx, "tcp", address)
 	if err != nil {
 		return 0, errs.From(err)
 	}
@@ -242,6 +251,31 @@ var specialUse = []netip.Prefix{
 	netip.MustParsePrefix("198.51.100.0/24"),
 	netip.MustParsePrefix("203.0.113.0/24"),
 	netip.MustParsePrefix("2001:db8::/32"),
+}
+
+// checkDialTarget enforces the private-target policy on the address the
+// dialer is about to connect to. DNS is resolved once by isPrivateTarget
+// and again by the dial itself, so a hostile resolver could answer public
+// and then hand back a private address; checking the real dial target in
+// Control closes that rebinding window, exactly like
+// subscription.dialChecked.
+func checkDialTarget(allowPrivate bool, address string) error {
+	if allowPrivate {
+		return nil
+	}
+	host, _, err := net.SplitHostPort(address)
+	if err != nil {
+		return err
+	}
+	addr, err := netip.ParseAddr(host)
+	if err != nil {
+		return err
+	}
+	if !publicAddr(addr) {
+		return errs.Newf(errs.CodePermissionDenied, errs.KeyProbeInvalidEndpoint,
+			"probe: private targets are not probed")
+	}
+	return nil
 }
 
 // EndpointProber defines the interface required by the control plane, keeping
