@@ -274,3 +274,39 @@ func TestShadowsocksObfsIsConstrained(t *testing.T) {
 		})
 	}
 }
+
+func TestSpiderXRejectsEnginesWithoutIt(t *testing.T) {
+	available := []Availability{
+		{Kind: KindSingBox, Usable: true, Version: mustVersion(t, "1.14.2")},
+		{Kind: KindXray, Usable: true, Version: mustVersion(t, "26.3.27")},
+		{Kind: KindMihomo, Usable: true, Version: mustVersion(t, "1.19.32")},
+	}
+	preference := []Kind{KindSingBox, KindXray, KindMihomo}
+
+	// Positive: a REALITY spider_x plan must skip sing-box and mihomo,
+	// which have no such option and would silently drop it.
+	p := validPlan()
+	p.Outbounds[0].Protocol = ProtocolVLESS
+	p.Outbounds[0].TLS = TLS{Enabled: true, Reality: true, ServerName: "www.example.com",
+		RealityPublicKey: "QUJD", SpiderX: "/spider"}
+	sel, err := SelectEngine(p, available, preference)
+	if err != nil {
+		t.Fatalf("selection failed: %v", err)
+	}
+	if sel.Kind != KindXray {
+		t.Errorf("spider_x must select Xray, got %s", sel.Kind)
+	}
+	if joined := strings.Join(sel.Rejected, ";"); !strings.Contains(joined, "spider_x") {
+		t.Errorf("rejections must name spider_x: %v", sel.Rejected)
+	}
+
+	// Negative: without spider_x the first preference wins again.
+	p.Outbounds[0].TLS.SpiderX = ""
+	sel, err = SelectEngine(p, available, preference)
+	if err != nil {
+		t.Fatalf("selection failed: %v", err)
+	}
+	if sel.Kind != KindSingBox {
+		t.Errorf("without spider_x sing-box must be selected, got %s", sel.Kind)
+	}
+}

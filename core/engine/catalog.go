@@ -187,6 +187,16 @@ func (c Capabilities) Missing(p *Plan) []string {
 			}
 		}
 	}
+	if c.Kind == KindSingBox || c.Kind == KindMihomo {
+		// Only Xray implements REALITY spider_x; the other engines have
+		// no such option and would silently drop it.
+		for _, o := range p.Outbounds {
+			if o.TLS.SpiderX != "" {
+				missing = append(missing, "REALITY spider_x")
+				break
+			}
+		}
+	}
 	for proto := range p.Protocols() {
 		if !c.SupportsProtocol(proto) {
 			missing = append(missing, "protocol "+string(proto))
