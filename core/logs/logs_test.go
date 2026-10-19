@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -222,5 +223,44 @@ func TestOutOfOrderDuplicatesDoNotFold(t *testing.T) {
 	}
 	if !p.Entries[1].Time.Equal(t0) {
 		t.Errorf("the first entry's time moved to %v", p.Entries[1].Time)
+	}
+}
+
+// TestSettingsBoundsAreCapped is the regression test for R5-LG-3-2: the
+// client-settable record bounds used to be unbounded, letting one settings
+// call (and every Watch replay) push the core into gigabytes.
+func TestSettingsBoundsAreCapped(t *testing.T) {
+	s := Settings{MaxEntries: 1 << 40, MaxBytes: 1 << 40}.normalized()
+	if s.MaxEntries != maxEntriesLimit || s.MaxBytes != maxBytesLimit {
+		t.Errorf("normalized bounds = %d/%d, want caps %d/%d",
+			s.MaxEntries, s.MaxBytes, maxEntriesLimit, maxBytesLimit)
+	}
+}
+
+// TestWatchReplayIsBounded checks that a watcher over a large record gets
+// at most maxWatchReplay entries up front and the rest counted as lost,
+// instead of a channel sized by the whole record.
+func TestWatchReplayIsBounded(t *testing.T) {
+	c := New(Settings{CaptureLevel: LevelDebug, MaxEntries: maxWatchReplay * 3})
+	for i := 0; i < maxWatchReplay*2; i++ {
+		c.Write(t0.Add(time.Duration(i)*time.Millisecond), LevelInfo, "core", "tick "+strconv.Itoa(i))
+	}
+	sub := c.Watch(Filter{}, 0)
+	defer sub.Close()
+	var got int
+	for {
+		select {
+		case <-sub.C:
+			got++
+		default:
+			goto done
+		}
+	}
+done:
+	if got != maxWatchReplay {
+		t.Errorf("replayed %d entries, want %d", got, maxWatchReplay)
+	}
+	if sub.Lost() == 0 {
+		t.Error("the capped replay must count the skipped entries as lost")
 	}
 }

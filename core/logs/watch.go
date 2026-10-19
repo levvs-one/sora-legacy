@@ -7,6 +7,12 @@ var errPatternTooLong = errors.New("logs: filter expression is too long")
 // watchBuffer bounds live entries queued beyond replay.
 const watchBuffer = 512
 
+// maxWatchReplay caps the entries Watch replays at subscribe time. A huge
+// record would otherwise size every watcher's channel by its full length;
+// the excess counts as lost and the client resumes with Query, which is the
+// same contract slow watchers already get.
+const maxWatchReplay = 4096
+
 type watcher struct {
 	filter Filter
 	ch     chan Entry
@@ -27,12 +33,17 @@ func (c *Center) Watch(f Filter, after uint64) *Subscription {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	var replay []Entry
+	var skipped uint64
 	for _, e := range c.entries {
 		if e.Seq > after && f.match(e) {
-			replay = append(replay, e)
+			if len(replay) < maxWatchReplay {
+				replay = append(replay, e)
+			} else {
+				skipped++
+			}
 		}
 	}
-	w := &watcher{filter: f, ch: make(chan Entry, len(replay)+watchBuffer)}
+	w := &watcher{filter: f, ch: make(chan Entry, len(replay)+watchBuffer), lost: skipped}
 	for _, e := range replay {
 		w.ch <- e
 	}

@@ -414,7 +414,21 @@ func (a *App) Close() error {
 		problems = append(problems, err)
 	}
 	if a.server != nil {
-		a.server.GracefulStop()
+		// GracefulStop waits for every RPC, so a stuck client stream
+		// could hang shutdown forever; bound it and force-stop instead.
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			a.server.GracefulStop()
+		}()
+		timer := time.NewTimer(10 * time.Second)
+		select {
+		case <-done:
+			timer.Stop()
+		case <-timer.C:
+			a.server.Stop()
+			<-done
+		}
 	}
 	if a.listener != nil {
 		if err := a.listener.Close(); err != nil && !errors.Is(err, net.ErrClosed) {

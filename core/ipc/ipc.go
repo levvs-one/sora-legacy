@@ -16,6 +16,9 @@ import (
 const (
 	// handshakeTimeout bounds silent connections before introduction.
 	handshakeTimeout = 10 * time.Second
+	// maxRefusedDelay caps the backoff Accept applies between
+	// unauthorized connections.
+	maxRefusedDelay = 250 * time.Millisecond
 	// dialTimeout bounds a client that cannot reach the endpoint at all.
 	dialTimeout = 5 * time.Second
 )
@@ -106,6 +109,7 @@ func (l *Listener) Address() string { return l.address }
 // Accept returns the next authorized connection. Checking peers here also
 // protects gRPC servers using the listener directly.
 func (l *Listener) Accept() (net.Conn, error) {
+	var refused int
 	for {
 		connection, err := l.Listener.Accept()
 		if err != nil {
@@ -113,8 +117,15 @@ func (l *Listener) Accept() (net.Conn, error) {
 		}
 		if l.allow != nil && !l.allow(peerOf(connection)) {
 			// Close unauthorized connections without replying to
-			// avoid revealing the core endpoint.
+			// avoid revealing the core endpoint. Back off instead of
+			// spinning: a local connection flood must not burn CPU.
 			_ = connection.Close()
+			refused++
+			delay := time.Duration(refused) * 10 * time.Millisecond
+			if delay > maxRefusedDelay {
+				delay = maxRefusedDelay
+			}
+			time.Sleep(delay)
 			continue
 		}
 		return connection, nil

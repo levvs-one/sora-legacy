@@ -92,6 +92,10 @@ const (
 	// foldWindow limits how long identical consecutive messages share an
 	// entry.
 	foldWindow = 30 * time.Second
+	// maxEntriesLimit and maxBytesLimit cap the client-settable record
+	// bounds so one settings call cannot push the core into gigabytes.
+	maxEntriesLimit = 200000
+	maxBytesLimit   = 256 << 20
 )
 
 // DefaultSettings captures info and higher levels, including destinations.
@@ -108,6 +112,15 @@ func (s Settings) normalized() Settings {
 	}
 	if s.MaxBytes <= 0 {
 		s.MaxBytes = DefaultMaxBytes
+	}
+	// The record lives in memory and every watcher replays it, so the
+	// bounds themselves need bounds: a client must not be able to push
+	// the core into gigabytes with one settings call.
+	if s.MaxEntries > maxEntriesLimit {
+		s.MaxEntries = maxEntriesLimit
+	}
+	if s.MaxBytes > maxBytesLimit {
+		s.MaxBytes = maxBytesLimit
 	}
 	return s
 }
