@@ -170,7 +170,11 @@ func (c *Center) Write(at time.Time, level Level, source, message string) {
 	}
 	if n := len(c.entries); n > 0 {
 		last := &c.entries[n-1]
-		if last.Source == source && last.Level == level && last.Message == message && at.Sub(last.Time) < foldWindow {
+		// The timestamp must not run backwards: an out-of-order duplicate
+		// with an older time starts its own entry instead of folding and
+		// dragging the record's clock back.
+		if last.Source == source && last.Level == level && last.Message == message &&
+			!at.Before(last.Time) && at.Sub(last.Time) < foldWindow {
 			last.Repeat++
 			last.Time = at
 			c.notify(*last)

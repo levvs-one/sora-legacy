@@ -166,7 +166,7 @@ func (c *Client) call(ctx context.Context, method, path string, body any, out an
 			return err
 		}
 		var netErr net.Error
-		if errors.As(err, &netErr) || isRefused(err) {
+		if errors.As(err, &netErr) || isNetworkError(err) {
 			return fmt.Errorf("%w: %s: %w", ErrUnreachable, redactURL(endpoint), err)
 		}
 		return fmt.Errorf("clashapi: controller request: %w", err)
@@ -199,7 +199,11 @@ func (c *Client) call(ctx context.Context, method, path string, body any, out an
 	return nil
 }
 
-func isRefused(err error) bool {
+// isNetworkError reports whether err is a network-layer failure, used to
+// map controller dial problems onto ErrUnreachable. It matches any
+// *net.OpError, not just ECONNREFUSED: a reset, a timeout-shaped syscall
+// failure, or a refused connection all mean the controller is gone.
+func isNetworkError(err error) bool {
 	var syscallErr *net.OpError
 	return errors.As(err, &syscallErr)
 }

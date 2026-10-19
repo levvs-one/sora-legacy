@@ -71,7 +71,7 @@ func newLogger(level string) (*slog.Logger, error) {
 	case "error":
 		parsed = slog.LevelError
 	default:
-		return nil, errs.Newf(errs.CodeInvalidArgument, errs.KeyUnauthenticated,
+		return nil, errs.Newf(errs.CodeInvalidArgument, errs.KeyInvalidRequest,
 			"core: %q is not a log level", level)
 	}
 	return slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: parsed})), nil

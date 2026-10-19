@@ -179,7 +179,7 @@ func (b *subscriptionBook) loadList(rec *subscriptionRecord) []*corev1.OutboundS
 func newSubscriptionID() (string, error) {
 	buf := make([]byte, 8)
 	if _, err := rand.Read(buf); err != nil {
-		return "", errs.Wrap(err, errs.CodeInternal, errs.KeySecretStoreUnavailable)
+		return "", errs.Wrap(err, errs.CodeInternal, errs.KeyInternal)
 	}
 	return hex.EncodeToString(buf), nil
 }

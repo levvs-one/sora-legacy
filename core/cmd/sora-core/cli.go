@@ -77,7 +77,7 @@ func run(ctx context.Context, arguments []string) error {
 	set.BoolVar(&f.legacyControl, "legacy-control", true, "serve JSON-RPC for the .NET Framework legacy client")
 	set.BoolVar(&f.allowEnvBin, "allow-env-bin", false, "honor $SORA_SINGBOX_BIN/$SORA_XRAY_BIN/$SORA_MIHOMO_BIN overrides when discovering engines; off by default because an inherited variable could substitute an arbitrary executable")
 	if err := set.Parse(arguments); err != nil {
-		return errs.Wrap(err, errs.CodeInvalidArgument, errs.KeyUnauthenticated)
+		return errs.Wrap(err, errs.CodeInvalidArgument, errs.KeyInvalidRequest)
 	}
 	if f.uninstall {
 		return uninstallService()

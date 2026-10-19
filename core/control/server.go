@@ -1273,8 +1273,10 @@ func (s *Server) RunDiagnostics(ctx context.Context, req *corev1.RunDiagnosticsR
 	return &corev1.RunDiagnosticsResponse{Report: &corev1.DiagnosticReport{Lines: lines}}, nil
 }
 
-// ExportDiagnostics returns an archive built from already-redacted core values.
-// Clients cannot expand its contents.
+// ExportDiagnostics returns an archive of the current session. The default
+// format is built from already-redacted core values, which clients cannot
+// expand. The PCAPNG and EVTX formats instead carry raw capture bytes, so
+// they stay behind the control authenticator like everything else here.
 func (s *Server) ExportDiagnostics(ctx context.Context, req *corev1.ExportDiagnosticsRequest) (*corev1.ExportDiagnosticsResponse, error) {
 	id := requestID(req.GetRequestId())
 	if _, err := s.checkVersion(req.GetApiVersion()); err != nil {

@@ -21,7 +21,8 @@ var (
 )
 
 // report renders session, engine, and environment details in a fixed order for
-// line-by-line comparison.
+// line-by-line comparison. Unlike Summary, the text report names the session
+// ID so a support bundle can be correlated with the client's logs.
 func (c *Collector) report() []string {
 	status := c.source.Status()
 	lines := []string{

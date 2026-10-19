@@ -207,3 +207,20 @@ func TestSlogRecordsTheCoreInTheCenter(t *testing.T) {
 		t.Fatalf("the service log keeps its own level: %q", out.String())
 	}
 }
+
+// TestOutOfOrderDuplicatesDoNotFold is the regression test for R5-LG-4-9:
+// an identical message carrying an older timestamp used to fold into the
+// newer entry because a negative duration is shorter than the fold window,
+// dragging the record's clock backwards.
+func TestOutOfOrderDuplicatesDoNotFold(t *testing.T) {
+	c := New(Settings{CaptureLevel: LevelDebug})
+	c.Write(t0, LevelWarning, "mihomo", "dial failed")
+	c.Write(t0.Add(-time.Minute), LevelWarning, "mihomo", "dial failed")
+	p := c.Query(Filter{}, 0, 0)
+	if len(p.Entries) != 2 {
+		t.Fatalf("an out-of-order duplicate must start its own entry: %+v", p.Entries)
+	}
+	if !p.Entries[1].Time.Equal(t0) {
+		t.Errorf("the first entry's time moved to %v", p.Entries[1].Time)
+	}
+}
