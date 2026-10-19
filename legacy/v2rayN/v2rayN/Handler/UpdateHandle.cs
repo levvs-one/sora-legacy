@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -97,6 +98,33 @@ namespace v2rayN.Handler
             }
         }
 
+        /// <summary>
+        /// LEGACY-H1: сравнение версий для запрета downgrade.
+        /// Возвращает &lt;0, 0, &gt;0 если left &lt;, ==, &gt; right.
+        /// </summary>
+        internal static int CompareVersions(string left, string right)
+        {
+            int[] l = ParseVersionParts(left);
+            int[] r = ParseVersionParts(right);
+            int n = Math.Max(l.Length, r.Length);
+            for (int i = 0; i < n; i++)
+            {
+                int a = i < l.Length ? l[i] : 0;
+                int b = i < r.Length ? r[i] : 0;
+                if (a != b) return a.CompareTo(b);
+            }
+            return 0;
+        }
+
+        private static int[] ParseVersionParts(string version)
+        {
+            string v = (version ?? string.Empty).Trim();
+            if (v.StartsWith("v", StringComparison.OrdinalIgnoreCase)) v = v.Substring(1);
+            Match m = Regex.Match(v, @"^[0-9]+(\.[0-9]+)*");
+            if (!m.Success) return new int[0];
+            return m.Value.Split('.').Select(p => int.TryParse(p, out int x) ? x : 0).ToArray();
+        }
+
         public event EventHandler<ResultEventArgs> AbsoluteCompleted;
 
         public class ResultEventArgs : EventArgs
@@ -127,11 +155,20 @@ namespace v2rayN.Handler
             if (downloadHandle == null)
             {
                 downloadHandle = new DownloadHandle();
-                downloadHandle.UpdateCompleted += (sender2, args) =>
+                downloadHandle.UpdateCompleted += async (sender2, args) =>
                 {
                     if (args.Success)
                     {
                         _updateFunc(false, ResUI.MsgDownloadV2rayCoreSuccessfully);
+
+                        // LEGACY-H1: сверяем SHA-256 архива с .dgst-манифестом релиза до распаковки.
+                        string verifyError = await VerifyCoreArchiveAsync(type, url);
+                        if (verifyError != null)
+                        {
+                            _updateFunc(false, verifyError);
+                            return;
+                        }
+
                         _updateFunc(false, ResUI.MsgUnpacking);
 
                         try
@@ -582,7 +619,110 @@ namespace v2rayN.Handler
             }
             if (blDownload)
             {
-                downloadHandle.DownloadFileAsync(url, true, 600);
+                _ = downloadHandle.DownloadFileAsync(url, true, 600);
+            }
+        }
+
+        /// <summary>
+        /// LEGACY-H1: сверка SHA-256 скачанного архива движка с .dgst-манифестом релиза.
+        /// Возвращает null, если проверка пройдена; иначе текст ошибки (обновление отклоняется).
+        /// </summary>
+        private static async Task<string> VerifyCoreArchiveAsync(ECoreType type, string url)
+        {
+            if (!HasChecksumManifest(type))
+            {
+                // Апстрим не публикует .dgst в предсказуемом виде для этого движка —
+                // ограничение задокументировано; запрет downgrade (см. выше) действует всегда.
+                Utils.SaveLog($"Checksum manifest is not available for core {type}; skipping hash verification.");
+                return null;
+            }
+
+            string fileName = Utils.GetPath(Utils.GetDownloadFileName(url));
+            if (!File.Exists(fileName))
+            {
+                return "Скачанный файл обновления не найден.";
+            }
+
+            try
+            {
+                string dgst = await new DownloadHandle().DownloadStringAsync(url + ".dgst", true, string.Empty);
+                string expected = ParseDgstSha256(dgst);
+                if (Utils.IsNullOrEmpty(expected))
+                {
+                    return "Не удалось получить контрольную сумму релиза (.dgst); обновление отклонено.";
+                }
+
+                string actual;
+                using (var sha256 = SHA256.Create())
+                using (var stream = File.OpenRead(fileName))
+                {
+                    actual = BitConverter.ToString(sha256.ComputeHash(stream)).Replace("-", string.Empty);
+                }
+
+                if (!string.Equals(actual, expected, StringComparison.OrdinalIgnoreCase))
+                {
+                    Utils.SaveLog($"Core archive checksum mismatch: {url}");
+                    try { File.Delete(fileName); } catch { }
+                    return "Контрольная сумма скачанного архива не совпала с манифестом релиза; обновление отклонено.";
+                }
+                return null;
+            }
+            catch (Exception ex)
+            {
+                Utils.SaveLog("Core archive verification failed", ex);
+                return "Не удалось проверить контрольную сумму архива: " + ex.Message;
+            }
+        }
+
+        private static bool HasChecksumManifest(ECoreType type)
+        {
+            // v2fly и XTLS публикуют .dgst-файлы рядом с ассетами релиза.
+            switch (type)
+            {
+                case ECoreType.v2fly:
+                case ECoreType.v2fly_v5:
+                case ECoreType.Xray:
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        private static string ParseDgstSha256(string dgst)
+        {
+            if (Utils.IsNullOrEmpty(dgst)) return null;
+            Match m = Regex.Match(dgst, @"\b[0-9a-fA-F]{64}\b");
+            return m.Success ? m.Value : null;
+        }
+
+        private const string ProxyRestoreSentinelFileName = "proxy_restore.pending";
+
+        private static string ProxyRestoreSentinelPath => Utils.GetPath(ProxyRestoreSentinelFileName);
+
+        /// <summary>
+        /// LEGACY-L10: сторожевой флаг. Если прошлое обновление подписок оборвалось между
+        /// снятием системного прокси и его восстановлением, восстанавливаем прокси при старте.
+        /// </summary>
+        internal static void RestoreSystemProxyIfInterrupted(Config config)
+        {
+            string sentinel = ProxyRestoreSentinelPath;
+            if (!File.Exists(sentinel))
+            {
+                return;
+            }
+            try
+            {
+                config.sysProxyType = ESysProxyType.ForcedChange;
+                SysProxyHandle.UpdateSysProxy(config, false);
+                Utils.SaveLog("Restored system proxy after an interrupted subscription update.");
+            }
+            catch (Exception ex)
+            {
+                Utils.SaveLog("Failed to restore system proxy after an interrupted update", ex);
+            }
+            finally
+            {
+                try { File.Delete(sentinel); } catch { }
             }
         }
         #endregion
