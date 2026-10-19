@@ -231,7 +231,7 @@ namespace v2rayN.Forms
             }
             for (int k = lvSelecteds.Count - 1; k >= 0; k--)
             {
-                routingItem.rules.RemoveAt(index);
+                routingItem.rules.RemoveAt(lvSelecteds[k]);
             }
             RefreshRoutingsView();
         }
@@ -342,11 +342,19 @@ namespace v2rayN.Forms
             {
                 DownloadHandle downloadHandle = new DownloadHandle();
                 string result = await downloadHandle.DownloadStringAsync(url, false, "");
-                if (AddBatchRoutingRules(ref routingItem, result) == 0)
+                // R5: возврат в UI-поток — RefreshRoutingsView трогает ListView.
+                BeginInvoke(new Action(() =>
                 {
-                    RefreshRoutingsView();
-                    UI.Show(ResUI.OperationSuccess);
-                }
+                    if (IsDisposed || Disposing)
+                    {
+                        return;
+                    }
+                    if (AddBatchRoutingRules(ref routingItem, result) == 0)
+                    {
+                        RefreshRoutingsView();
+                        UI.Show(ResUI.OperationSuccess);
+                    }
+                }));
             });
         }
         private int AddBatchRoutingRules(ref RoutingItem routingItem, string clipboardData)

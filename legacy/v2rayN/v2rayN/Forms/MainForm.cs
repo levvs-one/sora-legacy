@@ -1198,7 +1198,7 @@ namespace v2rayN.Forms
         /// <param name="msg"></param>
         private void notifyMsg(string msg)
         {
-            notifyMain.Text = (msg.Length <= 63 ? msg : msg.Substring(1, 63));
+            notifyMain.Text = (msg.Length <= 63 ? msg : msg.Substring(0, 63));
         }
 
         #endregion
@@ -1539,7 +1539,7 @@ namespace v2rayN.Forms
         }
         private void tsbSubGroupUpdate_Click(object sender, EventArgs e)
         {
-            UpdateSubscriptionProcess(_groupId, true);
+            UpdateSubscriptionProcess(_groupId, false);
         }
 
         private void tsbSubGroupUpdateViaProxy_Click(object sender, EventArgs e)
@@ -1592,6 +1592,7 @@ namespace v2rayN.Forms
         private void SetCurrentLanguage(string value)
         {
             Utils.RegWriteValue(Global.MyRegPath, Global.MyRegKeyLanguage, value);
+            v2rayN.Tool.SoraText.RefreshLanguage();
             //Application.Restart();
         }
 

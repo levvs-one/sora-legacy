@@ -315,7 +315,10 @@ namespace v2rayN.Forms
             for (int k = 1; k <= config.coreTypeItem.Count; k++)
             {
                 var item = config.coreTypeItem[k - 1];
-                item.coreType = (ECoreType)Enum.Parse(typeof(ECoreType), tabPageCoreType.Controls[$"cmbCoreType{k}"].Text);
+                if (Enum.TryParse(tabPageCoreType.Controls[$"cmbCoreType{k}"].Text, out ECoreType parsedCoreType))
+                {
+                    item.coreType = parsedCoreType;
+                }
             }
 
             return 0;

@@ -82,13 +82,13 @@ namespace v2rayN.Forms
             vmessItem.remarks = remarks;
             vmessItem.preSocksPort = Utils.ToInt(txtPreSocksPort.Text);
 
-            if (Utils.IsNullOrEmpty(cmbCoreType.Text))
+            if (Utils.IsNullOrEmpty(cmbCoreType.Text) || !Enum.TryParse(cmbCoreType.Text, out ECoreType parsedCoreType))
             {
                 vmessItem.coreType = null;
             }
             else
             {
-                vmessItem.coreType = (ECoreType)Enum.Parse(typeof(ECoreType), cmbCoreType.Text);
+                vmessItem.coreType = parsedCoreType;
             }
 
             if (ConfigHandler.EditCustomServer(ref config, vmessItem) == 0)
@@ -159,7 +159,17 @@ namespace v2rayN.Forms
             }
 
             string configDir = Utils.GetConfigPath();
-            string fullPath = Path.GetFullPath(Path.Combine(configDir, address));
+            string fullPath;
+            try
+            {
+                fullPath = Path.GetFullPath(Path.Combine(configDir, address));
+            }
+            catch (Exception ex)
+            {
+                Utils.SaveLog("Invalid custom config path", ex);
+                UI.Show(ResUI.OperationFailed);
+                return;
+            }
             if (!fullPath.StartsWith(configDir + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
             {
                 UI.Show("Недопустимый путь к файлу конфигурации.");

@@ -226,7 +226,7 @@ namespace v2rayN.Mode
 
         public int GetLocalPort(string protocol)
         {
-            int localPort = inbound.FirstOrDefault(t => t.protocol == Global.InboundSocks).localPort;
+            int localPort = inbound?.FirstOrDefault(t => t.protocol == Global.InboundSocks)?.localPort ?? 10808;
 
             if (protocol == Global.InboundSocks)
             {

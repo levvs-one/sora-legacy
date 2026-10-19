@@ -64,8 +64,18 @@ namespace v2rayN.Handler
                 };
             }
 
+            // R5: нормализация — JSON мог содержать "vmess": null или null-элементы.
+            if (config.vmess == null)
+            {
+                config.vmess = new List<VmessItem>();
+            }
+            else
+            {
+                config.vmess.RemoveAll(item => item == null);
+            }
+
             //本地监听
-            if (config.inbound == null)
+            if (config.inbound == null || config.inbound.Count == 0)
             {
                 config.inbound = new List<InItem>();
                 InItem inItem = new InItem
@@ -87,10 +97,7 @@ namespace v2rayN.Handler
             }
             else
             {
-                if (config.inbound.Count > 0)
-                {
-                    config.inbound[0].protocol = Global.InboundSocks;
-                }
+                config.inbound[0].protocol = Global.InboundSocks;
             }
             //路由规则
             if (Utils.IsNullOrEmpty(config.domainStrategy))
@@ -164,6 +171,7 @@ namespace v2rayN.Handler
             }
 
             if (config == null
+                || config.vmess == null
                 || config.vmess.Count <= 0
                 )
             {
@@ -799,7 +807,7 @@ namespace v2rayN.Handler
             if (!config.vmess.Exists(it => it.indexId == vmessItem.indexId))
             {
                 var maxSort = config.vmess.Any() ? config.vmess.Max(t => t.sort) : 0;
-                vmessItem.sort = maxSort++;
+                vmessItem.sort = maxSort + 1;
 
                 config.vmess.Add(vmessItem);
             }

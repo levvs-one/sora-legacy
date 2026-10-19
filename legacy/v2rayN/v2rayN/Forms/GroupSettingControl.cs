@@ -31,7 +31,7 @@ namespace v2rayN.Forms
         {
             if (groupItem != null)
             {
-                txtRemarks.Text = groupItem.remarks.ToString();
+                txtRemarks.Text = groupItem.remarks.TrimEx();
                 numSort.Value = groupItem.sort;
             }
         }

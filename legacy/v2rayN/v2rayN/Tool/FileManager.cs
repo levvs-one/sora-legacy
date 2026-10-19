@@ -65,7 +65,7 @@ namespace v2rayN.Tool
             catch (Exception ex)
             {
                 Utils.SaveLog(ex.Message, ex);
-                throw ex;
+                throw;
             }
         }
         public static bool ZipExtractToFile(string fileName, string ignoredName)

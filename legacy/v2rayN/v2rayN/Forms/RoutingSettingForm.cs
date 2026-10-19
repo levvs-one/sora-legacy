@@ -267,7 +267,7 @@ namespace v2rayN.Forms
             }
             for (int k = _lvSelecteds.Count - 1; k >= 0; k--)
             {
-                config.routings.RemoveAt(index);
+                config.routings.RemoveAt(_lvSelecteds[k]);
             }
             RefreshRoutingsView();
         }

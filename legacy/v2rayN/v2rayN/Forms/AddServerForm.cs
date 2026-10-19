@@ -229,13 +229,13 @@ namespace v2rayN.Forms
             vmessItem.alterId = Utils.ToInt(alterId);
             vmessItem.security = security;
 
-            if (Utils.IsNullOrEmpty(cmbCoreType.Text))
+            if (Utils.IsNullOrEmpty(cmbCoreType.Text) || !Enum.TryParse(cmbCoreType.Text, out ECoreType parsedCoreType))
             {
                 vmessItem.coreType = null;
             }
             else
             {
-                vmessItem.coreType = (ECoreType)Enum.Parse(typeof(ECoreType), cmbCoreType.Text);
+                vmessItem.coreType = parsedCoreType;
             }
 
             int ret = -1;

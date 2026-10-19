@@ -40,8 +40,8 @@ namespace v2rayN.Forms
         {
             if (subItem != null)
             {
-                txtRemarks.Text = subItem.remarks.ToString();
-                txtUrl.Text = subItem.url.ToString();
+                txtRemarks.Text = subItem.remarks.TrimEx();
+                txtUrl.Text = subItem.url.TrimEx();
                 chkEnabled.Checked = subItem.enabled;
                 txtUserAgent.Text = subItem.userAgent;
 

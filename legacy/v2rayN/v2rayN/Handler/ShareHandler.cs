@@ -441,7 +441,7 @@ namespace v2rayN.Handler
             }
             string[] arr21 = arr1[0].Split(':');
             string[] arr22 = arr1[1].Split(':');
-            if (arr21.Length != 2 || arr21.Length != 2)
+            if (arr21.Length != 2 || arr22.Length != 2)
             {
                 return null;
             }
