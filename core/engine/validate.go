@@ -135,6 +135,17 @@ func (o Outbound) Validate() error {
 			errs = append(errs, fmt.Errorf("outbound %s: header %q is not a safe HTTP header", o.ID, k))
 		}
 	}
+	if o.Protocol == ProtocolShadowsocks && o.Obfs != "" {
+		// The renderer interpolates obfs into obfs-local plugin_opts, so
+		// only the plugin's own modes are allowed and the host must be a
+		// bare hostname or address without option separators.
+		if o.Obfs != "http" && o.Obfs != "tls" {
+			errs = append(errs, fmt.Errorf("outbound %s: shadowsocks obfs %q is not http or tls", o.ID, o.Obfs))
+		}
+		if o.ObfsParam != "" && net.ParseIP(o.ObfsParam) == nil && !isDomain(o.ObfsParam) {
+			errs = append(errs, fmt.Errorf("outbound %s: obfs host %q is not valid", o.ID, o.ObfsParam))
+		}
+	}
 	for _, peer := range o.Peers {
 		if err := validatePeerEndpoint(o.ID, peer.Endpoint); err != nil {
 			errs = append(errs, err)

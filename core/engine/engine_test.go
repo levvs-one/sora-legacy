@@ -242,3 +242,35 @@ func TestPlanValidateChecksPortsAndPeerEndpoints(t *testing.T) {
 		})
 	}
 }
+
+// TestShadowsocksObfsIsConstrained is the regression test for R5-LG-1-5:
+// the sing-box renderer interpolates obfs into obfs-local plugin_opts, so
+// only the plugin's own modes and a bare host are accepted.
+func TestShadowsocksObfsIsConstrained(t *testing.T) {
+	good := validPlan()
+	good.Outbounds = append(good.Outbounds, Outbound{ID: "ss", Protocol: ProtocolShadowsocks,
+		Server: "ss.example.com", Port: 8388, Cipher: "aes-256-gcm", Password: "secret-pass",
+		Obfs: "http", ObfsParam: "cdn.example.com"})
+	if err := good.Validate(); err != nil {
+		t.Errorf("a plain http obfs must validate: %v", err)
+	}
+	for _, tc := range []struct {
+		name      string
+		obfs      string
+		obfsParam string
+	}{
+		{"option injection", "http;evil=1", "cdn.example.com"},
+		{"unknown mode", "websocket", "cdn.example.com"},
+		{"host injection", "http", "cdn.example.com;evil=1"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			plan := validPlan()
+			plan.Outbounds = append(plan.Outbounds, Outbound{ID: "ss", Protocol: ProtocolShadowsocks,
+				Server: "ss.example.com", Port: 8388, Cipher: "aes-256-gcm", Password: "secret-pass",
+				Obfs: tc.obfs, ObfsParam: tc.obfsParam})
+			if err := plan.Validate(); err == nil {
+				t.Errorf("obfs %q / host %q must not validate", tc.obfs, tc.obfsParam)
+			}
+		})
+	}
+}

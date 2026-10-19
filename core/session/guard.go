@@ -19,8 +19,7 @@ type Settings struct {
 	KillSwitch bool
 	// Bypass lists destinations that must skip the tunnel.
 	Bypass []string
-	// TunnelMode is the tunnel the plan asked for: system, application or
-	// none.
+	// TunnelMode is the tunnel the plan asked for: system or application.
 	TunnelMode string
 }
 
