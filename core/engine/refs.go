@@ -137,8 +137,8 @@ func (r Rule) validate() error {
 			errs = append(errs, fmt.Errorf("rule ip-cidr: %q is not a CIDR", r.Value))
 		}
 	case RulePort, RuleSrcPort:
-		if _, err := strconv.Atoi(r.Value); err != nil {
-			errs = append(errs, fmt.Errorf("rule %s: %q is not a port", r.Type, r.Value))
+		if port, err := strconv.Atoi(r.Value); err != nil || port < 1 || port > 65535 {
+			errs = append(errs, fmt.Errorf("rule %s: %q is not a valid port", r.Type, r.Value))
 		}
 	}
 	return errors.Join(errs...)

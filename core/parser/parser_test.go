@@ -137,3 +137,42 @@ func TestXrayConfigurationsBecomeProfiles(t *testing.T) {
 		t.Fatal("two profiles on one server must keep two identities")
 	}
 }
+
+// TestParserAcceptsNewerUUIDVersions is the regression test for R5-LG-2-3:
+// the UUID check rejected versions 6-8, which RFC 9562 defines.
+func TestParserAcceptsNewerUUIDVersions(t *testing.T) {
+	for _, id := range []string{
+		"123e4567-e89b-12d3-a456-426614174000", // v1
+		"123e4567-e89b-42d3-a456-426614174000", // v4
+		"01926f2a-9c6e-7c3b-b9e8-2b1b3f6a4c5d", // v7
+		"123e4567-e89b-82d3-a456-426614174000", // v8
+	} {
+		r, err := (LinkParser{}).Parse([]byte("vless://" + id + "@a.example:443"))
+		if err != nil {
+			t.Errorf("uuid %q: Parse error = %v", id, err)
+			continue
+		}
+		if len(r.Servers) != 1 || r.Servers[0].UUID != id {
+			t.Errorf("uuid %q was not imported: %#v", id, r.Report)
+		}
+	}
+}
+
+// TestReportItemsAreBounded is the regression test for R5-LG-2-7: the
+// per-item reasons must not grow with the input past the item limit.
+func TestReportItemsAreBounded(t *testing.T) {
+	var sb strings.Builder
+	for range 5000 {
+		sb.WriteString("vless://123e4567-e89b-12d3-a456-426614174000@a.example:443\n")
+	}
+	r, err := (LinkParser{MaxItems: 1}).Parse([]byte(sb.String()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := len(r.Report.UnsupportedItems); got > maxReportItems {
+		t.Errorf("UnsupportedItems holds %d reasons, want at most %d", got, maxReportItems)
+	}
+	if r.Report.Unsupported != 4999 {
+		t.Errorf("Unsupported = %d, want 4999", r.Report.Unsupported)
+	}
+}

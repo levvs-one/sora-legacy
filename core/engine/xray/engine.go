@@ -111,7 +111,10 @@ func (*driver) Handshake(ctx context.Context, rt supervise.Runtime) (string, err
 		if err != nil {
 			return "", fmt.Errorf("xray: the local proxy is not listening yet: %w", err)
 		}
-		return "", conn.Close()
+		// The dial proved the listener is up; a close failure must not
+		// fail the handshake.
+		_ = conn.Close()
+		return "", nil
 	}
 	_, err := readVars(ctx, rt.ControlAddr)
 	return "", err

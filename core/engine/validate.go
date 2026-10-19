@@ -135,7 +135,28 @@ func (o Outbound) Validate() error {
 			errs = append(errs, fmt.Errorf("outbound %s: header %q is not a safe HTTP header", o.ID, k))
 		}
 	}
+	for _, peer := range o.Peers {
+		if err := validatePeerEndpoint(o.ID, peer.Endpoint); err != nil {
+			errs = append(errs, err)
+		}
+	}
 	return errors.Join(errs...)
+}
+
+// validatePeerEndpoint checks the host:port of a WireGuard peer. Renderers
+// split it without further checks, so an invalid port must fail here.
+func validatePeerEndpoint(id, endpoint string) error {
+	host, portText, err := net.SplitHostPort(endpoint)
+	if err != nil {
+		return fmt.Errorf("outbound %s: peer endpoint %q is not host:port", id, endpoint)
+	}
+	if host == "" {
+		return fmt.Errorf("outbound %s: peer endpoint %q has no host", id, endpoint)
+	}
+	if port, err := strconv.Atoi(portText); err != nil || port < 1 || port > 65535 {
+		return fmt.Errorf("outbound %s: peer port %q is not valid", id, portText)
+	}
+	return nil
 }
 
 // Validate checks the plan as a whole: limits, identifiers, references between

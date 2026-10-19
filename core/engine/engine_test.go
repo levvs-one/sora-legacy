@@ -212,3 +212,33 @@ func TestTunStackNeverSilentlyChangesWithTheEngine(t *testing.T) {
 		}
 	}
 }
+
+// TestPlanValidateChecksPortsAndPeerEndpoints is the regression test for
+// R5-LG-2-5 and R5-LG-2-8: rule ports and WireGuard peer endpoints used to
+// skip range validation and reach the renderers unchecked.
+func TestPlanValidateChecksPortsAndPeerEndpoints(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		rule Rule
+		peer WireGuardPeer
+	}{
+		{"port zero", Rule{Type: RulePort, Value: "0", Target: "direct"}, WireGuardPeer{Endpoint: "198.51.100.7:51820"}},
+		{"port too large", Rule{Type: RulePort, Value: "65536", Target: "direct"}, WireGuardPeer{Endpoint: "198.51.100.7:51820"}},
+		{"negative port", Rule{Type: RuleSrcPort, Value: "-1", Target: "direct"}, WireGuardPeer{Endpoint: "198.51.100.7:51820"}},
+		{"peer port zero", Rule{Type: RulePort, Value: "443", Target: "direct"}, WireGuardPeer{Endpoint: "198.51.100.7:0"}},
+		{"peer port too large", Rule{Type: RulePort, Value: "443", Target: "direct"}, WireGuardPeer{Endpoint: "198.51.100.7:99999"}},
+		{"peer endpoint not host:port", Rule{Type: RulePort, Value: "443", Target: "direct"}, WireGuardPeer{Endpoint: "198.51.100.7"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			plan := validPlan()
+			plan.Rules = []Rule{tc.rule}
+			plan.Outbounds = append(plan.Outbounds, Outbound{ID: "wg", Protocol: ProtocolWireGuard,
+				Server: "198.51.100.7", Port: 51820, PrivateKey: "cKE7LmCF61IhqqABGhvJ44jWXp8fKymcMAEVAzLDYVk=",
+				Addresses: []string{"10.7.0.2/32"},
+				Peers:     []WireGuardPeer{{PublicKey: "Z84J2IelR9ch3k8VtlVhhs5ycBUlXA7wHBWcBrjqnAw=", Endpoint: tc.peer.Endpoint}}})
+			if err := plan.Validate(); err == nil {
+				t.Errorf("%s must not validate", tc.name)
+			}
+		})
+	}
+}

@@ -428,3 +428,25 @@ func TestPlanAcceptsEveryBuiltInTarget(t *testing.T) {
 		}
 	}
 }
+
+// TestRuleTypeOfTreatsIPAddressesAsNetworks is the regression test for
+// R5-LG-2-4: "::1" used to be classified as a port and "1.2.3.4" as a
+// domain keyword. Bare addresses are not valid destinations (the contract
+// wants a network such as "203.0.113.0/24"), so they classify as CIDR and
+// are rejected with an accurate error.
+func TestRuleTypeOfTreatsIPAddressesAsNetworks(t *testing.T) {
+	for _, destination := range []string{"::1", "1.2.3.4", "2001:db8::1"} {
+		if kind := ruleTypeOf(destination); kind != engine.RuleIPCIDR {
+			t.Errorf("ruleTypeOf(%q) = %q, want ip-cidr", destination, kind)
+		}
+		sp := &corev1.SessionPlan{
+			TunnelMode: corev1.TunnelMode_TUNNEL_MODE_SYSTEM,
+			Outbounds:  []*corev1.OutboundSpec{{Id: "a", Protocol: "direct"}},
+			Routes:     []*corev1.RoutingRule{{Destination: destination, OutboundId: "a"}},
+			Routing:    &corev1.RoutingOptions{ProxyTarget: "a"},
+		}
+		if _, err := planFromProto(sp, "s", nil); err == nil {
+			t.Errorf("a bare address %q must not become a plan rule", destination)
+		}
+	}
+}

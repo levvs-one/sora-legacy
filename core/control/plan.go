@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/netip"
 	"net/url"
 	"runtime"
 	"strconv"
@@ -324,7 +325,9 @@ func checkDNS(dns engine.DNS) error {
 	return nil
 }
 
-// checkBypass refuses an entry that is not a domain, an address or a network.
+// checkBypass rejects entries that are empty or contain whitespace. It does
+// not validate the domain, address, or network shape; matching happens
+// downstream when the rules are applied.
 func checkBypass(entry string) error {
 	trimmed := strings.TrimSpace(entry)
 	if trimmed == "" {
@@ -601,11 +604,23 @@ func ruleTypeOf(destination string) engine.RuleType {
 		return engine.RuleProcess
 	case strings.Contains(destination, "/"):
 		return engine.RuleIPCIDR
+	case isIPLiteral(destination):
+		// A bare address is not a network, a port, or a domain: reject it
+		// as an invalid CIDR instead of misreading "::1" as a port or
+		// "1.2.3.4" as a domain keyword.
+		return engine.RuleIPCIDR
 	case strings.Contains(destination, ":"):
 		return engine.RulePort
 	default:
 		return engine.RuleDomainKeyword
 	}
+}
+
+// isIPLiteral reports whether s is a bare IP address without a prefix
+// length.
+func isIPLiteral(s string) bool {
+	_, err := netip.ParseAddr(s)
+	return err == nil
 }
 
 // defaultTunResolvers supplies DNS for TUN plans without resolvers.

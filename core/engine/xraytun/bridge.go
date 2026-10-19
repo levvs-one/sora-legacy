@@ -176,7 +176,11 @@ func (e *Engine) Apply(ctx context.Context, p *engine.Plan) error {
 func (e *Engine) Select(ctx context.Context, group, target string) error {
 	e.op.Lock()
 	defer e.op.Unlock()
-	if err := e.tun.(engine.ConnectionTracker).CloseConnections(ctx); err != nil {
+	tracker, ok := e.tun.(engine.ConnectionTracker)
+	if !ok {
+		return fmt.Errorf("xraytun: the TUN engine does not track connections")
+	}
+	if err := tracker.CloseConnections(ctx); err != nil {
 		return err
 	}
 	return e.Engine.Select(ctx, group, target)

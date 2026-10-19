@@ -223,7 +223,7 @@ func (o *OutboundSpec) validate() error {
 	return nil
 }
 
-var uuidRE = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$`)
+var uuidRE = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$`)
 
 // ToProto converts a validated canonical specification to the stable fields of
 // the control-plane model.
@@ -232,6 +232,18 @@ func (o OutboundSpec) ToProto() (*corev1.OutboundSpec, error) {
 		return nil, err
 	}
 	return &corev1.OutboundSpec{Id: o.ID, DisplayName: o.DisplayName, Protocol: o.Protocol, DisplayProtocol: o.DisplayProtocol, Transport: o.Transport, Security: o.Security, Endpoint: &corev1.Endpoint{Host: o.Host, Port: uint32(o.Port)}, Credentials: &corev1.CredentialsRef{Reference: o.UUID}}, nil
+}
+
+// maxReportItems bounds the per-item reasons a report carries. The counters
+// keep counting past the bound, so a 16 MB subscription cannot turn the
+// report itself into a memory hog.
+const maxReportItems = 100
+
+func appendReason(reasons []ItemReason, reason ItemReason) []ItemReason {
+	if len(reasons) >= maxReportItems {
+		return reasons
+	}
+	return append(reasons, reason)
 }
 
 // ItemReason identifies a skipped source position and a stable readable reason.
@@ -300,7 +312,7 @@ func (p LinkParser) parseList(s string, f Format) (ImportResult, error) {
 	for i, l := range strings.Split(s, "\n") {
 		if len(r.Servers) >= p.limit() {
 			r.Report.Unsupported++
-			r.Report.UnsupportedItems = append(r.Report.UnsupportedItems, ItemReason{i, "item limit exceeded"})
+			r.Report.UnsupportedItems = appendReason(r.Report.UnsupportedItems, ItemReason{i, "item limit exceeded"})
 			continue
 		}
 		l = strings.TrimSpace(l)
@@ -311,17 +323,17 @@ func (p LinkParser) parseList(s string, f Format) (ImportResult, error) {
 		if e != nil {
 			if errors.Is(e, ErrUnsupported) {
 				r.Report.Unsupported++
-				r.Report.UnsupportedItems = append(r.Report.UnsupportedItems, ItemReason{i, "unsupported protocol or option"})
+				r.Report.UnsupportedItems = appendReason(r.Report.UnsupportedItems, ItemReason{i, "unsupported protocol or option"})
 			} else {
 				r.Report.Invalid++
-				r.Report.InvalidItems = append(r.Report.InvalidItems, ItemReason{i, "invalid link fields"})
+				r.Report.InvalidItems = appendReason(r.Report.InvalidItems, ItemReason{i, "invalid link fields"})
 			}
 			continue
 		}
 		k := o.StableKey()
 		if _, ok := seen[k]; ok {
 			r.Report.SkippedDuplicates++
-			r.Report.DuplicateItems = append(r.Report.DuplicateItems, ItemReason{i, "duplicate server"})
+			r.Report.DuplicateItems = appendReason(r.Report.DuplicateItems, ItemReason{i, "duplicate server"})
 			continue
 		}
 		seen[k] = struct{}{}
@@ -610,7 +622,7 @@ func (p LinkParser) parseJSON(b []byte, f Format) (ImportResult, error) {
 	for i, it := range items {
 		if len(r.Servers) >= p.limit() {
 			r.Report.Unsupported++
-			r.Report.UnsupportedItems = append(r.Report.UnsupportedItems, ItemReason{i, "item limit exceeded"})
+			r.Report.UnsupportedItems = appendReason(r.Report.UnsupportedItems, ItemReason{i, "item limit exceeded"})
 			continue
 		}
 		m, ok := it.(map[string]any)
@@ -732,7 +744,7 @@ func (p LinkParser) parseYAML(b []byte) (ImportResult, error) {
 	for i, m := range root.Proxies {
 		if len(r.Servers) >= p.limit() {
 			r.Report.Unsupported++
-			r.Report.UnsupportedItems = append(r.Report.UnsupportedItems, ItemReason{i, "item limit exceeded"})
+			r.Report.UnsupportedItems = appendReason(r.Report.UnsupportedItems, ItemReason{i, "item limit exceeded"})
 			continue
 		}
 		o, e := mapJSONSpec(m, "")
