@@ -494,3 +494,61 @@ func TestApplyIsAllOrNothing(t *testing.T) {
 		t.Fatalf("the change did not reach the disk: refs %v", reopened.Refs())
 	}
 }
+
+// TestOpenRejectsAForgedVault is the regression test for R5-LG-2-1 and
+// R5-LG-2-2. A vault carrying an empty secret used to panic the wipe
+// comparison in Apply, and a vault file larger than MaxVaultBytes was read
+// into memory without a bound. Both must fail at open with a corrupt-store
+// error instead.
+func TestOpenRejectsAForgedVault(t *testing.T) {
+	t.Run("empty secret value", func(t *testing.T) {
+		store, prot, dir := openTestStore(t)
+		sealed, err := store.seal(map[string][]byte{"s1_abc": {}})
+		if err != nil {
+			t.Fatalf("seal() error = %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, vaultFile), sealed, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		reopened, err := Open(dir, Options{Protector: prot})
+		if err == nil {
+			_ = reopened.Close()
+			t.Fatal("Open() accepted a vault with an empty secret")
+		}
+		if errs.KeyOf(err) != errs.KeySecretStoreCorrupt {
+			t.Errorf("Open() key = %q, want %q", errs.KeyOf(err), errs.KeySecretStoreCorrupt)
+		}
+	})
+	t.Run("oversized vault file", func(t *testing.T) {
+		_, prot, dir := openTestStore(t)
+		big := make([]byte, MaxVaultBytes+2)
+		for i := range big {
+			big[i] = 'x'
+		}
+		if err := os.WriteFile(filepath.Join(dir, vaultFile), big, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		reopened, err := Open(dir, Options{Protector: prot})
+		if err == nil {
+			_ = reopened.Close()
+			t.Fatal("Open() accepted an oversized vault file")
+		}
+		if errs.KeyOf(err) != errs.KeySecretStoreCorrupt {
+			t.Errorf("Open() key = %q, want %q", errs.KeyOf(err), errs.KeySecretStoreCorrupt)
+		}
+	})
+}
+
+// TestSameBackingNeedsAddressableSlices pins the empty-slice behavior the
+// Apply wipe comparison relies on: empty values never compare equal, so a
+// forged vault cannot reach the address-of-first-byte panic.
+func TestSameBackingNeedsAddressableSlices(t *testing.T) {
+	a := []byte("secret")
+	b := append([]byte(nil), a...)
+	if !sameBacking(a, a) || sameBacking(a, b) {
+		t.Error("sameBacking misidentifies shared backing")
+	}
+	if sameBacking(nil, nil) || sameBacking([]byte{}, a) || sameBacking(a, []byte{}) {
+		t.Error("sameBacking must be false when either side is empty")
+	}
+}

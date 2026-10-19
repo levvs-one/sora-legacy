@@ -250,13 +250,19 @@ func (s *Store) Apply(puts map[string][]byte, deletes []string) error {
 		return err
 	}
 	// Wipe replaced and removed values; unchanged values are shared by both
-	// maps.
+	// maps. The address comparison needs non-empty slices on both sides.
 	for reference, material := range previous {
-		if kept, ok := next[reference]; !ok || &kept[0] != &material[0] {
+		if kept, ok := next[reference]; !ok || !sameBacking(kept, material) {
 			wipe(material)
 		}
 	}
 	return nil
+}
+
+// sameBacking reports whether a and b start at the same address. Empty
+// slices have no addressable first byte and never compare equal.
+func sameBacking(a, b []byte) bool {
+	return len(a) > 0 && len(b) > 0 && &a[0] == &b[0]
 }
 
 // Has reports whether a reference is stored, without copying the material.
@@ -307,16 +313,31 @@ func (s *Store) Close() error {
 	return nil
 }
 
-// read loads the vault, treating a missing file as an empty store.
+// read loads the vault, treating a missing file as an empty store. The
+// read is bounded: the writer never produces more than MaxVaultBytes, so a
+// larger file is not a vault and must not be pulled into memory.
 func (s *Store) read() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	raw, err := os.ReadFile(filepath.Join(s.dir, vaultFile))
+	path := filepath.Join(s.dir, vaultFile)
+	file, err := os.Open(path)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			return nil
 		}
 		return errs.Wrap(err, errs.CodeInternal, errs.KeySecretStoreUnavailable)
+	}
+	raw, err := io.ReadAll(io.LimitReader(file, MaxVaultBytes+1))
+	closeErr := file.Close()
+	if err != nil {
+		return errs.Wrap(err, errs.CodeInternal, errs.KeySecretStoreUnavailable)
+	}
+	if closeErr != nil {
+		return errs.Wrap(closeErr, errs.CodeInternal, errs.KeySecretStoreUnavailable)
+	}
+	if len(raw) > MaxVaultBytes {
+		return errs.Newf(errs.CodeInternal, errs.KeySecretStoreCorrupt,
+			"secret store: the vault is %d bytes, the limit is %d", len(raw), MaxVaultBytes)
 	}
 	items, err := s.unseal(raw)
 	if err != nil {
@@ -389,6 +410,20 @@ func (s *Store) unseal(raw []byte) (map[string][]byte, error) {
 		if ValidateReference(reference) != nil {
 			return nil, errs.Newf(errs.CodeInternal, errs.KeySecretStoreCorrupt,
 				"secret store: the vault holds an invalid reference")
+		}
+	}
+	if len(items) > MaxSecrets {
+		return nil, errs.Newf(errs.CodeInternal, errs.KeySecretStoreCorrupt,
+			"secret store: the vault holds %d secrets, the limit is %d", len(items), MaxSecrets)
+	}
+	for reference, material := range items {
+		// Apply rejects empty and oversized material, so a vault that
+		// carries either was forged or corrupted; refuse it instead of
+		// trusting it into memory (empty values also panic the wipe
+		// comparison in Apply).
+		if len(material) == 0 || len(material) > MaxSecretBytes {
+			return nil, errs.Newf(errs.CodeInternal, errs.KeySecretStoreCorrupt,
+				"secret store: the vault holds an invalid secret for %q", reference)
 		}
 	}
 	return items, nil
