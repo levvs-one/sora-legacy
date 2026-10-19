@@ -2,7 +2,6 @@
 
 Пакеты службы ядра для Linux: `.deb`, `.rpm` и пакет Arch Linux, собранные
 [nfpm](https://github.com/goreleaser/nfpm) из одного описания `nfpm.yaml`.
-Интерфейс поставляется отдельным пакетом.
 
 ## Что ставит пакет
 
@@ -39,9 +38,8 @@ packaging/engines/fetch.sh amd64 dist/engines
 SORA_ARCH=amd64 SORA_VERSION=0.3.0 nfpm package --config packaging/linux/nfpm.yaml --packager deb --target dist/
 ```
 
-`--packager rpm` и `--packager archlinux` собирают остальные форматы. CI собирает
-все три формата для amd64 и arm64 в каждом pull request и прикладывает их к
-прогону.
+`--packager rpm` и `--packager archlinux` собирают остальные форматы. CI пакеты
+не собирает — сборка идёт вручную командами выше.
 
 ## Что не проверено
 
