@@ -12,6 +12,7 @@ import (
 	"sync"
 
 	"github.com/levvs-one/sora-client/core/errs"
+	"github.com/levvs-one/sora-client/core/secret"
 )
 
 // TokenLen is the control token length in bytes. Connect and Disconnect carry
@@ -30,12 +31,17 @@ const tokenFile = "control.token"
 // peer allow-list (Unix socket permissions / SO_PEERCRED, Windows pipe ACL,
 // polkit policy): see the ipc package.
 type Authenticator struct {
-	mu    sync.RWMutex
+	mu sync.RWMutex
+	// path is the token file written by LoadOrCreateToken. Empty for
+	// instances built with NewAuthenticator, for which Rotate keeps the
+	// token in memory only.
+	path  string
 	token []byte
 }
 
 // NewAuthenticator returns an authenticator for an existing token. The token is
-// copied, so the caller may wipe its own.
+// copied, so the caller may wipe its own. The instance has no token file, so
+// Rotate keeps the new token in memory only.
 func NewAuthenticator(token []byte) (*Authenticator, error) {
 	if len(token) != TokenLen {
 		return nil, errs.Newf(errs.CodeInvalidArgument, errs.KeyUnauthenticated,
@@ -70,10 +76,15 @@ func LoadOrCreateToken(dir string) (*Authenticator, error) {
 		return nil, errs.Wrap(err, errs.CodeInternal, errs.KeyUnauthenticated)
 	}
 	encoded := []byte(base64.StdEncoding.EncodeToString(token))
-	if err := writeOwnerOnly(path, encoded); err != nil {
+	if err := secret.WriteFileAtomic(path, encoded, 0o600); err != nil {
 		return nil, err
 	}
-	return NewAuthenticator(token)
+	auth, err := NewAuthenticator(token)
+	if err != nil {
+		return nil, err
+	}
+	auth.path = path
+	return auth, nil
 }
 
 // Verify checks a token in constant time after rejecting an invalid length.
@@ -109,22 +120,26 @@ func (a *Authenticator) Token() []byte {
 }
 
 // Rotate replaces and returns the token without restarting the core. All
-// existing client tokens become invalid.
+// existing client tokens become invalid. When the authenticator was loaded
+// from a token file, the new token is persisted atomically before it takes
+// effect, so a restart cannot resurrect the compromised token; a failed
+// write leaves the old token in place.
 func (a *Authenticator) Rotate() ([]byte, error) {
 	fresh := make([]byte, TokenLen)
 	if _, err := rand.Read(fresh); err != nil {
 		return nil, errs.Wrap(err, errs.CodeInternal, errs.KeyUnauthenticated)
 	}
+	a.mu.RLock()
+	path := a.path
+	a.mu.RUnlock()
+	if path != "" {
+		encoded := []byte(base64.StdEncoding.EncodeToString(fresh))
+		if err := secret.WriteFileAtomic(path, encoded, 0o600); err != nil {
+			return nil, err
+		}
+	}
 	a.mu.Lock()
 	a.token = append([]byte(nil), fresh...)
 	a.mu.Unlock()
 	return fresh, nil
-}
-
-// writeOwnerOnly stores a file that only the owner may read.
-func writeOwnerOnly(path string, data []byte) error {
-	if err := os.WriteFile(path, data, 0o600); err != nil {
-		return errs.Wrap(err, errs.CodeInternal, errs.KeyUnauthenticated)
-	}
-	return nil
 }

@@ -7,10 +7,10 @@ import (
 	"github.com/levvs-one/sora-client/core/errs"
 )
 
-// writeFileAtomic replaces content atomically so readers see the old or new
+// WriteFileAtomic replaces content atomically so readers see the old or new
 // file. It creates the temporary file beside the destination to keep rename on
 // one filesystem.
-func writeFileAtomic(path string, data []byte, mode os.FileMode) error {
+func WriteFileAtomic(path string, data []byte, mode os.FileMode) error {
 	dir := filepath.Dir(path)
 	tmp, err := os.CreateTemp(dir, filepath.Base(path)+".tmp-*")
 	if err != nil {

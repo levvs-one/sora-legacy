@@ -60,7 +60,7 @@ type Store struct {
 	items  map[string][]byte
 	closed bool
 	// writeFile permits failure injection to verify memory/disk
-	// consistency. Production uses writeFileAtomic.
+	// consistency. Production uses WriteFileAtomic.
 	writeFile func(path string, data []byte, mode os.FileMode) error
 }
 
@@ -101,7 +101,7 @@ func Open(dir string, opts Options) (*Store, error) {
 		key:       key,
 		id:        id,
 		items:     make(map[string][]byte),
-		writeFile: writeFileAtomic,
+		writeFile: WriteFileAtomic,
 	}
 	if err := s.read(); err != nil {
 		wipe(key)

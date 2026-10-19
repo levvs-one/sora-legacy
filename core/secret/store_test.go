@@ -226,7 +226,7 @@ func TestStoreKeepsFileAndMemoryInStep(t *testing.T) {
 	if !store.Has("s1_keep") {
 		t.Error("a failed delete dropped the secret from memory")
 	}
-	store.writeFile = writeFileAtomic
+	store.writeFile = WriteFileAtomic
 	if err := store.Close(); err != nil {
 		t.Fatalf("Close() error = %v", err)
 	}

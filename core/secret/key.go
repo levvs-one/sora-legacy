@@ -76,7 +76,7 @@ func loadOrCreateKey(dir string, prot Protector) (key, id []byte, err error) {
 	}
 	payload := append([]byte(masterHeader), protected...)
 	wipe(protected)
-	if err := writeFileAtomic(filepath.Join(dir, masterFile), payload, fileMode); err != nil {
+	if err := WriteFileAtomic(filepath.Join(dir, masterFile), payload, fileMode); err != nil {
 		wipe(key)
 		return nil, nil, err
 	}
@@ -101,7 +101,7 @@ func loadOrCreateID(path string) ([]byte, error) {
 	if _, err := rand.Read(id); err != nil {
 		return nil, errs.Wrap(err, errs.CodeInternal, errs.KeySecretStoreUnavailable)
 	}
-	if err := writeFileAtomic(path, id, fileMode); err != nil {
+	if err := WriteFileAtomic(path, id, fileMode); err != nil {
 		return nil, err
 	}
 	return id, nil
