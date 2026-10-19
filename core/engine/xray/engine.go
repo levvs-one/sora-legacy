@@ -141,6 +141,14 @@ type traffic struct {
 	Downlink uint64 `json:"downlink"`
 }
 
+// metricsClient bypasses the process proxy environment: the target is always a
+// loopback listener owned by the supervised engine, and routing it through
+// HTTP_PROXY would break metrics (or leak the request into the tunnel).
+// NEW-R2: previously http.DefaultClient, which honors HTTP_PROXY for loopback.
+var metricsClient = &http.Client{
+	Transport: &http.Transport{Proxy: nil},
+}
+
 func readVars(ctx context.Context, addr string) (vars, error) {
 	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
@@ -148,7 +156,7 @@ func readVars(ctx context.Context, addr string) (vars, error) {
 	if err != nil {
 		return vars{}, err
 	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := metricsClient.Do(req)
 	if err != nil {
 		return vars{}, fmt.Errorf("xray: metrics are not reachable: %w", err)
 	}
