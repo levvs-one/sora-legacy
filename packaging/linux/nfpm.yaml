@@ -48,6 +48,11 @@ contents:
     dst: /usr/lib/sora/engines/geoip.dat
   - src: ./dist/engines/geosite.dat
     dst: /usr/lib/sora/engines/geosite.dat
+  # Digest manifest written by fetch.sh; sora-core verifies engine binaries
+  # against it at discovery time. Keep it next to the binaries it covers.
+  - src: ./dist/engines/SHA256SUMS
+    dst: /usr/lib/sora/engines/SHA256SUMS
+    file_info: {mode: 0644}
   # zapret by bol-van (MIT), built from third_party/zapret unchanged.
   - src: ./dist/engines/tpws
     dst: /usr/lib/sora/engines/tpws
