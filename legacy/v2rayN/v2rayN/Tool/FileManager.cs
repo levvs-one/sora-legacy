@@ -111,6 +111,7 @@ namespace v2rayN.Tool
         {
             try
             {
+                string baseDir = Utils.GetPath();
                 using (ZipArchive archive = ZipFile.OpenRead(fileName))
                 {
                     foreach (ZipArchiveEntry entry in archive.Entries)
@@ -118,7 +119,13 @@ namespace v2rayN.Tool
                         if (entry.Length == 0)
                             continue;
 
-                        string entryOuputPath = Utils.GetPath(entry.FullName);
+                        // LEGACY-L8: защита от Zip-Slip — запись только внутрь каталога приложения.
+                        string entryOuputPath = Path.GetFullPath(Path.Combine(baseDir, entry.FullName));
+                        if (!entryOuputPath.StartsWith(baseDir + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+                        {
+                            Utils.SaveLog($"Blocked zip-slip entry: {entry.FullName}");
+                            continue;
+                        }
                         FileInfo fileInfo = new FileInfo(entryOuputPath);
                         fileInfo.Directory.Create();
                         entry.ExtractToFile(entryOuputPath, true);
