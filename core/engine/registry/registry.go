@@ -62,9 +62,10 @@ type Registry struct {
 	last engine.Selection
 }
 
-// Discover searches environment overrides, enginesDir, and PATH for each
-// engine. Missing builds are recorded without failing discovery. Instances
-// inherit base and use separate directories under base.HomeDir.
+// Discover searches the engines directory for each engine (plus an
+// environment override only when the operator opted in with --allow-env-bin).
+// Missing builds are recorded without failing discovery. Instances inherit
+// base and use separate directories under base.HomeDir.
 func Discover(ctx context.Context, enginesDir string, base supervise.Config) *Registry {
 	r := &Registry{binaries: map[engine.Kind]supervise.Binary{}, preference: engine.DefaultPreference, base: base}
 	if enginesDir != "" {
@@ -74,7 +75,11 @@ func Discover(ctx context.Context, enginesDir string, base supervise.Config) *Re
 		}
 	}
 	for _, kind := range engine.DefaultPreference {
-		b, err := drivers[kind].prober.Discover(ctx, enginesDir)
+		// Copy the shared prober so the operator's env-override choice
+		// applies to this discovery only.
+		prober := drivers[kind].prober
+		prober.AllowEnv = base.AllowEnvBin
+		b, err := prober.Discover(ctx, enginesDir)
 		if err != nil {
 			// Probe errors contain local paths; expose them only
 			// through sora-core -check, not diagnostics.

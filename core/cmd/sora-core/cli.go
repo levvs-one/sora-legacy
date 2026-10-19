@@ -31,6 +31,7 @@ type flags struct {
 	uninstall     bool
 	showToken     bool
 	legacyControl bool
+	allowEnvBin   bool
 }
 
 func main() {
@@ -73,6 +74,7 @@ func run(ctx context.Context, arguments []string) error {
 	set.BoolVar(&f.uninstall, "uninstall-service", false, "Windows: stop and remove the SoraLegacyCore service and exit")
 	set.BoolVar(&f.showToken, "print-token", false, "print the control plane token and exit")
 	set.BoolVar(&f.legacyControl, "legacy-control", true, "serve JSON-RPC for the .NET Framework legacy client")
+	set.BoolVar(&f.allowEnvBin, "allow-env-bin", false, "honor $SORA_SINGBOX_BIN/$SORA_XRAY_BIN/$SORA_MIHOMO_BIN overrides when discovering engines; off by default because an inherited variable could substitute an arbitrary executable")
 	if err := set.Parse(arguments); err != nil {
 		return errs.Wrap(err, errs.CodeInvalidArgument, errs.KeyUnauthenticated)
 	}
@@ -88,6 +90,9 @@ func run(ctx context.Context, arguments []string) error {
 		}
 		if f.legacyControl {
 			arguments = append(arguments, "-legacy-control")
+		}
+		if f.allowEnvBin {
+			arguments = append(arguments, "-allow-env-bin")
 		}
 		return installService(arguments)
 	}
@@ -120,6 +125,7 @@ func run(ctx context.Context, arguments []string) error {
 		Socket:        f.socket,
 		Log:           logger,
 		AllowFileKeys: f.fileKeys,
+		AllowEnvBin:   f.allowEnvBin,
 	}
 	app, err := New(ctx, options)
 	if err != nil {

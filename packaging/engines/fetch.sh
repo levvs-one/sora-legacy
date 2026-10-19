@@ -47,3 +47,9 @@ if [[ "$found" -ne 3 ]]; then
 	echo "engines.lock has $found engines for $arch, expected 3" >&2
 	exit 1
 fi
+
+# Record the digests of the laid-out binaries. sora-core verifies enginesDir
+# candidates against this manifest at discovery time (see supervise.LoadDigests);
+# it is the binary-level counterpart of the archive digests in engines.lock.
+(cd "$dest" && sha256sum sing-box xray mihomo geoip.dat geosite.dat >SHA256SUMS)
+echo "wrote $dest/SHA256SUMS"

@@ -76,6 +76,11 @@ type Options struct {
 	// fails. Disabled by default because file keys provide weaker
 	// protection.
 	AllowFileKeys bool
+	// AllowEnvBin lets engine discovery honor $SORA_*_BIN overrides.
+	// Disabled by default: an inherited environment variable would
+	// otherwise let any process able to influence the core's environment
+	// substitute an arbitrary engine executable.
+	AllowEnvBin bool
 }
 
 // App holds an initialized core. Construction opens the store, token, and
@@ -188,6 +193,7 @@ func New(ctx context.Context, opts Options) (*App, error) {
 		}
 		app.engines = registry.Discover(ctx, opts.EnginesDir, supervise.Config{
 			HomeDir: filepath.Join(opts.DataDir, "engine"), LocalPort: int(tunnelPort), Logs: center,
+			AllowEnvBin: opts.AllowEnvBin,
 		})
 		if err := app.engines.Pin(opts.Engine); err != nil {
 			return nil, err

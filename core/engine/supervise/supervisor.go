@@ -104,6 +104,12 @@ type Preparer interface {
 type Config struct {
 	Binary  Binary
 	HomeDir string
+	// AllowEnvBin lets engine discovery honor $SORA_*_BIN overrides.
+	// Keep it false unless the operator explicitly passes --allow-env-bin:
+	// an inherited environment variable would otherwise let any process
+	// able to influence the core's environment substitute an arbitrary
+	// engine executable.
+	AllowEnvBin bool
 	// LocalPort is reserved before system proxy configuration. Zero selects
 	// a port per start and is suitable only when no proxy points to a fixed
 	// port.
