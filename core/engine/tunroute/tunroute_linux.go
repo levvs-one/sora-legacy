@@ -11,6 +11,7 @@ import (
 	"net/netip"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -135,10 +136,51 @@ func bypassSteps(device string, addresses []netip.Prefix, families []string) []s
 	return steps
 }
 
+// systemBinDirs are the trusted locations for the privileged iproute2
+// helper. A privileged daemon must not resolve helpers through PATH: a
+// PATH-planted binary would otherwise execute with the core's (possibly
+// root) privileges.
+var systemBinDirs = []string{"/usr/sbin", "/sbin", "/usr/bin", "/bin"}
+
+// ErrBinNotFound reports that a privileged helper binary is absent from
+// the trusted system directories.
+var ErrBinNotFound = errors.New("not found in system directories")
+
+// resolveSystemBin returns the absolute path of a privileged helper binary
+// from the trusted system directories, failing closed when absent.
+func resolveSystemBin(name string) (string, error) {
+	for _, dir := range systemBinDirs {
+		p := filepath.Join(dir, name)
+		if fi, err := os.Stat(p); err == nil && !fi.IsDir() && fi.Mode()&0o111 != 0 {
+			return p, nil
+		}
+	}
+	return "", fmt.Errorf("%s %w (/usr/sbin, /sbin, /usr/bin, /bin)", name, ErrBinNotFound)
+}
+
+// ipBinForTest, when non-nil, replaces ipBin in tests.
+var ipBinForTest func() (string, error)
+
+// ipBin resolves iproute2 to a trusted absolute path (never PATH).
+func ipBin() (string, error) {
+	if ipBinForTest != nil {
+		return ipBinForTest()
+	}
+	p, err := resolveSystemBin("ip")
+	if err != nil {
+		return "", fmt.Errorf("tunroute: TUN routing requires iproute2 (ip): %w", err)
+	}
+	return p, nil
+}
+
 func unroute(ctx context.Context) error {
+	bin, err := ipBin()
+	if err != nil {
+		return err
+	}
 	var errs []error
 	for _, family := range families() {
-		out, err := exec.CommandContext(ctx, "ip", family, "-d", "-j", "-N", "rule").Output() //nolint:gosec // family is the fixed -4/-6 set
+		out, err := exec.CommandContext(ctx, bin, family, "-d", "-j", "-N", "rule").Output() //nolint:gosec // bin is the trusted absolute iproute2 path; family is the fixed -4/-6 set
 		if err != nil {
 			return fmt.Errorf("tunroute: read rules: %w", err)
 		}
@@ -162,7 +204,7 @@ func unroute(ctx context.Context) error {
 		}
 		// Reading first lets a proxy-only, unprivileged core start when there
 		// is no stale state, without attempting privileged mutations.
-		out, err = exec.CommandContext(ctx, "ip", family, "route", "show", "table", table).CombinedOutput() //nolint:gosec // fixed family and Sora table
+		out, err = exec.CommandContext(ctx, bin, family, "route", "show", "table", table).CombinedOutput() //nolint:gosec // bin is the trusted absolute iproute2 path; fixed family and Sora table
 		if err != nil && !strings.Contains(string(out), "FIB table does not exist") {
 			errs = append(errs, fmt.Errorf("tunroute: read table: %w: %s", err, out))
 		} else if err == nil && len(out) != 0 {
@@ -290,11 +332,11 @@ func deleteMatches(want, older map[string]json.RawMessage) bool {
 // cleanup only touches the reserved table/priorities and the named Sora
 // adapter. Before installation, keep the current engine's selected addresses.
 func cleanup(ctx context.Context, tun engine.Tun) error {
-	if _, err := exec.LookPath("ip"); err != nil {
-		if !tun.Enabled && errors.Is(err, exec.ErrNotFound) {
+	if _, err := ipBin(); err != nil {
+		if !tun.Enabled && errors.Is(err, ErrBinNotFound) {
 			return nil
 		}
-		return fmt.Errorf("tunroute: TUN routing requires iproute2 (ip): %w", err)
+		return err
 	}
 	if err := unroute(ctx); err != nil {
 		return err
@@ -347,10 +389,14 @@ func families() []string {
 }
 
 func ip(ctx context.Context, args string) error {
+	bin, err := ipBin()
+	if err != nil {
+		return err
+	}
 	if strings.Contains(args, " rule add ") {
 		args += " protocol " + protocol
 	}
-	out, err := exec.CommandContext(ctx, "ip", strings.Fields(args)...).CombinedOutput() //nolint:gosec // fixed arguments built above
+	out, err := exec.CommandContext(ctx, bin, strings.Fields(args)...).CombinedOutput() //nolint:gosec // bin is the trusted absolute iproute2 path; arguments are built above from fixed parts
 	if err != nil {
 		return fmt.Errorf("tunroute: ip %s: %w: %s", args, err, strings.TrimSpace(string(out)))
 	}
