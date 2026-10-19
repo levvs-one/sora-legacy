@@ -54,6 +54,10 @@ namespace v2rayN.Forms
         {
             var txt = ((TextBox)sender);
             var index = Utils.ToInt(txt.Name.Substring(txt.Name.Length - 1, 1));
+            if (index < 0 || index >= lstKey.Count)
+            {
+                return;
+            }
 
             lstKey[index].KeyCode = e.KeyCode;
             lstKey[index].Alt = e.Alt;
@@ -91,7 +95,12 @@ namespace v2rayN.Forms
                     keys += $"{item.KeyCode.ToString()}";
                 }
 
-                panel1.Controls[$"txtGlobalHotkey{k}"].Text = keys;
+                var control = panel1.Controls[$"txtGlobalHotkey{k}"];
+                if (control == null)
+                {
+                    continue;
+                }
+                control.Text = keys;
             }
         }
 

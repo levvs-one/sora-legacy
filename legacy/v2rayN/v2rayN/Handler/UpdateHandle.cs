@@ -555,15 +555,14 @@ namespace v2rayN.Handler
             try
             {
                 var gitHubReleases = Utils.FromJson<List<GitHubRelease>>(gitHubReleaseApi);
-                string version;
-                if (preRelease)
+                var release = preRelease
+                    ? gitHubReleases?.FirstOrDefault()
+                    : gitHubReleases?.FirstOrDefault(r => r.Prerelease == false);
+                if (release == null)
                 {
-                    version = gitHubReleases!.First().TagName;
+                    throw new InvalidOperationException("No releases found in the update response.");
                 }
-                else
-                {
-                    version = gitHubReleases!.First(r => r.Prerelease == false).TagName;
-                }
+                string version = release.TagName;
                 var coreInfo = LazyConfig.Instance.GetCoreInfo(type);
 
                 string curVersion;
