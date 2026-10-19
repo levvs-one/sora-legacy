@@ -21,7 +21,7 @@ type Availability struct {
 
 // Catalog holds upstream engine capabilities, separate from installed
 // Availability. Entries were validated with mihomo v1.19.32 (-t), sing-box
-// v1.14.2 (check), and Xray v26.3.27 (run -test).
+// v1.14.3 (check), and Xray v26.3.27 (run -test).
 var Catalog = map[Kind]Capabilities{
 	KindMihomo: {
 		Kind:       KindMihomo,

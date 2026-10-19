@@ -22,7 +22,7 @@
 
 | Компонент | Версия | Лицензия | Источник | SHA-256 |
 |---|---|---|---|---|
-| sing-box | 1.14.2 | GPL-3.0-or-later | https://github.com/SagerNet/sing-box/releases/tag/v1.14.2 | см. `packaging/engines/engines.lock` |
+| sing-box | 1.14.3 | GPL-3.0-or-later | https://github.com/SagerNet/sing-box/releases/tag/v1.14.3 | см. `packaging/engines/engines.lock` |
 | Xray-core | 26.3.27 | MPL-2.0 | https://github.com/XTLS/Xray-core/releases/tag/v26.3.27 | см. `packaging/engines/engines.lock` |
 | mihomo | 1.19.32 | GPL-3.0 | https://github.com/MetaCubeX/mihomo/releases/tag/v1.19.32 | см. `packaging/engines/engines.lock` |
 | zapret (tpws, nfqws) | 72.13 | MIT, © 2016-2024 bol-van | https://github.com/bol-van/zapret/releases/tag/v72.13 | архив исходников `04696a1b6fe766e35cd6426555520c79d5052a759cdf4d7724a1f46eba4670f6` |
