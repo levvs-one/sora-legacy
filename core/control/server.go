@@ -578,14 +578,18 @@ func (s *Server) GetStatus(_ context.Context, req *corev1.GetStatusRequest) (*co
 	if _, err := s.checkVersion(req.GetApiVersion()); err != nil {
 		return nil, transportStatus(err)
 	}
-	if err := s.checkSession(req.GetSessionId()); err != nil {
-		return &corev1.GetStatusResponse{
-			Status: &corev1.SessionStatus{
-				Connection:        wireStatus(session.Status{}),
-				NegotiatedVersion: s.apiVersion(),
-			},
-			Error: toWire(err, nil, id),
-		}, nil
+	// Public status stays pollable without a session; only a named wrong
+	// session is rejected.
+	if strings.TrimSpace(req.GetSessionId()) != "" {
+		if err := s.checkSession(req.GetSessionId()); err != nil {
+			return &corev1.GetStatusResponse{
+				Status: &corev1.SessionStatus{
+					Connection:        wireStatus(session.Status{}),
+					NegotiatedVersion: s.apiVersion(),
+				},
+				Error: toWire(err, nil, id),
+			}, nil
+		}
 	}
 	status := s.sessions.Status()
 	return &corev1.GetStatusResponse{Status: &corev1.SessionStatus{
@@ -594,15 +598,23 @@ func (s *Server) GetStatus(_ context.Context, req *corev1.GetStatusRequest) (*co
 	}}, nil
 }
 
-// checkSession rejects requests naming a different running session. Empty
-// identifiers accept the current session, as allowed by the contract.
+// checkSession scopes a request to the currently running session. It rejects
+// empty identifiers: silently accepting them would let any admitted peer read
+// or mutate the current session without naming it. Callers serving public
+// status (GetStatus, GetStats) intentionally skip this check for empty
+// identifiers so clients can poll before any session exists.
 func (s *Server) checkSession(named string) error {
+	running := s.sessions.Current()
+	if running == nil {
+		return errs.Newf(errs.CodeFailedPrecondition, errs.KeySessionRequired,
+			"control: there is no running session")
+	}
 	wanted := strings.TrimSpace(named)
 	if wanted == "" {
-		return nil
+		return errs.Newf(errs.CodeInvalidArgument, errs.KeyUnknownSession,
+			"control: the request must name the running session")
 	}
-	running := s.sessions.Current()
-	if running == nil || running.ID() != wanted {
+	if running.ID() != wanted {
 		return errs.Newf(errs.CodeNotFound, errs.KeyUnknownSession,
 			"control: the request names a session that is not running")
 	}
@@ -638,11 +650,15 @@ func (s *Server) GetStats(ctx context.Context, req *corev1.GetStatsRequest) (*co
 	if _, err := s.checkVersion(req.GetApiVersion()); err != nil {
 		return nil, transportStatus(err)
 	}
-	if err := s.checkSession(req.GetSessionId()); err != nil {
-		return &corev1.GetStatsResponse{
-			Stats: &corev1.StatsTick{},
-			Error: toWire(err, nil, ""),
-		}, nil
+	// Public counters stay pollable without a session; only a named wrong
+	// session is rejected.
+	if strings.TrimSpace(req.GetSessionId()) != "" {
+		if err := s.checkSession(req.GetSessionId()); err != nil {
+			return &corev1.GetStatsResponse{
+				Stats: &corev1.StatsTick{},
+				Error: toWire(err, nil, ""),
+			}, nil
+		}
 	}
 	running := s.sessions.Current()
 	if running == nil {
@@ -676,16 +692,10 @@ func (s *Server) WatchEvents(req *corev1.WatchEventsRequest, stream grpc.ServerS
 		return transportStatus(err)
 	}
 	ctx := stream.Context()
+	if err := s.checkSession(req.GetSessionId()); err != nil {
+		return err
+	}
 	running := s.sessions.Current()
-	if running == nil {
-		// End the stream immediately when there is no session.
-		return errs.Newf(errs.CodeFailedPrecondition, errs.KeySessionRequired,
-			"control: there is no session to watch")
-	}
-	if wanted := strings.TrimSpace(req.GetSessionId()); wanted != "" && wanted != running.ID() {
-		return errs.Newf(errs.CodeNotFound, errs.KeyUnknownSession,
-			"control: the request names a session that is not running")
-	}
 	feed := newEventFeed(running.Journal(), req.GetAfterSequence(), s.redactors.get(running.ID()))
 	defer feed.close()
 

@@ -298,7 +298,10 @@ func TestDisconnectRefusesToStopSomeoneElsesSession(t *testing.T) {
 	if other.GetError().GetCode() != corev1.SoraErrorCode_SORA_ERROR_CODE_NOT_FOUND {
 		t.Errorf("Disconnect() of a foreign session = %v, want not found", other.GetError())
 	}
-	answer, err := server.GetStatus(context.Background(), &corev1.GetStatusRequest{ApiVersion: clientVersion()})
+	answer, err := server.GetStatus(context.Background(), &corev1.GetStatusRequest{
+		ApiVersion: clientVersion(),
+		SessionId:  response.GetStatus().GetConnection().GetSessionId(),
+	})
 	if err != nil {
 		t.Fatalf("GetStatus() error = %v", err)
 	}

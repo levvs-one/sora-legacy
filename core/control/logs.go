@@ -367,15 +367,16 @@ type connectionSession interface {
 }
 
 func (s *Server) runningSession(named string) (connectionSession, error) {
-	if err := s.checkSession(named); err != nil {
-		return nil, err
-	}
-	running := s.sessions.Current()
-	if running == nil {
+	// Report "unavailable" when nothing runs; only then demand the session
+	// name so an empty identifier cannot silently attach to a live session.
+	if s.sessions.Current() == nil {
 		return nil, errs.Newf(errs.CodeFailedPrecondition, errs.KeyConnectionsUnavailable,
 			"control: no session is running")
 	}
-	return running, nil
+	if err := s.checkSession(named); err != nil {
+		return nil, err
+	}
+	return s.sessions.Current(), nil
 }
 
 func connectionToWire(c engine.Connection) *corev1.Connection {

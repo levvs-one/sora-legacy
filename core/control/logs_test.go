@@ -171,11 +171,12 @@ func TestConnectionCenterListsAndCloses(t *testing.T) {
 	t.Cleanup(func() {
 		_, _ = server.Disconnect(ctx, &corev1.DisconnectRequest{ApiVersion: clientVersion(), ControlAuthenticator: testToken})
 	})
-	list, err := server.ListConnections(ctx, &corev1.ListConnectionsRequest{ApiVersion: clientVersion(), ControlAuthenticator: testToken})
+	sessionID := connected.GetStatus().GetConnection().GetSessionId()
+	list, err := server.ListConnections(ctx, &corev1.ListConnectionsRequest{ApiVersion: clientVersion(), ControlAuthenticator: testToken, SessionId: sessionID})
 	if err != nil || len(list.GetConnections()) != 1 || list.GetConnections()[0].GetHost() != "example.org" || len(list.GetConnections()[0].GetChain()) != 2 {
 		t.Fatalf("connections = %v, %v", list, err)
 	}
-	if _, err := server.CloseConnection(ctx, &corev1.CloseConnectionRequest{ApiVersion: clientVersion(), ControlAuthenticator: testToken, ConnectionId: "c1"}); err != nil || len(eng.closed) != 1 {
+	if _, err := server.CloseConnection(ctx, &corev1.CloseConnectionRequest{ApiVersion: clientVersion(), ControlAuthenticator: testToken, SessionId: sessionID, ConnectionId: "c1"}); err != nil || len(eng.closed) != 1 {
 		t.Fatalf("close = %v, closed %v", err, eng.closed)
 	}
 }

@@ -115,12 +115,17 @@ func TestClientTalksToTheCoreOverTheTransport(t *testing.T) {
 		t.Error("a refused client must not receive the token")
 	}
 
-	if _, err := client.Connect(ctx, &corev1.ConnectRequest{
+	connectedResp, err := client.Connect(ctx, &corev1.ConnectRequest{
 		ApiVersion:           clientVersion(),
 		SessionPlan:          validPlan(t, store),
 		ControlAuthenticator: testToken,
-	}); err != nil {
+	})
+	if err != nil {
 		t.Fatalf("Connect() error = %v", err)
+	}
+	sessionID := connectedResp.GetStatus().GetConnection().GetSessionId()
+	if sessionID == "" {
+		t.Fatal("the core did not name the session it started")
 	}
 
 	// Reject bad tokens before reading the plan or starting an engine,
@@ -137,7 +142,7 @@ func TestClientTalksToTheCoreOverTheTransport(t *testing.T) {
 		t.Errorf("a wrong token answered %s, want unauthenticated", code)
 	}
 
-	status, err := client.GetStatus(ctx, &corev1.GetStatusRequest{ApiVersion: clientVersion()})
+	status, err := client.GetStatus(ctx, &corev1.GetStatusRequest{ApiVersion: clientVersion(), SessionId: sessionID})
 	if err != nil {
 		t.Fatalf("GetStatus() error = %v", err)
 	}
@@ -147,10 +152,12 @@ func TestClientTalksToTheCoreOverTheTransport(t *testing.T) {
 		t.Fatalf("after a successful connect the state is %s",
 			status.GetStatus().GetConnection().GetValue())
 	}
-	sessionID := status.GetStatus().GetConnection().GetSessionId()
-	if sessionID == "" {
-		t.Fatal("the core did not name the session it started")
+
+	if got := status.GetStatus().GetConnection().GetSessionId(); got != sessionID {
+		t.Fatalf("GetStatus() session = %q, want %q", got, sessionID)
 	}
+
+	// Requests for another session must be rejected.
 
 	// Requests for another session must be rejected.
 	foreign, err := client.GetStatus(ctx, &corev1.GetStatusRequest{
@@ -162,6 +169,16 @@ func TestClientTalksToTheCoreOverTheTransport(t *testing.T) {
 	}
 	if foreign.GetError().GetCode() != corev1.SoraErrorCode_SORA_ERROR_CODE_NOT_FOUND {
 		t.Errorf("a foreign session answered %v, want not found", foreign.GetError())
+	}
+
+	// Private methods must reject requests that do not name the session.
+	anonEvents, err := client.WatchEvents(ctx, &corev1.WatchEventsRequest{
+		ApiVersion: clientVersion(),
+	})
+	if err == nil {
+		if _, recvErr := anonEvents.Recv(); recvErr == nil {
+			t.Error("WatchEvents() without a session id was accepted, want rejection")
+		}
 	}
 
 	// A fresh stream must replay session startup before live events.
