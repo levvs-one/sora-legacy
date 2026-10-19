@@ -741,8 +741,10 @@ namespace v2rayN.Forms
             try
             {
                 var updater = new UpdateHandle();
+                // H2: обновление всегда через собственный прокси ядра (blProxy) —
+                // системный прокси на время обновления НЕ снимается.
                 results = await System.Threading.Tasks.Task.Run(async () =>
-                    await updater.UpdateSubscriptionsAsync(config, subscriptionIds, false, includeDisabled, update));
+                    await updater.UpdateSubscriptionsAsync(config, subscriptionIds, true, includeDisabled, update));
                 foreach (UpdateHandle.SubscriptionUpdateResult result in results)
                 {
                     _soraSubscriptionStatuses[result.SubscriptionId] = result.Success

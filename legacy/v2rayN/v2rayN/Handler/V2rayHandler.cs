@@ -27,6 +27,12 @@ namespace v2rayN.Handler
         private static string v2rayConfigRes = Global.v2rayConfigFileName;
         private CoreInfo coreInfo;
         public event ProcessDelegate ProcessEvent;
+        /// <summary>
+        /// H1: срабатывает, когда процесс ядра завершается после успешного старта
+        /// (сторожок по образцу TunModeController). Штатные остановки через
+        /// V2rayStop() это событие не вызывают.
+        /// </summary>
+        public event Action<int> CoreExited;
         private int processId = 0;
         private Process _process;
 
@@ -221,9 +227,12 @@ namespace v2rayN.Handler
             {
                 if (_process != null)
                 {
-                    KillProcess(_process);
-                    _process.Dispose();
+                    // H1: сначала отцепляем ссылку — иначе Exited от штатной
+                    // остановки приняли бы за падение ядра (ср. TunModeController.Stop).
+                    Process process = _process;
                     _process = null;
+                    KillProcess(process);
+                    process.Dispose();
                 }
                 else
                 {
@@ -376,7 +385,9 @@ namespace v2rayN.Handler
                         CreateNoWindow = true,
                         StandardOutputEncoding = coreInfo.redirectInfo ? Encoding.UTF8 : null,
                         StandardErrorEncoding = coreInfo.redirectInfo ? Encoding.UTF8 : null,
-                    }
+                    },
+                    // H1: сторожок смерти ядра, ср. TunModeController.
+                    EnableRaisingEvents = true
                 };
                 var startupErrors = new StringBuilder();
                 var startupErrorSync = new object();
@@ -399,6 +410,27 @@ namespace v2rayN.Handler
                         }
                     };
                 }
+                p.Exited += (sender, e) =>
+                {
+                    var completed = (Process)sender;
+                    // H1: защита от PID-reuse — реагируем, только пока это текущий процесс ядра
+                    // (убийство чужого процесса отдельно прикрыто IsKnownCoreProcess).
+                    if (ReferenceEquals(_process, completed))
+                    {
+                        _process = null;
+                        int exitCode;
+                        try
+                        {
+                            exitCode = completed.ExitCode;
+                        }
+                        catch (Exception ex)
+                        {
+                            Utils.SaveLog(ex.Message, ex);
+                            exitCode = -1;
+                        }
+                        OnCoreExited(exitCode);
+                    }
+                };
                 p.Start();
                 if (coreInfo.redirectInfo)
                 {
@@ -498,6 +530,21 @@ namespace v2rayN.Handler
                 string msg = ex.Message;
                 ShowMsg(false, msg);
                 return -1;
+            }
+        }
+
+        /// <summary>
+        /// H1: ядро завершилось после успешного старта — оповещаем подписчиков.
+        /// </summary>
+        private void OnCoreExited(int exitCode)
+        {
+            try
+            {
+                CoreExited?.Invoke(exitCode);
+            }
+            catch (Exception ex)
+            {
+                Utils.SaveLog(ex.Message, ex);
             }
         }
 

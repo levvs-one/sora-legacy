@@ -71,6 +71,8 @@ namespace v2rayN.Forms
             MainFormHandler.Instance.BackupGuiNConfig(config, true);
             v2rayHandler = new V2rayHandler();
             v2rayHandler.ProcessEvent += v2rayHandler_ProcessEvent;
+            // H1: сторожок смерти ядра — симметрично колбэку смерти TUN.
+            v2rayHandler.CoreExited += V2rayCoreExited;
 
             // LEGACY-L10: если прошлое обновление подписок оборвалось между снятием
             // системного прокси и его восстановлением — восстанавливаем при старте.

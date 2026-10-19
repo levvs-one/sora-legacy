@@ -951,6 +951,39 @@ namespace v2rayN.Forms
             AppendText(false, $"[TUN] Процесс завершён, код {exitCode}.");
         }
 
+        /// <summary>
+        /// H1: сторожок смерти ядра (подписка на V2rayHandler.CoreExited).
+        /// Маршалинг в UI-поток — как у CommunityTunExited.
+        /// </summary>
+        private void V2rayCoreExited(int exitCode)
+        {
+            try
+            {
+                if (IsDisposed || Disposing || !IsHandleCreated)
+                {
+                    return;
+                }
+                BeginInvoke(new Action(() => CommunityCoreExited(exitCode)));
+            }
+            catch (Exception ex)
+            {
+                Utils.SaveLog(ex.Message, ex);
+            }
+        }
+
+        private void CommunityCoreExited(int exitCode)
+        {
+            // Сначала честный пересчёт состояния (снимает ложный «зелёный»),
+            // затем фиксируем именно ошибку: ядро упало само, а не по команде.
+            UpdateCommunityConnectionState(config.sysProxyType);
+            if (_happConnection != null)
+            {
+                _happConnection.State = SoraConnectionState.Error;
+            }
+            // Спокойная философия ошибок: только строка в журнале, без модалок и уведомлений трея.
+            AppendText(false, $"[CORE] Процесс ядра завершён, код {exitCode}.");
+        }
+
         private bool StopCommunityTun()
         {
             bool wasRunning = _tunModeController != null && _tunModeController.IsRunning;
