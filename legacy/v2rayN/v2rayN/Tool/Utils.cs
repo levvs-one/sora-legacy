@@ -402,15 +402,17 @@ namespace v2rayN
 
         public static string GetMD5(string str)
         {
-            var md5 = MD5.Create();
-            byte[] byteOld = Encoding.UTF8.GetBytes(str);
-            byte[] byteNew = md5.ComputeHash(byteOld);
-            StringBuilder sb = new StringBuilder();
-            foreach (byte b in byteNew)
+            using (var md5 = MD5.Create())
             {
-                sb.Append(b.ToString("x2"));
+                byte[] byteOld = Encoding.UTF8.GetBytes(str);
+                byte[] byteNew = md5.ComputeHash(byteOld);
+                StringBuilder sb = new StringBuilder();
+                foreach (byte b in byteNew)
+                {
+                    sb.Append(b.ToString("x2"));
+                }
+                return sb.ToString();
             }
-            return sb.ToString();
         }
 
         #endregion
@@ -425,16 +427,7 @@ namespace v2rayN
         /// <returns></returns>
         public static bool IsNumberic(string oText)
         {
-            try
-            {
-                int var1 = ToInt(oText);
-                return true;
-            }
-            catch (Exception ex)
-            {
-                SaveLog(ex.Message, ex);
-                return false;
-            }
+            return int.TryParse(oText, out _);
         }
 
         /// <summary>
@@ -475,7 +468,7 @@ namespace v2rayN
                 string[] cidr = ip.Split('/');
                 if (cidr.Length == 2)
                 {
-                    if (!IsNumberic(cidr[0]))
+                    if (!IsNumberic(cidr[1]))
                     {
                         return false;
                     }
@@ -736,19 +729,21 @@ namespace v2rayN
             {
                 int timeout = 30;
                 int echoNum = 2;
-                Ping pingSender = new Ping();
-                for (int i = 0; i < echoNum; i++)
+                using (Ping pingSender = new Ping())
                 {
-                    PingReply reply = pingSender.Send(host, timeout);
-                    if (reply.Status == IPStatus.Success)
+                    for (int i = 0; i < echoNum; i++)
                     {
-                        if (reply.RoundtripTime < 0)
+                        PingReply reply = pingSender.Send(host, timeout);
+                        if (reply.Status == IPStatus.Success)
                         {
-                            continue;
-                        }
-                        if (roundtripTime < 0 || reply.RoundtripTime < roundtripTime)
-                        {
-                            roundtripTime = reply.RoundtripTime;
+                            if (reply.RoundtripTime < 0)
+                            {
+                                continue;
+                            }
+                            if (roundtripTime < 0 || reply.RoundtripTime < roundtripTime)
+                            {
+                                roundtripTime = reply.RoundtripTime;
+                            }
                         }
                     }
                 }
@@ -1104,24 +1099,25 @@ namespace v2rayN
                             int marginLeft = (int)((double)fullImage.Width * i / 2.5 / maxTry);
                             int marginTop = (int)((double)fullImage.Height * i / 2.5 / maxTry);
                             Rectangle cropRect = new Rectangle(marginLeft, marginTop, fullImage.Width - marginLeft * 2, fullImage.Height - marginTop * 2);
-                            Bitmap target = new Bitmap(screen.Bounds.Width, screen.Bounds.Height);
-
-                            double imageScale = (double)screen.Bounds.Width / (double)cropRect.Width;
-                            using (Graphics g = Graphics.FromImage(target))
+                            using (Bitmap target = new Bitmap(screen.Bounds.Width, screen.Bounds.Height))
                             {
-                                g.DrawImage(fullImage, new Rectangle(0, 0, target.Width, target.Height),
-                                                cropRect,
-                                                GraphicsUnit.Pixel);
-                            }
+                                double imageScale = (double)screen.Bounds.Width / (double)cropRect.Width;
+                                using (Graphics g = Graphics.FromImage(target))
+                                {
+                                    g.DrawImage(fullImage, new Rectangle(0, 0, target.Width, target.Height),
+                                                    cropRect,
+                                                    GraphicsUnit.Pixel);
+                                }
 
-                            BitmapLuminanceSource source = new BitmapLuminanceSource(target);
-                            BinaryBitmap bitmap = new BinaryBitmap(new HybridBinarizer(source));
-                            QRCodeReader reader = new QRCodeReader();
-                            Result result = reader.decode(bitmap);
-                            if (result != null)
-                            {
-                                string ret = result.Text;
-                                return ret;
+                                BitmapLuminanceSource source = new BitmapLuminanceSource(target);
+                                BinaryBitmap bitmap = new BinaryBitmap(new HybridBinarizer(source));
+                                QRCodeReader reader = new QRCodeReader();
+                                Result result = reader.decode(bitmap);
+                                if (result != null)
+                                {
+                                    string ret = result.Text;
+                                    return ret;
+                                }
                             }
                         }
                     }

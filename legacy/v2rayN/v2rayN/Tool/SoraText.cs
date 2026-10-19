@@ -15,7 +15,15 @@ namespace v2rayN.Tool
         private static readonly ResourceManager Standard = new ResourceManager("v2rayN.Resx.SoraUI", typeof(SoraText).Assembly);
         private static readonly ResourceManager PreReform = new ResourceManager("v2rayN.Resx.SoraUI_PreReform", typeof(SoraText).Assembly);
 
-        internal static string CurrentLanguage => Normalize(Utils.RegReadValue(Global.MyRegPath, Global.MyRegKeyLanguage, Russian));
+        private static string _currentLanguage;
+
+        // R5: кэш вместо чтения реестра при каждом Translate.
+        internal static string CurrentLanguage => _currentLanguage ??= Normalize(Utils.RegReadValue(Global.MyRegPath, Global.MyRegKeyLanguage, Russian));
+
+        internal static void RefreshLanguage()
+        {
+            _currentLanguage = null;
+        }
 
         internal static CultureInfo CurrentCulture
         {
@@ -67,6 +75,7 @@ namespace v2rayN.Tool
         internal static void Select(string language)
         {
             Utils.RegWriteValue(Global.MyRegPath, Global.MyRegKeyLanguage, Normalize(language));
+            RefreshLanguage();
             Application.Restart();
         }
 

@@ -14,7 +14,13 @@ namespace v2rayN.Base
     /// </summary>
     public class HttpClientHelper
     {
-        private static HttpClientHelper httpClientHelper = null;
+        private static readonly Lazy<HttpClientHelper> _instance = new Lazy<HttpClientHelper>(() =>
+        {
+            var helper = new HttpClientHelper();
+            HttpClientHandler handler = new HttpClientHandler() { UseCookies = false };
+            helper.httpClient = new HttpClient(handler);
+            return helper;
+        });
         private HttpClient httpClient;
 
         /// <summary>
@@ -26,18 +32,7 @@ namespace v2rayN.Base
         /// <returns></returns>
         public static HttpClientHelper GetInstance()
         {
-            if (httpClientHelper != null)
-            {
-                return httpClientHelper;
-            }
-            else
-            {
-                HttpClientHelper httpClientHelper = new HttpClientHelper();
-
-                HttpClientHandler handler = new HttpClientHandler() { UseCookies = false };
-                httpClientHelper.httpClient = new HttpClient(handler);
-                return httpClientHelper;
-            }
+            return _instance.Value;
         }
         public async Task<string> GetAsync(string url)
         {
@@ -46,8 +41,10 @@ namespace v2rayN.Base
                 return null;
             }
             HttpResponseMessage response = await httpClient.GetAsync(url);
-
-            return await response.Content.ReadAsStringAsync();
+            using (response)
+            {
+                return await response.Content.ReadAsStringAsync();
+            }
         }
         public async Task<string> GetAsync(HttpClient client, string url, CancellationToken token)
         {
@@ -55,12 +52,14 @@ namespace v2rayN.Base
             {
                 return null;
             }
-            HttpResponseMessage response = await client.GetAsync(url, token);
-            if (!response.IsSuccessStatusCode)
+            using (HttpResponseMessage response = await client.GetAsync(url, token))
             {
-                throw new Exception(string.Format("The request returned with HTTP status code {0}", response.StatusCode));
+                if (!response.IsSuccessStatusCode)
+                {
+                    throw new Exception(string.Format("The request returned with HTTP status code {0}", response.StatusCode));
+                }
+                return await response.Content.ReadAsStringAsync();
             }
-            return await response.Content.ReadAsStringAsync();
         }
 
         public async Task PutAsync(string url, Dictionary<string, string> headers)
@@ -70,7 +69,9 @@ namespace v2rayN.Base
             var byteContent = new ByteArrayContent(buffer);
             byteContent.Headers.ContentType = new MediaTypeHeaderValue("application/json");
 
-            var result = await httpClient.PutAsync(url, byteContent);
+            using (var result = await httpClient.PutAsync(url, byteContent))
+            {
+            }
         }
 
         public async Task DownloadFileAsync(HttpClient client, string url, string fileName, IProgress<double> progress, CancellationToken token)
@@ -88,60 +89,58 @@ namespace v2rayN.Base
                 File.Delete(fileName);
             }
 
-            var response = await client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, token);
-
-            if (!response.IsSuccessStatusCode)
+            using (var response = await client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, token))
             {
-                throw new Exception(string.Format("The request returned with HTTP status code {0}", response.StatusCode));
-            }
-
-            var total = response.Content.Headers.ContentLength.HasValue ? response.Content.Headers.ContentLength.Value : -1L;
-            var canReportProgress = total != -1 && progress != null;
-
-            using (var stream = await response.Content.ReadAsStreamAsync())
-            {
-                using (var file = File.Create(fileName))
+                if (!response.IsSuccessStatusCode)
                 {
-                    var totalRead = 0L;
-                    var buffer = new byte[1024 * 1024];
-                    var isMoreToRead = true;
-                    var progressPercentage = 0;
+                    throw new Exception(string.Format("The request returned with HTTP status code {0}", response.StatusCode));
+                }
 
-                    do
+                var total = response.Content.Headers.ContentLength.HasValue ? response.Content.Headers.ContentLength.Value : -1L;
+                var canReportProgress = total != -1 && progress != null;
+
+                using (var stream = await response.Content.ReadAsStreamAsync())
+                {
+                    using (var file = File.Create(fileName))
                     {
-                        token.ThrowIfCancellationRequested();
+                        var totalRead = 0L;
+                        var buffer = new byte[1024 * 1024];
+                        var isMoreToRead = true;
+                        var progressPercentage = 0;
 
-                        var read = await stream.ReadAsync(buffer, 0, buffer.Length, token);
-
-                        if (read == 0)
+                        do
                         {
-                            isMoreToRead = false;
-                        }
-                        else
-                        {
-                            var data = new byte[read];
-                            buffer.ToList().CopyTo(0, data, 0, read);
+                            token.ThrowIfCancellationRequested();
 
-                            file.Write(data, 0, read);
+                            var read = await stream.ReadAsync(buffer, 0, buffer.Length, token);
 
-                            totalRead += read;
-
-                            if (canReportProgress)
+                            if (read == 0)
                             {
-                                var percent = Convert.ToInt32((totalRead * 1d) / (total * 1d) * 100);
-                                if (progressPercentage != percent && percent % 10 == 0)
+                                isMoreToRead = false;
+                            }
+                            else
+                            {
+                                file.Write(buffer, 0, read);
+
+                                totalRead += read;
+
+                                if (canReportProgress)
                                 {
-                                    progressPercentage = percent;
-                                    progress.Report(percent);
+                                    var percent = Convert.ToInt32((totalRead * 1d) / (total * 1d) * 100);
+                                    if (progressPercentage != percent && percent % 10 == 0)
+                                    {
+                                        progressPercentage = percent;
+                                        progress.Report(percent);
+                                    }
                                 }
                             }
-                        }
-                    } while (isMoreToRead);
-                    file.Close();
-                    if (canReportProgress)
-                    {
-                        progress.Report(101);
+                        } while (isMoreToRead);
+                        file.Close();
+                        if (canReportProgress)
+                        {
+                            progress.Report(101);
 
+                        }
                     }
                 }
             }
@@ -154,63 +153,61 @@ namespace v2rayN.Base
                 throw new ArgumentNullException("url");
             }
 
-            var response = await client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, token);
-
-            if (!response.IsSuccessStatusCode)
+            using (var response = await client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, token))
             {
-                throw new Exception(string.Format("The request returned with HTTP status code {0}", response.StatusCode));
-            }
-
-            //var total = response.Content.Headers.ContentLength.HasValue ? response.Content.Headers.ContentLength.Value : -1L;
-            //var canReportProgress = total != -1 && progress != null;
-
-            using (var stream = await response.Content.ReadAsStreamAsync())
-            {
-                var totalRead = 0L;
-                var buffer = new byte[1024 * 64];
-                var isMoreToRead = true;
-                string progressSpeed = string.Empty;
-                DateTime totalDatetime = DateTime.Now;
-
-                do
+                if (!response.IsSuccessStatusCode)
                 {
-                    if (token.IsCancellationRequested)
+                    throw new Exception(string.Format("The request returned with HTTP status code {0}", response.StatusCode));
+                }
+
+                //var total = response.Content.Headers.ContentLength.HasValue ? response.Content.Headers.ContentLength.Value : -1L;
+                //var canReportProgress = total != -1 && progress != null;
+
+                using (var stream = await response.Content.ReadAsStreamAsync())
+                {
+                    var totalRead = 0L;
+                    var buffer = new byte[1024 * 64];
+                    var isMoreToRead = true;
+                    string progressSpeed = string.Empty;
+                    DateTime totalDatetime = DateTime.Now;
+
+                    do
                     {
-                        if (totalRead > 0)
+                        if (token.IsCancellationRequested)
                         {
-                            return;
+                            if (totalRead > 0)
+                            {
+                                return;
+                            }
+                            else
+                            {
+                                token.ThrowIfCancellationRequested();
+                            }
+                        }
+
+                        var read = await stream.ReadAsync(buffer, 0, buffer.Length, token);
+
+                        if (read == 0)
+                        {
+                            isMoreToRead = false;
                         }
                         else
                         {
-                            token.ThrowIfCancellationRequested();
-                        }
-                    }
+                            totalRead += read;
 
-                    var read = await stream.ReadAsync(buffer, 0, buffer.Length, token);
-
-                    if (read == 0)
-                    {
-                        isMoreToRead = false;
-                    }
-                    else
-                    {
-                        var data = new byte[read];
-                        buffer.ToList().CopyTo(0, data, 0, read);
-
-                        totalRead += read;
-
-                        TimeSpan ts = (DateTime.Now - totalDatetime);
-                        var speed = (totalRead * 1d / ts.TotalMilliseconds / 1000).ToString("#0.0");
-                        if (progress != null)
-                        {
-                            if (progressSpeed != speed)
+                            TimeSpan ts = (DateTime.Now - totalDatetime);
+                            var speed = (totalRead * 1d / ts.TotalMilliseconds / 1000).ToString("#0.0");
+                            if (progress != null)
                             {
-                                progressSpeed = speed;
-                                progress.Report(speed);
+                                if (progressSpeed != speed)
+                                {
+                                    progressSpeed = speed;
+                                    progress.Report(speed);
+                                }
                             }
                         }
-                    }
-                } while (isMoreToRead);
+                    } while (isMoreToRead);
+                }
             }
         }
 

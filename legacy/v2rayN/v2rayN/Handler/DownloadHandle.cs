@@ -82,12 +82,15 @@ namespace v2rayN.Handler
                     }
                 };
 
-                var cancellationToken = new CancellationTokenSource();
-                cancellationToken.CancelAfter(downloadTimeout * 1000);
-                await HttpClientHelper.GetInstance().DownloadDataAsync4Speed(client,
-                      url,
-                      progress,
-                      cancellationToken.Token);
+                using (client)
+                using (var cancellationToken = new CancellationTokenSource())
+                {
+                    cancellationToken.CancelAfter(downloadTimeout * 1000);
+                    await HttpClientHelper.GetInstance().DownloadDataAsync4Speed(client,
+                          url,
+                          progress,
+                          cancellationToken.Token);
+                }
             }
             catch (Exception ex)
             {

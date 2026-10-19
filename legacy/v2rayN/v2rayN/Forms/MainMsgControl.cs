@@ -228,7 +228,8 @@ namespace v2rayN.Forms
             }
             try
             {
-                return new Regex(pattern, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+                // R5: таймаут против ReDoS — фильтр вводит пользователь.
+                return new Regex(pattern, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, TimeSpan.FromSeconds(2));
             }
             catch (ArgumentException)
             {
@@ -238,7 +239,19 @@ namespace v2rayN.Forms
 
         private bool MatchesFilter(string message)
         {
-            return _filter == null || _filter.IsMatch(message ?? string.Empty);
+            if (_filter == null)
+            {
+                return true;
+            }
+            try
+            {
+                return _filter.IsMatch(message ?? string.Empty);
+            }
+            catch (RegexMatchTimeoutException)
+            {
+                // R5: fail-open — лучше показать строку, чем ронять/пустить в шторм перерисовок.
+                return true;
+            }
         }
 
         private void RenderHistory()
