@@ -217,10 +217,31 @@ func isPrivateTarget(ctx context.Context, host string) bool {
 }
 
 // publicAddr mirrors the subscription fetcher's notion of a dialable public
-// address.
+// address, including its special-use blocklist; the two must stay identical.
 func publicAddr(addr netip.Addr) bool {
 	addr = addr.Unmap()
-	return addr.IsGlobalUnicast() && !addr.IsPrivate()
+	if !addr.IsGlobalUnicast() || addr.IsPrivate() {
+		return false
+	}
+	for _, prefix := range specialUse {
+		if prefix.Contains(addr) {
+			return false
+		}
+	}
+	return true
+}
+
+// specialUse prefixes are globally reachable per IsGlobalUnicast but never
+// name a server on the internet: shared CGNAT space, benchmarking, and the
+// documentation pools Sora itself uses for its TUN adapters.
+var specialUse = []netip.Prefix{
+	netip.MustParsePrefix("100.64.0.0/10"),
+	netip.MustParsePrefix("192.0.0.0/24"),
+	netip.MustParsePrefix("192.0.2.0/24"),
+	netip.MustParsePrefix("198.18.0.0/15"),
+	netip.MustParsePrefix("198.51.100.0/24"),
+	netip.MustParsePrefix("203.0.113.0/24"),
+	netip.MustParsePrefix("2001:db8::/32"),
 }
 
 // EndpointProber defines the interface required by the control plane, keeping

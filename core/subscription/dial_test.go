@@ -3,7 +3,12 @@ package subscription
 import "testing"
 
 func TestAFetchFromTheInternetNeverReachesALocalAddress(t *testing.T) {
-	for _, address := range []string{"127.0.0.1:443", "[::1]:443", "10.0.0.5:443", "192.168.1.1:443", "169.254.169.254:80", "[fe80::1]:443", "0.0.0.0:443"} {
+	for _, address := range []string{"127.0.0.1:443", "[::1]:443", "10.0.0.5:443", "192.168.1.1:443", "169.254.169.254:80", "[fe80::1]:443", "0.0.0.0:443",
+		// Special-use ranges that IsGlobalUnicast accepts but that never host
+		// a server: CGNAT, benchmarking, and the documentation pools Sora
+		// uses for its own TUN adapters.
+		"100.64.0.5:443", "192.0.2.1:443", "198.51.100.7:443", "203.0.113.9:443",
+		"198.18.0.4:443", "[2001:db8::1]:443"} {
 		if checkDial(false, address) == nil {
 			t.Errorf("%s was dialled for a subscription on the internet", address)
 		}

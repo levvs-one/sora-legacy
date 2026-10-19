@@ -139,7 +139,10 @@ func TestFetchRejectsARedirectIntoThePrivateNetwork(t *testing.T) {
 		Transport: rt,
 	}
 	fetcher := subscription.New(subscription.Options{HTTPClient: client})
-	_, err := fetcher.Fetch(context.Background(), "https://provider.example/sub", subscription.FetchOptions{})
+	// A public IP literal keeps the initial host public without depending on
+	// the test machine's DNS: some resolvers sinkhole names into
+	// non-routable space.
+	_, err := fetcher.Fetch(context.Background(), "https://93.184.216.34/sub", subscription.FetchOptions{})
 	if errs.KeyOf(err) != errs.KeySubscriptionRedirect {
 		t.Errorf("a redirect into 169.254.169.254 = %v, key = %q", err, errs.KeyOf(err))
 	}

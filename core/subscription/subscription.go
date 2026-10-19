@@ -319,7 +319,30 @@ func isPrivateHost(ctx context.Context, host string) bool {
 
 func publicAddr(addr netip.Addr) bool {
 	addr = addr.Unmap()
-	return addr.IsGlobalUnicast() && !addr.IsPrivate()
+	if !addr.IsGlobalUnicast() || addr.IsPrivate() {
+		return false
+	}
+	// Special-use ranges that IsGlobalUnicast accepts but that never name a
+	// server on the internet: shared CGNAT space, benchmarking, and the
+	// documentation pools Sora itself uses for its TUN adapters. A redirect
+	// or probe target inside one of them is never dialable.
+	for _, prefix := range specialUse {
+		if prefix.Contains(addr) {
+			return false
+		}
+	}
+	return true
+}
+
+// specialUse mirrors the prober's blocklist; the two must stay identical.
+var specialUse = []netip.Prefix{
+	netip.MustParsePrefix("100.64.0.0/10"),
+	netip.MustParsePrefix("192.0.0.0/24"),
+	netip.MustParsePrefix("192.0.2.0/24"),
+	netip.MustParsePrefix("198.18.0.0/15"),
+	netip.MustParsePrefix("198.51.100.0/24"),
+	netip.MustParsePrefix("203.0.113.0/24"),
+	netip.MustParsePrefix("2001:db8::/32"),
 }
 
 // dialChecked rejects private resolved addresses unless the subscription is
