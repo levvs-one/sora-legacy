@@ -4,6 +4,7 @@ import (
 	"context"
 	"net"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -129,7 +130,7 @@ func closedPort(t *testing.T) uint32 {
 
 func TestProbeFindsAListeningPort(t *testing.T) {
 	host, port := listener(t)
-	prober := probe.New(probe.Config{Timeout: 2 * time.Second})
+	prober := probe.New(probe.Config{Timeout: 2 * time.Second, AllowPrivate: true})
 	results, err := prober.Probe(context.Background(), []*corev1.Endpoint{
 		{Host: host, Port: port},
 	}, []string{"berlin"})
@@ -152,7 +153,7 @@ func TestProbeFindsAListeningPort(t *testing.T) {
 }
 
 func TestProbeReportsAClosedPortWithoutLeakingTheAddress(t *testing.T) {
-	prober := probe.New(probe.Config{Timeout: time.Second})
+	prober := probe.New(probe.Config{Timeout: time.Second, AllowPrivate: true})
 	results, err := prober.Probe(context.Background(), []*corev1.Endpoint{
 		{Host: "127.0.0.1", Port: closedPort(t)},
 	}, nil)
@@ -204,9 +205,33 @@ func TestProbeRefusesEndpointsItCannotUse(t *testing.T) {
 	}
 }
 
+// TestProbeRejectsPrivateTargets is the regression test for LEGACY-M7:
+// probing must not become an oracle for the local network.
+func TestProbeRejectsPrivateTargets(t *testing.T) {
+	prober := probe.New(probe.Config{Timeout: time.Second})
+	for _, host := range []string{"127.0.0.1", "169.254.169.254", "192.168.1.1", "10.0.0.1", "::1"} {
+		results, err := prober.Probe(context.Background(), []*corev1.Endpoint{{Host: host, Port: 80}}, nil)
+		if err != nil {
+			t.Fatalf("Probe(%q) error = %v", host, err)
+		}
+		for result := range results {
+			if result.GetReachable() {
+				t.Errorf("private target %q was reported as reachable", host)
+			}
+			got := result.GetError()
+			if got == nil || got.GetCode() != corev1.SoraErrorCode_SORA_ERROR_CODE_PERMISSION_DENIED {
+				t.Errorf("private target %q gave %v, want permission denied", host, got)
+			}
+			if strings.Contains(got.GetDetailRedacted(), host) {
+				t.Errorf("rejection of %q leaked the address", host)
+			}
+		}
+	}
+}
+
 func TestProbeStopsWhenTheCallerCancels(t *testing.T) {
 	host, port := listener(t)
-	prober := probe.New(probe.Config{Timeout: time.Second})
+	prober := probe.New(probe.Config{Timeout: time.Second, AllowPrivate: true})
 	ctx, cancel := context.WithCancel(context.Background())
 	results, err := prober.Probe(ctx, []*corev1.Endpoint{{Host: host, Port: port}}, nil)
 	if err != nil {
@@ -228,7 +253,7 @@ func TestProbeStopsWhenTheCallerCancels(t *testing.T) {
 
 func TestProbeKeepsConcurrencyBounded(t *testing.T) {
 	host, port := listener(t)
-	prober := probe.New(probe.Config{Timeout: time.Second, Concurrency: 2})
+	prober := probe.New(probe.Config{Timeout: time.Second, Concurrency: 2, AllowPrivate: true})
 	endpoints := make([]*corev1.Endpoint, 16)
 	ids := make([]string, len(endpoints))
 	for i := range endpoints {

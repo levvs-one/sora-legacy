@@ -8,6 +8,7 @@ import (
 	"crypto/tls"
 	"math"
 	"net"
+	"net/netip"
 	"strconv"
 	"sync"
 	"time"
@@ -39,14 +40,19 @@ type Config struct {
 	// ServerName selects the verified TLS name. Empty uses the endpoint
 	// host.
 	ServerName string
+	// AllowPrivate permits probing private, loopback and link-local
+	// targets. Keep it false in production: probing must not become an
+	// oracle for the local network. Tests use it for loopback listeners.
+	AllowPrivate bool
 }
 
 // Prober measures endpoints and streams the results.
 type Prober struct {
-	timeout     time.Duration
-	concurrency int
-	tls         bool
-	serverName  string
+	timeout      time.Duration
+	concurrency  int
+	tls          bool
+	serverName   string
+	allowPrivate bool
 	// slots shares the socket budget across all requests; per-request
 	// limits would let concurrent calls multiply socket usage.
 	slots chan struct{}
@@ -67,12 +73,13 @@ func New(cfg Config) *Prober {
 		cfg.Concurrency = DefaultConcurrency
 	}
 	return &Prober{
-		timeout:     cfg.Timeout,
-		concurrency: cfg.Concurrency,
-		tls:         cfg.TLS,
-		serverName:  cfg.ServerName,
-		slots:       make(chan struct{}, cfg.Concurrency),
-		requests:    make(chan struct{}, MaxConcurrentRequests),
+		timeout:      cfg.Timeout,
+		concurrency:  cfg.Concurrency,
+		tls:          cfg.TLS,
+		serverName:   cfg.ServerName,
+		allowPrivate: cfg.AllowPrivate,
+		slots:        make(chan struct{}, cfg.Concurrency),
+		requests:     make(chan struct{}, MaxConcurrentRequests),
 	}
 }
 
@@ -134,6 +141,15 @@ func (p *Prober) measure(ctx context.Context, index int, endpoint *corev1.Endpoi
 		result.Error = toWire(err, "")
 		return result
 	}
+	// Probing must not become an oracle for the local network: reject
+	// private, loopback and link-local targets like the subscription
+	// fetcher does (see subscription.dialChecked), unless the operator
+	// explicitly allows them.
+	if !p.allowPrivate && isPrivateTarget(ctx, host) {
+		result.Error = toWire(errs.Newf(errs.CodePermissionDenied, errs.KeyProbeInvalidEndpoint,
+			"probe: private targets are not probed"), "")
+		return result
+	}
 	latency, err := p.dial(ctx, host, port)
 	if err != nil {
 		result.Error = toWire(err, host)
@@ -179,6 +195,32 @@ func (p *Prober) dial(ctx context.Context, host string, port uint32) (time.Durat
 	}
 	_ = connection.Close()
 	return time.Since(start), nil
+}
+
+// isPrivateTarget reports whether host names a private, loopback or
+// link-local address, resolving DNS names. A failed lookup is not treated as
+// private: the dial itself will fail then.
+func isPrivateTarget(ctx context.Context, host string) bool {
+	if addr, err := netip.ParseAddr(host); err == nil {
+		return !publicAddr(addr)
+	}
+	addrs, err := net.DefaultResolver.LookupNetIP(ctx, "ip", host)
+	if err != nil {
+		return false
+	}
+	for _, addr := range addrs {
+		if !publicAddr(addr) {
+			return true
+		}
+	}
+	return false
+}
+
+// publicAddr mirrors the subscription fetcher's notion of a dialable public
+// address.
+func publicAddr(addr netip.Addr) bool {
+	addr = addr.Unmap()
+	return addr.IsGlobalUnicast() && !addr.IsPrivate()
 }
 
 // EndpointProber defines the interface required by the control plane, keeping
