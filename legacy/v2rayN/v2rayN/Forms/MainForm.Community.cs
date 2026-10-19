@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
@@ -869,6 +870,20 @@ namespace v2rayN.Forms
         {
             try
             {
+                // LEGACY-H2: per-user установка лежит в каталоге, доступном для записи
+                // текущему пользователю. Перезапуск с правами администратора исполнит
+                // оттуда компоненты (TUN, ядро, sysproxy) — требуем явного подтверждения.
+                if (IsAppDirectoryUserWritable() &&
+                    UI.ShowYesNo(
+                        "Каталог установки Sora доступен для записи без прав администратора. " +
+                        "Перезапуск с правами администратора запустит оттуда компоненты TUN. " +
+                        "Продолжить, только если вы уверены в целостности установки.") != DialogResult.Yes)
+                {
+                    config.soraReconnectOnStart = false;
+                    ConfigHandler.SaveConfig(ref config, false);
+                    return;
+                }
+
                 int processId = Process.GetCurrentProcess().Id;
                 Process.Start(new ProcessStartInfo
                 {
@@ -885,6 +900,25 @@ namespace v2rayN.Forms
                 ConfigHandler.SaveConfig(ref config, false);
                 UI.ShowWarning("TUN не включён: запрос прав администратора отменён.");
             }
+
+        /// <summary>
+        /// LEGACY-H2: каталог приложения доступен для записи текущему пользователю
+        /// (типично для per-user установки в LocalAppData).
+        /// </summary>
+        private static bool IsAppDirectoryUserWritable()
+        {
+            try
+            {
+                string probe = Path.Combine(Utils.StartupPath(), ".writetest_" + Guid.NewGuid().ToString("N"));
+                using (File.Create(probe)) { }
+                File.Delete(probe);
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
             catch (Exception exception)
             {
                 config.soraReconnectOnStart = false;
