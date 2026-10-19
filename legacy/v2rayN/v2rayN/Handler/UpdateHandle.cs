@@ -396,11 +396,20 @@ namespace v2rayN.Handler
             {
                 downloadHandle = new DownloadHandle();
 
-                downloadHandle.UpdateCompleted += (sender2, args) =>
+                downloadHandle.UpdateCompleted += async (sender2, args) =>
                 {
                     if (args.Success)
                     {
                         _updateFunc(false, string.Format(ResUI.MsgDownloadGeoFileSuccessfully, geoName));
+
+                        // NEW-R2 (LEGACY-H1, geo-часть): сверяем SHA-256 скачанного geo-файла
+                        // с {url}.sha256sum релиза до замены рабочего файла.
+                        string verifyError = await VerifyGeoFileAsync(geoName, url);
+                        if (verifyError != null)
+                        {
+                            _updateFunc(false, verifyError);
+                            return;
+                        }
 
                         try
                         {
@@ -705,6 +714,51 @@ namespace v2rayN.Handler
             if (Utils.IsNullOrEmpty(dgst)) return null;
             Match m = Regex.Match(dgst, @"\b[0-9a-fA-F]{64}\b");
             return m.Success ? m.Value : null;
+        }
+
+        /// <summary>
+        /// NEW-R2 (LEGACY-H1, geo-часть): сверка SHA-256 скачанного geo-файла
+        /// (geoip.dat / geosite.dat) с {url}.sha256sum релиза
+        /// Loyalsoldier/v2ray-rules-dat. Fail-closed: несовпадение или недоступность
+        /// манифеста — обновление отклоняется, скачанный файл удаляется.
+        /// Возвращает null, если проверка пройдена; иначе текст ошибки.
+        /// </summary>
+        private static async Task<string> VerifyGeoFileAsync(string geoName, string url)
+        {
+            string fileName = Utils.GetPath(Utils.GetDownloadFileName(url));
+            if (!File.Exists(fileName))
+            {
+                return "Скачанный geo-файл не найден.";
+            }
+            try
+            {
+                string sumText = await new DownloadHandle().DownloadStringAsync(url + ".sha256sum", true, string.Empty);
+                string expected = ParseDgstSha256(sumText);
+                if (Utils.IsNullOrEmpty(expected))
+                {
+                    return "Не удалось получить контрольную сумму geo-файла (.sha256sum); обновление отклонено.";
+                }
+
+                string actual;
+                using (var sha256 = SHA256.Create())
+                using (var stream = File.OpenRead(fileName))
+                {
+                    actual = BitConverter.ToString(sha256.ComputeHash(stream)).Replace("-", string.Empty);
+                }
+
+                if (!string.Equals(actual, expected, StringComparison.OrdinalIgnoreCase))
+                {
+                    Utils.SaveLog($"Geo file checksum mismatch: {url}");
+                    try { File.Delete(fileName); } catch { }
+                    return "Контрольная сумма geo-файла не совпала с манифестом релиза; обновление отклонено.";
+                }
+                return null;
+            }
+            catch (Exception ex)
+            {
+                Utils.SaveLog("Geo file verification failed", ex);
+                return "Не удалось проверить контрольную сумму geo-файла: " + ex.Message;
+            }
         }
 
         private const string ProxyRestoreSentinelFileName = "proxy_restore.pending";

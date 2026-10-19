@@ -108,30 +108,32 @@ namespace v2rayN.Handler
                 Utils.SetSecurityProtocol(LazyConfig.Instance.GetConfig().enableSecurityProtocolTls13);
                 UpdateCompleted?.Invoke(this, new ResultEventArgs(false, ResUI.Downloading));
 
-                var client = new HttpClient(new WebRequestHandler()
+                // NEW-R2: HttpClient освобождается после загрузки (сокеты не висят до финализатора).
+                using (var client = new HttpClient(new WebRequestHandler()
                 {
                     Proxy = GetWebProxy(blProxy)
-                });
-
-                var progress = new Progress<double>();
-                progress.ProgressChanged += (sender, value) =>
+                }))
                 {
-                    if (UpdateCompleted != null)
+                    var progress = new Progress<double>();
+                    progress.ProgressChanged += (sender, value) =>
                     {
-                        string msg = $"...{value}%";
-                        UpdateCompleted(this, new ResultEventArgs(value > 100 ? true : false, msg));
-                    }
-                };
+                        if (UpdateCompleted != null)
+                        {
+                            string msg = $"...{value}%";
+                            UpdateCompleted(this, new ResultEventArgs(value > 100 ? true : false, msg));
+                        }
+                    };
 
-                // LEGACY-L9: таймаут и корректная отмена/освобождение CTS вместо fire-and-forget.
-                using (var cancellationToken = new CancellationTokenSource())
-                {
-                    cancellationToken.CancelAfter(downloadTimeout * 1000);
-                    await HttpClientHelper.GetInstance().DownloadFileAsync(client,
-                           url,
-                           Utils.GetPath(Utils.GetDownloadFileName(url)),
-                           progress,
-                           cancellationToken.Token);
+                    // LEGACY-L9: таймаут и корректная отмена/освобождение CTS вместо fire-and-forget.
+                    using (var cancellationToken = new CancellationTokenSource())
+                    {
+                        cancellationToken.CancelAfter(downloadTimeout * 1000);
+                        await HttpClientHelper.GetInstance().DownloadFileAsync(client,
+                               url,
+                               Utils.GetPath(Utils.GetDownloadFileName(url)),
+                               progress,
+                               cancellationToken.Token);
+                    }
                 }
             }
             catch (Exception ex)
@@ -149,20 +151,18 @@ namespace v2rayN.Handler
         public async Task<string> UrlRedirectAsync(string url, bool blProxy)
         {
             Utils.SetSecurityProtocol(LazyConfig.Instance.GetConfig().enableSecurityProtocolTls13);
-            WebRequestHandler webRequestHandler = new WebRequestHandler
+            // NEW-R2: using для клиента и ответа; null-safe чтение Location.
+            using (var client = new HttpClient(new WebRequestHandler
             {
                 AllowAutoRedirect = false,
                 Proxy = GetWebProxy(blProxy)
-            };
-            HttpClient client = new HttpClient(webRequestHandler);
-
-            HttpResponseMessage response = await client.GetAsync(url);
-            if (response.StatusCode.ToString() == "Redirect")
+            }))
+            using (HttpResponseMessage response = await client.GetAsync(url))
             {
-                return response.Headers.Location.ToString();
-            }
-            else
-            {
+                if (response.StatusCode.ToString() == "Redirect")
+                {
+                    return response.Headers.Location?.ToString();
+                }
                 Utils.SaveLog("StatusCode error: " + url);
                 return null;
             }
