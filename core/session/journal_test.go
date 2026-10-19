@@ -31,7 +31,14 @@ func TestJournalUnsubscribeDuringAppend(t *testing.T) {
 	for i := 0; i < 200; i++ {
 		ch, cancel := j.Subscribe(1)
 		go func() {
-			for range ch {
+			// The channel is never closed, so stop draining when the
+			// publishers stop instead of leaking the goroutine.
+			for {
+				select {
+				case <-ch:
+				case <-stop:
+					return
+				}
 			}
 		}()
 		time.Sleep(time.Millisecond)
