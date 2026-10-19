@@ -77,7 +77,9 @@ type Transport struct {
 	Host        string
 	Service     string
 	Headers     map[string]string
-	Prefix      string
+	// Prefix is reserved: no renderer consumes it.
+	Prefix string
+	// IdleTimeout is reserved: no renderer consumes it.
 	IdleTimeout int
 	// Mode is the XHTTP mode: auto, packet-up, stream-up or stream-one.
 	Mode string
@@ -206,7 +208,11 @@ type DNSServer struct {
 	Transport DNSTransport
 	Address   string
 	Port      uint16
-	Dialer    string
+	// Dialer names the outbound used to reach this resolver ("direct" or an
+	// outbound ID). Only the mihomo renderer honors it (dialer-proxy);
+	// nothing in the tree sets it.
+	Dialer string
+	// Suffixes is reserved: no renderer consumes it.
 	Suffixes  []string
 	ProxyOnly bool
 }
