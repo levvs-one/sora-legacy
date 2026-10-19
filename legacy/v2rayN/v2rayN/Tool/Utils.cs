@@ -1049,6 +1049,17 @@ namespace v2rayN
             }
         }
 
+        /// <summary>
+        /// LEGACY-H3: разрешены только текстовые форматы конфигов.
+        /// Исполняемые и прочие файлы отклоняются (защита от запуска через "Edit").
+        /// </summary>
+        public static bool IsAllowedCustomConfigExtension(string extension)
+        {
+            return string.Equals(extension, ".json", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(extension, ".yaml", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(extension, ".yml", StringComparison.OrdinalIgnoreCase);
+        }
+
         #endregion
 
         #region Log

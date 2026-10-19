@@ -113,7 +113,9 @@ namespace v2rayN.Forms
             OpenFileDialog fileDialog = new OpenFileDialog
             {
                 Multiselect = false,
-                Filter = "Config|*.json|YAML|*.yaml;*.yml|All|*.*"
+                // LEGACY-H3: только текстовые конфиги; *.* убран, чтобы нельзя было
+                // подсунуть исполняемый файл.
+                Filter = "Config|*.json|YAML|*.yaml;*.yml"
             };
             if (fileDialog.ShowDialog() != DialogResult.OK)
             {
@@ -148,8 +150,41 @@ namespace v2rayN.Forms
                 return;
             }
 
-            address = Utils.GetConfigPath(address);
-            Process.Start(address);
+            // LEGACY-H3: открываем только whitelisted-расширения и только через явный
+            // notepad.exe без UseShellExecute — никакого запуска произвольных файлов.
+            if (!Utils.IsAllowedCustomConfigExtension(Path.GetExtension(address)))
+            {
+                UI.Show("Недопустимый тип файла конфигурации.");
+                return;
+            }
+
+            string configDir = Utils.GetConfigPath();
+            string fullPath = Path.GetFullPath(Path.Combine(configDir, address));
+            if (!fullPath.StartsWith(configDir + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+            {
+                UI.Show("Недопустимый путь к файлу конфигурации.");
+                return;
+            }
+            if (!File.Exists(fullPath))
+            {
+                UI.Show(ResUI.OperationFailed);
+                return;
+            }
+
+            try
+            {
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "notepad.exe"),
+                    Arguments = "\"" + fullPath + "\"",
+                    UseShellExecute = false
+                });
+            }
+            catch (Exception ex)
+            {
+                Utils.SaveLog("Open custom config in editor failed", ex);
+                UI.Show(ResUI.OperationFailed);
+            }
         }
     }
 }

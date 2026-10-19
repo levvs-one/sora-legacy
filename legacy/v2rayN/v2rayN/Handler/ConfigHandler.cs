@@ -472,6 +472,12 @@ namespace v2rayN.Handler
                 return -1;
             }
             var ext = Path.GetExtension(fileName);
+            // LEGACY-H3: принимаем только текстовые конфиги, исполняемые файлы — нет.
+            if (!Utils.IsAllowedCustomConfigExtension(ext))
+            {
+                Utils.SaveLog($"Rejected custom server file with disallowed extension: {ext}");
+                return -1;
+            }
             string newFileName = $"{Utils.GetGUID()}{ext}";
             //newFileName = Path.Combine(Utils.GetTempPath(), newFileName);
 
