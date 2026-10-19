@@ -109,6 +109,45 @@ func TestFetchStopsAtARedirectThatDowngradesToHttp(t *testing.T) {
 	}
 }
 
+// redirectRoundTripper answers the first request with a redirect without
+// dialing, so the test never touches the network.
+type redirectRoundTripper struct {
+	location string
+	called   int
+}
+
+func (r *redirectRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	r.called++
+	return &http.Response{
+		StatusCode: http.StatusFound,
+		Header:     http.Header{"Location": []string{r.location}},
+		Body:       http.NoBody,
+		Request:    req,
+	}, nil
+}
+
+// TestFetchRejectsARedirectIntoThePrivateNetwork is the regression test for
+// LEGACY-L6: with a proxy configured, dialChecked only validates the proxy
+// address, so every hop's target must be checked against the private-host
+// policy independently of the transport.
+func TestFetchRejectsARedirectIntoThePrivateNetwork(t *testing.T) {
+	rt := &redirectRoundTripper{location: "https://169.254.169.254/sub"}
+	client := &http.Client{
+		CheckRedirect: func(*http.Request, []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+		Transport: rt,
+	}
+	fetcher := subscription.New(subscription.Options{HTTPClient: client})
+	_, err := fetcher.Fetch(context.Background(), "https://provider.example/sub", subscription.FetchOptions{})
+	if errs.KeyOf(err) != errs.KeySubscriptionRedirect {
+		t.Errorf("a redirect into 169.254.169.254 = %v, key = %q", err, errs.KeyOf(err))
+	}
+	if code := errs.CodeOf(err); code != errs.CodePermissionDenied {
+		t.Errorf("a redirect into the private network gave code %v, want permission denied", code)
+	}
+}
+
 func TestFetchStopsAfterTooManyRedirects(t *testing.T) {
 	fetcher, url := newServer(t, func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/again", http.StatusFound)

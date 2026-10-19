@@ -124,12 +124,24 @@ func (f *Fetcher) Fetch(ctx context.Context, reference string, opts FetchOptions
 	}
 	ctx, cancel := context.WithTimeout(ctx, f.timeout)
 	defer cancel()
-	ctx = context.WithValue(ctx, privateKey{}, isPrivateHost(ctx, target.Hostname()))
+	allowPrivate, _ := ctx.Value(privateKey{}).(bool)
+	if !allowPrivate {
+		allowPrivate = isPrivateHost(ctx, target.Hostname())
+	}
+	ctx = context.WithValue(ctx, privateKey{}, allowPrivate)
 
 	for hop := 0; ; hop++ {
 		if hop > f.maxRedirects {
 			return Result{}, errs.Newf(errs.CodeInvalidArgument, errs.KeySubscriptionRedirect,
 				"subscription: the provider led the request more than %d times", f.maxRedirects)
+		}
+		// Re-evaluate the private-host policy for every hop. dialChecked
+		// only sees the dialed address: with a proxy configured it validates
+		// the proxy, while the real target travels inside CONNECT unchecked.
+		// A public initial URL must never redirect into the local network.
+		if !allowPrivate && isPrivateHost(ctx, target.Hostname()) {
+			return Result{}, errs.Newf(errs.CodePermissionDenied, errs.KeySubscriptionRedirect,
+				"subscription: the provider led the request outside the internet")
 		}
 		body, header, location, err := f.hop(ctx, target, agent)
 		if err != nil {
