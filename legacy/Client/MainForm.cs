@@ -317,7 +317,7 @@ internal sealed class MainForm : Form
         }
         try
         {
-            var result = await worker.SetAsync(plan);
+            var result = await worker.SetAsync(plan, settings.KillSwitch);
             if (closing || current != revision) return;
             status = result;
             apply.Visible = false;
@@ -344,6 +344,7 @@ internal sealed class MainForm : Form
         var layout = new FlowLayoutPanel { AutoSize = true, FlowDirection = FlowDirection.TopDown, WrapContents = false, Padding = new Padding(20) };
         var tun = new RadioButton { Text = text["tunMode"], Checked = settings.Tun, AutoSize = true, Margin = new Padding(0, 8, 0, 8) };
         var proxy = new RadioButton { Text = text["tunnelProxy"], Checked = !settings.Tun, AutoSize = true, Margin = tun.Margin };
+        var killSwitch = new CheckBox { Text = text["killSwitch"], Checked = settings.KillSwitch, AutoSize = true, Margin = tun.Margin };
         var engine = new AntdUI.Select { Width = 300, Height = 44, List = true, Font = strong, BackColor = Field, ForeColor = ForeColor, Radius = 8 };
         engine.Items.Add(new AntdUI.SelectItem(text["engineAuto"], ""));
         foreach (var kind in new[] { "sing-box", "xray", "mihomo" }) engine.Items.Add(new AntdUI.SelectItem(kind, kind));
@@ -361,6 +362,7 @@ internal sealed class MainForm : Form
         save.Click += (_, _) =>
         {
             settings.Tun = tun.Checked;
+            settings.KillSwitch = killSwitch.Checked;
             settings.Engine = (string?)engine.SelectedValue ?? "";
             if (settings.Engine == "xray") settings.XrayStack = (string?)stack.SelectedValue ?? "gvisor";
             if (settings.Engine == "mihomo") settings.MihomoStack = (string?)stack.SelectedValue ?? "mixed";
@@ -368,7 +370,7 @@ internal sealed class MainForm : Form
             apply.Visible = desiredConnected;
             dialog.DialogResult = DialogResult.OK;
         };
-        layout.Controls.AddRange(new FormsControl[] { tun, proxy, engine, stack, save });
+        layout.Controls.AddRange(new FormsControl[] { tun, proxy, killSwitch, engine, stack, save });
         dialog.Controls.Add(layout);
         dialog.AcceptButton = save;
         RenderStack();

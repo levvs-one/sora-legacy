@@ -16,6 +16,9 @@ internal sealed class ClientSettings : ApplicationSettingsBase
     [UserScopedSetting, DefaultSettingValue("True")]
     public bool Tun { get => (bool)this[nameof(Tun)]; set => this[nameof(Tun)] = value; }
 
+    [UserScopedSetting, DefaultSettingValue("False")]
+    public bool KillSwitch { get => (bool)this[nameof(KillSwitch)]; set => this[nameof(KillSwitch)] = value; }
+
     [UserScopedSetting, DefaultSettingValue("gvisor")]
     public string XrayStack { get => (string)this[nameof(XrayStack)]; set => this[nameof(XrayStack)] = value; }
 
