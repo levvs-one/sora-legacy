@@ -231,3 +231,31 @@ func TestFailedStartupKeepsTheOwnerOfUnrestoredSettings(t *testing.T) {
 
 // release gates the blocking engine factory of the concurrency test.
 var release chan struct{}
+
+func TestManagerPassesTheNetworkIntervalToSessions(t *testing.T) {
+	manager := NewManager(ManagerConfig{
+		Factory:         func(context.Context, *engine.Plan) (engine.Engine, error) { return newFakeEngine(), nil },
+		Guard:           &fakeGuard{},
+		NetworkInterval: 250 * time.Millisecond,
+	})
+	connected, err := manager.Connect(context.Background(), testPlan("session-1"), Settings{})
+	if err != nil {
+		t.Fatalf("Connect() error = %v", err)
+	}
+	t.Cleanup(func() { _ = manager.Disconnect(context.Background()) })
+	if got := connected.cfg.NetworkInterval; got != 250*time.Millisecond {
+		t.Errorf("the session reads the network every %v, want 250ms", got)
+	}
+}
+
+func TestManagerDefaultsTheNetworkInterval(t *testing.T) {
+	manager, _ := testManager(t, &fakeGuard{})
+	connected, err := manager.Connect(context.Background(), testPlan("session-1"), Settings{})
+	if err != nil {
+		t.Fatalf("Connect() error = %v", err)
+	}
+	t.Cleanup(func() { _ = manager.Disconnect(context.Background()) })
+	if got := connected.cfg.NetworkInterval; got != DefaultNetworkInterval {
+		t.Errorf("the session reads the network every %v, want the default %v", got, DefaultNetworkInterval)
+	}
+}

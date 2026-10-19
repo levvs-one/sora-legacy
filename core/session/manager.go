@@ -36,6 +36,9 @@ type ManagerConfig struct {
 	TunUp func(ctx context.Context, device string) error
 	// Network fingerprints the networks of the machine; see Config.Network.
 	Network func() string
+	// NetworkInterval is how often the network fingerprint is read. Zero
+	// uses DefaultNetworkInterval.
+	NetworkInterval time.Duration
 }
 
 // Manager owns at most one session. Connect stops and restores the old session
@@ -63,6 +66,9 @@ func NewManager(cfg ManagerConfig) *Manager {
 	}
 	if cfg.StopGrace <= 0 {
 		cfg.StopGrace = DefaultStopGrace
+	}
+	if cfg.NetworkInterval <= 0 {
+		cfg.NetworkInterval = DefaultNetworkInterval
 	}
 	if cfg.Now == nil {
 		cfg.Now = time.Now
@@ -96,17 +102,18 @@ func (m *Manager) Connect(ctx context.Context, plan *engine.Plan, settings Setti
 		return nil, err
 	}
 	created, err := New(Config{
-		Plan:          plan,
-		Engine:        built,
-		Guard:         m.cfg.Guard,
-		Journal:       NewJournal(m.cfg.JournalCapacity),
-		StatsInterval: m.cfg.StatsInterval,
-		StopGrace:     m.cfg.StopGrace,
-		Redactor:      m.cfg.Redactor,
-		Settings:      settings,
-		Now:           m.cfg.Now,
-		TunUp:         m.cfg.TunUp,
-		Network:       m.cfg.Network,
+		Plan:            plan,
+		Engine:          built,
+		Guard:           m.cfg.Guard,
+		Journal:         NewJournal(m.cfg.JournalCapacity),
+		StatsInterval:   m.cfg.StatsInterval,
+		StopGrace:       m.cfg.StopGrace,
+		Redactor:        m.cfg.Redactor,
+		Settings:        settings,
+		Now:             m.cfg.Now,
+		TunUp:           m.cfg.TunUp,
+		Network:         m.cfg.Network,
+		NetworkInterval: m.cfg.NetworkInterval,
 	})
 	if err != nil {
 		_ = built.Close()
