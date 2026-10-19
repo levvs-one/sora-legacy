@@ -257,6 +257,9 @@ namespace v2rayN.Handler
                 if (!blProxy && config.sysProxyType == ESysProxyType.ForcedChange)
                 {
                     restoreSystemProxy = true;
+                    // LEGACY-L10: сторожевой флаг на случай обрыва между снятием и восстановлением прокси.
+                    try { File.WriteAllText(ProxyRestoreSentinelPath, DateTime.UtcNow.ToString("o")); }
+                    catch (Exception ex) { Utils.SaveLog(ex.Message, ex); }
                     config.sysProxyType = ESysProxyType.ForcedClear;
                     SysProxyHandle.UpdateSysProxy(config, false);
                     await Task.Delay(3000);
@@ -371,6 +374,7 @@ namespace v2rayN.Handler
                 {
                     config.sysProxyType = ESysProxyType.ForcedChange;
                     SysProxyHandle.UpdateSysProxy(config, false);
+                    try { File.Delete(ProxyRestoreSentinelPath); } catch { }
                 }
                 SubscriptionUpdateLock.Release();
             }
