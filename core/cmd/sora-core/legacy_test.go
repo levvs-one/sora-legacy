@@ -13,12 +13,12 @@ func TestLegacyKeepsOrdinaryProfileSeparate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got, want := defaultDataDir(), filepath.Join(config, "sora-legacy", "core"); got != want {
-		t.Fatalf("legacy profile = %s, want %s", got, want)
+	if got, fromEnv := defaultDataDir(); got != filepath.Join(config, "sora-legacy", "core") || fromEnv {
+		t.Fatalf("legacy profile = %s (fromEnv=%v), want %s", got, fromEnv, filepath.Join(config, "sora-legacy", "core"))
 	}
 	legacy := filepath.Join(t.TempDir(), "legacy")
 	t.Setenv("SORA_LEGACY_DATA_DIR", legacy)
-	if got := defaultDataDir(); got != legacy {
-		t.Fatalf("explicit legacy profile = %s, want %s", got, legacy)
+	if got, fromEnv := defaultDataDir(); got != legacy || !fromEnv {
+		t.Fatalf("explicit legacy profile = %s (fromEnv=%v), want %s", got, fromEnv, legacy)
 	}
 }

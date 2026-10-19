@@ -60,8 +60,9 @@ func main() {
 func run(ctx context.Context, arguments []string) error {
 	set := flag.NewFlagSet("sora-core", flag.ContinueOnError)
 	var f flags
-	set.StringVar(&f.dataDir, "data-dir", defaultDataDir(), "where the token, the secrets and the engine state live")
-	set.StringVar(&f.enginesDir, "engines-dir", filepath.Join(defaultDataDir(), "engines"), "where the engine binaries are looked for")
+	defaultDir, dirFromEnv := defaultDataDir()
+	set.StringVar(&f.dataDir, "data-dir", defaultDir, "where the token, the secrets and the engine state live")
+	set.StringVar(&f.enginesDir, "engines-dir", filepath.Join(defaultDir, "engines"), "where the engine binaries are looked for")
 	set.StringVar(&f.engine, "engine", "", "pin one engine: sing-box, xray or mihomo; empty picks one per plan")
 	set.IntVar(&f.localPort, "tunnel-port", 0, "loopback port the tunnel is served on; 0 picks a free one")
 	set.StringVar(&f.bypass, "bypass", "", "comma separated destinations that skip the tunnel")
@@ -114,6 +115,26 @@ func run(ctx context.Context, arguments []string) error {
 	if err != nil {
 		return err
 	}
+	// An environment-redirected data directory must not move the token and
+	// the secret store for a privileged core: the variable is inherited
+	// from the caller's environment, which a less-privileged local process
+	// may influence. An explicit -data-dir still wins over everything.
+	explicitDataDir := false
+	set.Visit(func(fl *flag.Flag) {
+		if fl.Name == "data-dir" {
+			explicitDataDir = true
+		}
+	})
+	if dirFromEnv && !explicitDataDir && os.Geteuid() == 0 {
+		safe := defaultDataDirNoEnv()
+		logger.Warn("ignoring SORA_LEGACY_DATA_DIR for a privileged run",
+			"ignored", f.dataDir, "using", safe)
+		f.dataDir = safe
+		f.enginesDir = filepath.Join(safe, "engines")
+	} else if dirFromEnv && !explicitDataDir {
+		logger.Warn("the data directory comes from SORA_LEGACY_DATA_DIR",
+			"dir", f.dataDir)
+	}
 	options := Options{
 		LegacyControl: f.legacyControl,
 		Diagnostic:    f.check,
@@ -163,13 +184,26 @@ func run(ctx context.Context, arguments []string) error {
 var buildVersion = "dev"
 
 // defaultDataDir returns the per-user directory for manual runs. Services
-// receive an explicit directory.
-func defaultDataDir() string {
+// receive an explicit directory. The second result reports whether the value
+// came from the environment, so callers can distrust it for privileged runs.
+func defaultDataDir() (string, bool) {
 	if dir := strings.TrimSpace(os.Getenv("SORA_LEGACY_DATA_DIR")); dir != "" {
-		return dir
+		return dir, true
 	}
+	return defaultDataDirNoEnv(), false
+}
+
+// defaultDataDirNoEnv resolves the data directory without consulting the
+// environment.
+func defaultDataDirNoEnv() string {
 	if dir, err := os.UserConfigDir(); err == nil {
 		return filepath.Join(dir, "sora-legacy", "core")
+	}
+	// os.UserConfigDir fails only without a home directory; fall back to a
+	// fixed system location rather than a CWD-relative directory whose
+	// meaning depends on where the core was started.
+	if os.Geteuid() == 0 {
+		return filepath.Join(string(filepath.Separator), "var", "lib", "sora-legacy-core")
 	}
 	return filepath.Join(".", ".sora-legacy-core")
 }
