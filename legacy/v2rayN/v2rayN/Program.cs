@@ -1,4 +1,5 @@
 ﻿using System;
+using System.IO;
 using System.Linq;
 using System.Diagnostics;
 using System.Threading;
@@ -19,6 +20,13 @@ namespace v2rayN
             if (args.Any(arg => string.Equals(arg, "--restore-proxy", StringComparison.OrdinalIgnoreCase)))
             {
                 Logging.Setup();
+                // LEGACY-L11: молчаливое изменение системного прокси — только с явным
+                // подтверждением пользователя; деинсталлятор передаёт --silent.
+                bool silent = args.Any(arg => string.Equals(arg, "--silent", StringComparison.OrdinalIgnoreCase));
+                if (!silent && UI.ShowYesNo("Сбросить системный прокси к настройкам по умолчанию?") != DialogResult.Yes)
+                {
+                    return;
+                }
                 Environment.ExitCode = Handler.SysProxyHandle.ResetIEProxy() ? 0 : 1;
                 return;
             }
@@ -122,7 +130,54 @@ namespace v2rayN
             name = name.Replace("\\", "/"); // https://stackoverflow.com/questions/20714120/could-not-find-a-part-of-the-path-error-while-creating-mutex
 
             Global.mutexObj = new Mutex(false, name, out bool bCreatedNew);
+            if (!bCreatedNew && !IsOwnExecutableRunning())
+            {
+                // LEGACY-L11: мьютекс занят, но живого процесса этого exe нет —
+                // имя могли занять заранее (squatting) либо остался мусор.
+                // Закрываем чужой дескриптор и пробуем создать заново.
+                try { Global.mutexObj.Close(); } catch { }
+                Global.mutexObj = new Mutex(false, name, out bCreatedNew);
+            }
             return !bCreatedNew;
+        }
+
+        /// <summary>
+        /// LEGACY-L11: проверяет, что одноимённый мьютекс действительно удерживает
+        /// живой процесс этого приложения, а не создан заранее посторонним процессом.
+        /// </summary>
+        private static bool IsOwnExecutableRunning()
+        {
+            string exePath = Utils.GetExePath();
+            int currentId = Process.GetCurrentProcess().Id;
+            Process[] processes;
+            try
+            {
+                processes = Process.GetProcessesByName(Path.GetFileNameWithoutExtension(exePath));
+            }
+            catch
+            {
+                return true; // не смогли проверить — считаем, что инстанс есть (fail-closed)
+            }
+            foreach (Process p in processes)
+            {
+                try
+                {
+                    if (p.Id != currentId &&
+                        string.Equals(p.MainModule?.FileName, exePath, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return true;
+                    }
+                }
+                catch
+                {
+                    // Нет доступа к чужому процессу или он уже завершился — пропускаем.
+                }
+                finally
+                {
+                    p.Dispose();
+                }
+            }
+            return false;
         }
 
         static void Application_ThreadException(object sender, ThreadExceptionEventArgs e)

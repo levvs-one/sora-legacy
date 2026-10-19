@@ -73,7 +73,7 @@ Name: "{userstartup}\Sora"; Filename: "{app}\{#MyAppExeName}"; Parameters: "--si
 Filename: "{app}\{#MyAppExeName}"; Description: "Запустить Sora"; WorkingDir: "{app}"; Flags: nowait postinstall skipifsilent; Check: not WizardNoIcons
 
 [UninstallRun]
-Filename: "{app}\{#MyAppExeName}"; Parameters: "--restore-proxy"; WorkingDir: "{app}"; Flags: runhidden waituntilterminated skipifdoesntexist; RunOnceId: "RestoreSystemProxy"
+Filename: "{app}\{#MyAppExeName}"; Parameters: "--restore-proxy --silent"; WorkingDir: "{app}"; Flags: runhidden waituntilterminated skipifdoesntexist; RunOnceId: "RestoreSystemProxy"
 
 [UninstallDelete]
 Type: files; Name: "{app}\guiNConfig.json"
