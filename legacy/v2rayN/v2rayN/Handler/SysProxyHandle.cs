@@ -110,9 +110,10 @@ namespace v2rayN.Handler
         public static void SetIEProxy(bool global, string strProxy, string strExceptions)
         {
             RecordUserSettings();
+            // LEGACY-M11: экранируем аргументы и в global-ветке, как в ResetIEProxy.
             string arguments = global
-                ? $"global {strProxy} {strExceptions}"
-                : $"pac {strProxy}";
+                ? $"global {QuoteArgument(strProxy)} {QuoteArgument(strExceptions)}"
+                : $"pac {QuoteArgument(strProxy)}";
 
             ExecSysproxy(arguments);
         }
