@@ -73,7 +73,9 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
-          go-version: 1.26.9
+          # Bootstrap Go for the win7 SDK build; the win7 toolchain itself is
+          # pinned by archive hash and VERSION check below.
+          go-version-file: core/go.mod
           cache: false
       - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
         with:
