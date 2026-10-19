@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/keepalive"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/levvs-one/sora-client/core/control"
@@ -270,6 +271,11 @@ func New(ctx context.Context, opts Options) (*App, error) {
 		// limit before allocating their payload.
 		grpc.MaxRecvMsgSize(control.MaxRecvMsgBytes),
 		grpc.MaxSendMsgSize(control.MaxSendMsgBytes),
+		// Reap idle control connections so abandoned clients cannot
+		// accumulate file descriptors on the local endpoint.
+		grpc.KeepaliveParams(keepalive.ServerParameters{
+			MaxConnectionIdle: 5 * time.Minute,
+		}),
 	)
 	corev1.RegisterCoreControlServer(app.server, plane)
 	built = true

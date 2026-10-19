@@ -39,6 +39,10 @@ type Peer struct {
 	Present bool
 }
 
+// defaultMaxConnections caps concurrent control connections to bound local
+// file-descriptor exhaustion.
+const defaultMaxConnections = 128
+
 // Options configures an endpoint.
 type Options struct {
 	// Address selects the endpoint. Empty uses the platform's standard
@@ -53,6 +57,9 @@ type Options struct {
 	Allow func(Peer) bool
 	// HandshakeTimeout bounds a connection that has not introduced itself.
 	HandshakeTimeout time.Duration
+	// MaxConnections caps concurrent connections in Serve. Zero uses the
+	// default cap.
+	MaxConnections int
 }
 
 // Listener is the local endpoint the control plane is served on.
@@ -116,11 +123,18 @@ func (l *Listener) Accept() (net.Conn, error) {
 
 // Serve runs a handler per admitted connection until cancellation closes the
 // endpoint. Direct listener users inherit the same checks through Accept.
+// Concurrent connections are capped; connections beyond the cap are closed
+// immediately so silent connection floods cannot exhaust file descriptors.
 func (l *Listener) Serve(ctx context.Context, handle func(context.Context, net.Conn) error) error {
 	go func() {
 		<-ctx.Done()
 		_ = l.Close()
 	}()
+	maxConns := l.options.MaxConnections
+	if maxConns <= 0 {
+		maxConns = defaultMaxConnections
+	}
+	sem := make(chan struct{}, maxConns)
 	for {
 		connection, err := l.Accept()
 		if err != nil {
@@ -131,11 +145,24 @@ func (l *Listener) Serve(ctx context.Context, handle func(context.Context, net.C
 			}
 			return err
 		}
-		go l.dispatch(ctx, connection, handle)
+		select {
+		case sem <- struct{}{}:
+		default:
+			_ = connection.Close()
+			continue
+		}
+		go func() {
+			defer func() { <-sem }()
+			l.dispatch(ctx, connection, handle)
+		}()
 	}
 }
 
 // dispatch gives one connection its own context and its introduction budget.
+// Only the read side is bounded: a silent or slow introduction is reaped
+// after the timeout, while the handler clears the deadline once the peer
+// introduces itself (for example after Handshake) because it then owns
+// long-lived streams.
 func (l *Listener) dispatch(ctx context.Context, connection net.Conn, handle func(context.Context, net.Conn) error) {
 	connectionCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -144,10 +171,7 @@ func (l *Listener) dispatch(ctx context.Context, connection net.Conn, handle fun
 	if timeout <= 0 {
 		timeout = handshakeTimeout
 	}
-	_ = connection.SetDeadline(time.Now().Add(timeout))
-	// Clear the introduction deadline because the handler owns subsequent
-	// long-lived streams.
-	_ = connection.SetDeadline(time.Time{})
+	_ = connection.SetReadDeadline(time.Now().Add(timeout))
 	_ = handle(connectionCtx, connection)
 }
 
