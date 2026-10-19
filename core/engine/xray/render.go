@@ -315,8 +315,11 @@ func (r *renderer) target(id string, depth int) (field, tag string, err error) {
 	switch id {
 	case "direct":
 		return "outboundTag", tagDirect, nil
-	case "reject":
+	case "reject", "block":
 		return "outboundTag", tagBlock, nil
+	case "pass":
+		// Xray has no accept routing; pass leaves the tunnel like direct.
+		return "outboundTag", tagDirect, nil
 	case "dns":
 		return "outboundTag", tagDNS, nil
 	}

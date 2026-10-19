@@ -150,7 +150,9 @@ func (r *renderer) assignTags() error {
 }
 
 func (r *renderer) target(id string) (string, error) {
-	if id == "direct" {
+	switch id {
+	case "direct", "pass":
+		// sing-box has no accept action; pass routes like direct.
 		return "direct", nil
 	}
 	tag, ok := r.tags[id]
@@ -360,15 +362,18 @@ func (r *renderer) route() (obj, error) {
 	final := "direct"
 	for _, rule := range r.plan.Rules {
 		if rule.Type == engine.RuleMatchAll {
-			if rule.Target == "reject" {
+			switch rule.Target {
+			case "reject", "block":
 				rules = append(rules, obj{"action": "reject"})
-				continue
+			case "dns":
+				rules = append(rules, obj{"action": "hijack-dns"})
+			default:
+				tag, err := r.target(rule.Target)
+				if err != nil {
+					return nil, err
+				}
+				final = tag
 			}
-			tag, err := r.target(rule.Target)
-			if err != nil {
-				return nil, err
-			}
-			final = tag
 			break
 		}
 		match, err := r.match(rule)
@@ -376,7 +381,7 @@ func (r *renderer) route() (obj, error) {
 			return nil, err
 		}
 		switch rule.Target {
-		case "reject":
+		case "reject", "block":
 			match["action"] = "reject"
 		case "dns":
 			match["action"] = "hijack-dns"

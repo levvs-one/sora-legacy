@@ -77,9 +77,18 @@ func (p *Plan) RequiredFeatures() map[Feature]bool {
 	return out
 }
 
-func isBuiltInTarget(t string) bool {
+// IsBuiltInTarget reports whether a target is provided by the engine instead
+// of the plan. The control plane and engine validation share this set so both
+// accept the same vocabulary; every renderer must handle all of them:
+//   - direct: leave the tunnel, no proxy
+//   - block: drop silently (rendered as the engine's refuse action)
+//   - reject: refuse actively
+//   - pass: accept without proxying (rendered as direct where the engine
+//     has no accept action)
+//   - dns: hand to the session DNS outbound
+func IsBuiltInTarget(t string) bool {
 	switch t {
-	case "direct", "reject", "pass", "dns":
+	case "direct", "block", "reject", "pass", "dns":
 		return true
 	}
 	return false

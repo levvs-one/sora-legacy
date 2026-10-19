@@ -405,3 +405,26 @@ func TestProfileDisplayMetadataKeepsAdapterAndCredentialsPrivate(t *testing.T) {
 		t.Fatalf("display metadata round trip: %v, %v", &decoded, err)
 	}
 }
+
+// TestPlanAcceptsEveryBuiltInTarget is the regression test for R5-LG-5-1:
+// the control plane shares its target vocabulary with engine validation, so
+// every built-in target must survive planFromProto.
+func TestPlanAcceptsEveryBuiltInTarget(t *testing.T) {
+	in := &corev1.SessionPlan{
+		TunnelMode: corev1.TunnelMode_TUNNEL_MODE_SYSTEM,
+		Outbounds:  []*corev1.OutboundSpec{{Id: "a", Protocol: "direct"}},
+		Routing:    &corev1.RoutingOptions{ProxyTarget: "a"},
+	}
+	for _, target := range []string{"direct", "block", "reject", "pass", "dns"} {
+		sp := proto.Clone(in).(*corev1.SessionPlan)
+		sp.Routes = []*corev1.RoutingRule{{Destination: "domain:example.org", OutboundId: target}}
+		p, err := planFromProto(sp, "s", nil)
+		if err != nil {
+			t.Errorf("target %q: planFromProto error = %v", target, err)
+			continue
+		}
+		if p.Rules[0].Target != target {
+			t.Errorf("target %q became %q", target, p.Rules[0].Target)
+		}
+	}
+}

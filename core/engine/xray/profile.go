@@ -71,10 +71,12 @@ func renderProfile(p *engine.Plan, rt supervise.Runtime) ([]byte, error) {
 	for _, rule := range p.Rules {
 		var target string
 		switch rule.Target {
-		case "direct":
+		case "direct", "pass":
 			target = profileDirect
 		case "reject", "block":
 			target = profileBlock
+		case "dns":
+			target = profileDNS
 		default:
 			// Profile-target rules defer to provider routing,
 			// including catch-all rules.

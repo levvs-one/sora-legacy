@@ -159,3 +159,31 @@ func TestEngineAcceptsRenderedPlans(t *testing.T) {
 		})
 	}
 }
+
+// TestEveryBuiltInTargetRenders is the regression test for R5-LG-5-1: the
+// control plane and engine validation share one target vocabulary, so every
+// built-in target must render on every engine instead of failing late.
+func TestEveryBuiltInTargetRenders(t *testing.T) {
+	p := enginetest.Plan(engine.ProtocolVLESS)
+	p.Rules = []engine.Rule{
+		{Type: engine.RuleDomainSuffix, Value: "a.example", Target: "direct"},
+		{Type: engine.RuleDomainSuffix, Value: "b.example", Target: "block"},
+		{Type: engine.RuleDomainSuffix, Value: "c.example", Target: "reject"},
+		{Type: engine.RuleDomainSuffix, Value: "d.example", Target: "pass"},
+		{Type: engine.RuleDomainSuffix, Value: "e.example", Target: "dns"},
+		{Type: engine.RuleMatchAll, Target: "direct"},
+	}
+	if err := p.Validate(); err != nil {
+		t.Fatalf("Validate() error = %v", err)
+	}
+	raw, err := Render(p, testRuntime)
+	if err != nil {
+		t.Fatalf("Render() error = %v", err)
+	}
+	cfg := string(raw)
+	for _, want := range []string{`"action":"reject"`, `"action":"hijack-dns"`, `"outbound":"direct"`} {
+		if !strings.Contains(cfg, want) {
+			t.Errorf("rendered config lacks %s", want)
+		}
+	}
+}

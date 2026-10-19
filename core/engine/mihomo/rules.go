@@ -65,6 +65,10 @@ func ruleTarget(target string, byID map[string]string) (string, error) {
 	switch target {
 	case "direct":
 		return "DIRECT", nil
+	case "block":
+		// mihomo has no silent-drop rule action; REJECT is the closest
+		// refuse flavor.
+		return "REJECT", nil
 	case "reject":
 		return "REJECT", nil
 	case "pass":
