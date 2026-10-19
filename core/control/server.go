@@ -123,6 +123,38 @@ type Fetcher interface {
 }
 
 // Server implements the control-plane service.
+// Authorization matrix: which control methods require the control token.
+//
+// The token is a client-liveness check (proof of a completed Handshake), NOT
+// a security boundary against other same-account processes: Handshake issues
+// it to every peer the transport admits. The real boundary is the transport's
+// peer allow-list (see the ipc package and LEGACY-H4).
+//
+//	Method              Token   Rationale
+//	Handshake           no      Bootstrap; issues the token.
+//	GetAbout            no      Public read-only build info.
+//	GetRoutingPresets   no      Public read-only presets.
+//	Connect             YES     Mutating: starts a session.
+//	Disconnect          YES     Mutating: stops a session.
+//	GetStatus           no      Read-only; session-scoped via checkSession.
+//	SetKillSwitch       no (*)  Mutating, but the request carries no token
+//	                          field; callers are gated by the transport only.
+//	GetStats            no      Read-only counters.
+//	WatchEvents         no      Read-only event stream.
+//	ParseImport         no      Pure function; changes no state.
+//	PutSecret           no (*)  Mutating secrets; no token field in the proto.
+//	DeleteSecret        no (*)  Mutating secrets; no token field in the proto.
+//	FetchSubscription   no (*)  Network fetch + subscription state.
+//	ProbeServers        no (*)  Network probing (see LEGACY-M7).
+//	RunDiagnostics      no (*)  Reads diagnostics; redacted.
+//	ExportDiagnostics   YES     Private data (archives may carry hosts).
+//	Logs/Connections    YES     Private data (destinations in logs).
+//	Subscriptions       YES     Private/mutating subscription state.
+//
+// (*) Known gaps: unifying the token requirement needs a wire-contract change
+// (control_authenticator fields on those requests) plus coordinated client
+// updates, so it is deferred. Any same-account process passes the transport
+// today, which bounds the value of the token as a security control anyway.
 type Server struct {
 	corev1.UnimplementedCoreControlServer
 
