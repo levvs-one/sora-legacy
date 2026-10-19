@@ -101,7 +101,7 @@ namespace v2rayN.Handler
             return 0;
         }
 
-        public void DownloadFileAsync(string url, bool blProxy, int downloadTimeout)
+        public async Task DownloadFileAsync(string url, bool blProxy, int downloadTimeout)
         {
             try
             {
@@ -123,12 +123,16 @@ namespace v2rayN.Handler
                     }
                 };
 
-                var cancellationToken = new CancellationTokenSource();
-                _ = HttpClientHelper.GetInstance().DownloadFileAsync(client,
-                       url,
-                       Utils.GetPath(Utils.GetDownloadFileName(url)),
-                       progress,
-                       cancellationToken.Token);
+                // LEGACY-L9: таймаут и корректная отмена/освобождение CTS вместо fire-and-forget.
+                using (var cancellationToken = new CancellationTokenSource())
+                {
+                    cancellationToken.CancelAfter(downloadTimeout * 1000);
+                    await HttpClientHelper.GetInstance().DownloadFileAsync(client,
+                           url,
+                           Utils.GetPath(Utils.GetDownloadFileName(url)),
+                           progress,
+                           cancellationToken.Token);
+                }
             }
             catch (Exception ex)
             {

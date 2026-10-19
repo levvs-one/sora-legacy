@@ -595,8 +595,9 @@ namespace v2rayN.Handler
                         throw new ArgumentException("Type");
                 }
 
-                if (curVersion == version)
+                if (CompareVersions(version, curVersion) <= 0)
                 {
+                    // LEGACY-H1: downgrade запрещён — качаем только более новую версию.
                     AbsoluteCompleted?.Invoke(this, new ResultEventArgs(false, message));
                     return;
                 }
