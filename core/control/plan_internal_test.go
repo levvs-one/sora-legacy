@@ -10,6 +10,7 @@ import (
 	"github.com/levvs-one/sora-client/core/engine"
 	"github.com/levvs-one/sora-client/core/engine/registry"
 	"github.com/levvs-one/sora-client/core/engine/supervise"
+	"github.com/levvs-one/sora-client/core/errs"
 	corev1 "github.com/levvs-one/sora-client/core/gen/sora/core/v1"
 	"github.com/levvs-one/sora-client/core/parser"
 	"github.com/levvs-one/sora-client/core/session"
@@ -30,7 +31,11 @@ func TestRealityAndTransportSurviveTheVault(t *testing.T) {
 		t.Fatal(err)
 	}
 	var o engine.Outbound
-	if err := applyCredential(&o, parseCredential(document)); err != nil {
+	values, err := parseCredential(document)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := applyCredential(&o, values); err != nil {
 		t.Fatal(err)
 	}
 
@@ -76,7 +81,11 @@ func TestWireGuardSurvivesTheVault(t *testing.T) {
 				t.Fatal(err)
 			}
 			var o engine.Outbound
-			if err := applyCredential(&o, parseCredential(document)); err != nil {
+			values, err := parseCredential(document)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := applyCredential(&o, values); err != nil {
 				t.Fatal(err)
 			}
 			if o.PrivateKey != "cKE7LmCF61IhqqABGhvJ44jWXp8fKymcMAEVAzLDYVk=" {
@@ -89,6 +98,71 @@ func TestWireGuardSurvivesTheVault(t *testing.T) {
 				t.Errorf("peers = %+v", o.Peers)
 			}
 		})
+	}
+}
+
+// TestParseCredentialRejectsForeignMaterial locks SORA-M8: only the JSON
+// credential document is accepted; raw proxy URLs, empty or truncated
+// bytes fail closed instead of producing an empty credential.
+func TestParseCredentialRejectsForeignMaterial(t *testing.T) {
+	for name, material := range map[string][]byte{
+		"empty":         {},
+		"whitespace":    []byte("  \n "),
+		"proxy URL":     []byte("vless://11111111-1111-1111-1111-111111111111@example.com:443?security=reality#x"),
+		"truncated":     []byte(`{"uuid": "11111111-`),
+		"not an object": []byte(`["uuid"]`),
+	} {
+		t.Run(name, func(t *testing.T) {
+			if _, err := parseCredential(material); err == nil {
+				t.Fatalf("parseCredential(%q) = nil, want an error", material)
+			} else if errs.CodeOf(err) != errs.CodeInvalidArgument {
+				t.Fatalf("parseCredential(%q) code = %q, want invalid_argument", material, errs.CodeOf(err))
+			}
+		})
+	}
+	values, err := parseCredential([]byte(`{"uuid":"ok"}`))
+	if err != nil {
+		t.Fatalf("parseCredential(valid document) = %v, want nil", err)
+	}
+	if values["uuid"] != "ok" {
+		t.Fatalf("parseCredential(valid document) = %v, want the uuid", values)
+	}
+}
+
+type mapResolver struct {
+	data map[string][]byte
+	err  error
+}
+
+func (m mapResolver) Get(reference string) ([]byte, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.data[reference], nil
+}
+
+// TestCredentialMaterialFailsClosedEndToEnd locks SORA-M8 at the plan
+// boundary: a credential reference whose stored material is not a
+// credential document fails the whole plan with invalid_argument, so no
+// partially configured outbound is ever built.
+func TestCredentialMaterialFailsClosedEndToEnd(t *testing.T) {
+	secrets := mapResolver{data: map[string][]byte{
+		"vault:bad": []byte("vless://11111111-1111-1111-1111-111111111111@example.com:443"),
+	}}
+	in := &corev1.SessionPlan{
+		TunnelMode: corev1.TunnelMode_TUNNEL_MODE_APPLICATION,
+		Outbounds: []*corev1.OutboundSpec{{
+			Id:          "a",
+			Protocol:    "vless",
+			Credentials: &corev1.CredentialsRef{Reference: "vault:bad"},
+		}},
+	}
+	_, err := planFromProto(in, "s", secrets)
+	if err == nil {
+		t.Fatal("foreign credential material must fail the plan")
+	}
+	if errs.CodeOf(err) != errs.CodeInvalidArgument {
+		t.Fatalf("plan error code = %q, want invalid_argument", errs.CodeOf(err))
 	}
 }
 
@@ -121,7 +195,11 @@ func TestAmneziaWGSurvivesTheVault(t *testing.T) {
 		t.Fatal(err)
 	}
 	var o engine.Outbound
-	if err := applyCredential(&o, parseCredential(document)); err != nil {
+	values, err := parseCredential(document)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := applyCredential(&o, values); err != nil {
 		t.Fatal(err)
 	}
 	want := engine.AmneziaWG{Jc: 4, Jmin: 40, Jmax: 70, S1: 15, S2: 25, S3: 10, S4: 5,
