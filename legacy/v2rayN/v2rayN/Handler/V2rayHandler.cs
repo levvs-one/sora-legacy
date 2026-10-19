@@ -28,9 +28,11 @@ namespace v2rayN.Handler
         private CoreInfo coreInfo;
         public event ProcessDelegate ProcessEvent;
         /// <summary>
-        /// H1: срабатывает, когда процесс ядра завершается после успешного старта
-        /// (сторожок по образцу TunModeController). Штатные остановки через
-        /// V2rayStop() это событие не вызывают.
+        /// H1: срабатывает, когда завершается процесс, назначенный текущим ядром
+        /// (_process) — как правило, падение после успешного старта. Может сработать
+        /// и при падении в первые 1000 мс после назначения _process (тогда
+        /// дополнительно показывается штатный стартовый тост со stderr).
+        /// Штатные остановки через V2rayStop() это событие не вызывают.
         /// </summary>
         public event Action<int> CoreExited;
         private int processId = 0;
@@ -534,7 +536,7 @@ namespace v2rayN.Handler
         }
 
         /// <summary>
-        /// H1: ядро завершилось после успешного старта — оповещаем подписчиков.
+        /// H1: текущий процесс ядра завершился — оповещаем подписчиков.
         /// </summary>
         private void OnCoreExited(int exitCode)
         {
