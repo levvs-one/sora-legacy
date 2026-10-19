@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/levvs-one/sora-client/core/errs"
+	"github.com/levvs-one/sora-client/core/obfs"
 )
 
 // Default retrieval limits allow distant providers while bounding total fetch
@@ -61,6 +62,13 @@ type Options struct {
 	// redirects to this package. Only tests may inject a client trusting a
 	// local test server.
 	HTTPClient *http.Client
+	// Obfs, when non-nil, enables ClientHello fragmentation for the TLS
+	// handshakes of subscription fetches, defeating DPI that expects the
+	// whole ClientHello in one TCP segment. Only the fragmentation
+	// settings of the profile apply: http.Transport owns the TLS
+	// handshake and cannot use uTLS fingerprints (see the obfs package
+	// doc). Nil disables obfuscation. An invalid profile is ignored.
+	Obfs *obfs.Profile
 }
 
 // Fetcher retrieves subscription bodies.
@@ -84,22 +92,37 @@ func New(opts Options) *Fetcher {
 	}
 	client := opts.HTTPClient
 	if client == nil {
+		transport := &http.Transport{
+			Proxy:                 http.ProxyFromEnvironment,
+			DialContext:           dialChecked,
+			ForceAttemptHTTP2:     true,
+			MaxIdleConns:          8,
+			IdleConnTimeout:       30 * time.Second,
+			TLSHandshakeTimeout:   10 * time.Second,
+			ExpectContinueTimeout: time.Second,
+			ResponseHeaderTimeout: 20 * time.Second,
+		}
+		if p := opts.Obfs; p != nil {
+			if frag := p.Clamp(); frag.Validate() == nil && frag.Fragmentation() {
+				// Fragment the ClientHello at the TCP layer underneath
+				// the transport's own TLS handshake: proxies, HTTP/2
+				// and certificate verification keep working untouched.
+				transport.DialContext = func(ctx context.Context, network, address string) (net.Conn, error) {
+					conn, err := dialChecked(ctx, network, address)
+					if err != nil {
+						return nil, err
+					}
+					return frag.WrapConn(conn), nil
+				}
+			}
+		}
 		client = &http.Client{
 			// Handle redirects here so every hop is validated and
 			// counted.
 			CheckRedirect: func(*http.Request, []*http.Request) error {
 				return http.ErrUseLastResponse
 			},
-			Transport: &http.Transport{
-				Proxy:                 http.ProxyFromEnvironment,
-				DialContext:           dialChecked,
-				ForceAttemptHTTP2:     true,
-				MaxIdleConns:          8,
-				IdleConnTimeout:       30 * time.Second,
-				TLSHandshakeTimeout:   10 * time.Second,
-				ExpectContinueTimeout: time.Second,
-				ResponseHeaderTimeout: 20 * time.Second,
-			},
+			Transport: transport,
 		}
 	}
 	return &Fetcher{

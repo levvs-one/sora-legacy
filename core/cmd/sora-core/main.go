@@ -34,6 +34,7 @@ import (
 	"github.com/levvs-one/sora-client/core/ipc"
 	"github.com/levvs-one/sora-client/core/legacycontrol"
 	"github.com/levvs-one/sora-client/core/logs"
+	"github.com/levvs-one/sora-client/core/obfs"
 	"github.com/levvs-one/sora-client/core/probe"
 	"github.com/levvs-one/sora-client/core/secret"
 	"github.com/levvs-one/sora-client/core/session"
@@ -248,6 +249,13 @@ func New(ctx context.Context, opts Options) (*App, error) {
 	if app.engines != nil {
 		measurer = app.engines
 	}
+	// Subscription fetches fragment the ClientHello at the TCP layer so
+	// panels stay reachable where SNI-based DPI runs. Only the
+	// fragmentation knobs of the profile apply here: http.Transport
+	// owns the TLS handshake and cannot use uTLS fingerprints.
+	// The profile is copied: later mutations of the preset cannot leak
+	// into the fetcher.
+	fetchObfs := obfs.PresetBalanced
 	plane, err := control.New(control.Config{
 		Version:       Version,
 		Authenticator: auth,
@@ -257,7 +265,7 @@ func New(ctx context.Context, opts Options) (*App, error) {
 		Measurer:      measurer,
 		Logs:          center,
 		About:         app.about,
-		Fetcher:       subscription.New(subscription.Options{}),
+		Fetcher:       subscription.New(subscription.Options{Obfs: &fetchObfs}),
 	})
 	if err != nil {
 		_ = store.Close()

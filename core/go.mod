@@ -7,6 +7,7 @@ require (
 	github.com/creachadair/jrpc2 v1.3.5
 	github.com/godbus/dbus/v5 v5.2.2
 	github.com/gopacket/gopacket v1.7.4
+	github.com/refraction-networking/utls v1.8.2
 	github.com/tailscale/wf v0.0.0-20240214030419-6fbb0a674ee6
 	github.com/txthinking/socks5 v0.0.0-20260601051520-339b044ab0eb
 	golang.org/x/net v0.60.0
@@ -19,10 +20,13 @@ require (
 
 require (
 	github.com/BurntSushi/toml v1.4.1-0.20240526193622-a339e1f7089c // indirect
+	github.com/andybalholm/brotli v1.0.6 // indirect
 	github.com/creachadair/mds v0.26.1 // indirect
+	github.com/klauspost/compress v1.17.4 // indirect
 	github.com/patrickmn/go-cache v2.1.0+incompatible // indirect
 	github.com/txthinking/runnergroup v0.0.0-20210608031112-152c7c4432bf // indirect
 	go4.org/netipx v0.0.0-20220725152314-7e7bdc8411bf // indirect
+	golang.org/x/crypto v0.57.0 // indirect
 	golang.org/x/exp/typeparams v0.0.0-20231108232855-2478ac86f678 // indirect
 	golang.org/x/mod v0.41.0 // indirect
 	golang.org/x/text v0.42.0 // indirect
