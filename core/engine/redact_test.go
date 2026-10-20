@@ -161,10 +161,11 @@ func TestMaskPatternsDifferential(t *testing.T) {
 	reference := func(s string) string {
 		s = userInfoPattern.ReplaceAllString(s, "${1}://[masked]@")
 		s = tokenLinkPattern.ReplaceAllString(s, "${1}://[masked]")
+		s = subscriptionPathPattern.ReplaceAllString(s, "${1}[masked]")
 		s = authHeaderPattern.ReplaceAllString(s, "${1}[masked]")
 		s = bearerPattern.ReplaceAllString(s, "${1}[masked]")
-		s = keyValuePattern.ReplaceAllString(s, "${1}${2}[masked]")
-		s = strictKeyValuePattern.ReplaceAllString(s, "${1}${2}[masked]")
+		s = replaceKeyValues(keyValuePattern, s)
+		s = replaceKeyValues(strictKeyValuePattern, s)
 		s = uuidPattern.ReplaceAllString(s, "[masked]")
 		return s
 	}
@@ -202,6 +203,21 @@ func TestMaskPatternsDifferential(t *testing.T) {
 		"://",
 		"-",
 		"",
+		`token: "abc"def`,
+		`token: ""0`,
+		"sni: a.example",
+		"host: h.example",
+		"session: xyz",
+		"key=abc123",
+		"seed: s",
+		"hwid: hw",
+		"dest: d.example:443",
+		"encryption: none",
+		"https://h.example/sub/AbCdEfGh12345678",
+		"https://h.example/api/v1/sub/NestedToken123456",
+		"Authorization: Token abcdefgh123456",
+		"[masked]",
+		"token: [masked],",
 	}
 	var inputs []string
 	inputs = append(inputs, fragments...)
