@@ -70,12 +70,15 @@ Name: "{autodesktop}\Sora"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app
 Name: "{userstartup}\Sora"; Filename: "{app}\{#MyAppExeName}"; Parameters: "--silent"; WorkingDir: "{app}"; Tasks: autorun
 
 [Registry]
-; sora:// opens the subscription import in the client: the shell passes
-; the whole link as "%1" and the client imports what it carries
-; (sora://add/…). The registration names the shipped executable, whose
-; command-line contract (Program.cs of the client behind that name)
-; handles the argument; uninsdeletekey removes the whole protocol key
-; at uninstall.
+; sora:// registration, made ahead of time: the shell passes the
+; whole link as "%1" (sora://add/…) to the named executable. Today
+; that executable is built from v2rayN, whose command line does not
+; handle a sora:// argument, so a click on a link is silently
+; dropped for now. The handler is the new client's Program.cs, which
+; imports what the link carries; this registration takes effect
+; unchanged when the delivery stage switches the shipped executable
+; to that client. uninsdeletekey removes the whole protocol key at
+; uninstall.
 Root: HKA; Subkey: "Software\Classes\sora"; ValueType: string; ValueData: "URL:Sora"; Flags: uninsdeletekey
 Root: HKA; Subkey: "Software\Classes\sora"; ValueType: string; ValueName: "URL Protocol"; ValueData: ""
 Root: HKA; Subkey: "Software\Classes\sora\DefaultIcon"; ValueType: string; ValueData: """{app}\{#MyAppExeName}"",0"
