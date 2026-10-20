@@ -50,6 +50,7 @@ internal static class Program
         if (HasArg(args, ClientContract.RestoreProxyArgument)) return RestoreProxy(silent, text);
         WaitForPreviousInstance(args);
         EnableDpiAwareness();
+        InstallExceptionHandlers();
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);
 
@@ -108,6 +109,24 @@ internal static class Program
         if (marker < 0 || marker + 1 >= args.Length || !int.TryParse(args[marker + 1], out var processId)) return;
         try { Process.GetProcessById(processId).WaitForExit(15000); }
         catch { /* Already gone or not ours to wait for: start anyway. */ }
+    }
+
+    private static void InstallExceptionHandlers()
+    {
+        // As in the shipped client (v2rayN Program.cs): an unhandled
+        // exception must never surface as the raw .NET dialog with its
+        // stack trace. UI-thread exceptions are caught and recorded —
+        // the exception type name only, the convention of every other
+        // handler in this client — and the application keeps running;
+        // anything that still escapes is recorded by the AppDomain
+        // handler on its way out. Nothing is shown to the user here:
+        // there is no honest localized text for "the program broke",
+        // so the log is the record and the exit stays quiet.
+        Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
+        Application.ThreadException += (_, e) =>
+            Trace.WriteLine("Legacy client thread exception: " + e.Exception.GetType().Name);
+        AppDomain.CurrentDomain.UnhandledException += (_, e) =>
+            Trace.WriteLine("Legacy client unhandled exception: " + (e.ExceptionObject?.GetType().Name ?? "unknown"));
     }
 
     private static void EnableDpiAwareness()
