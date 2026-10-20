@@ -193,6 +193,17 @@ func (r *renderer) outbound(o engine.Outbound) (obj, error) {
 	if o.TLS.Insecure && !o.TLS.Reality && (o.TLS.Enabled || o.Protocol == engine.ProtocolTrojan || o.Protocol == engine.ProtocolHysteria2) {
 		return nil, fmt.Errorf("xray: outbound %s disables certificate verification; this build requires verification or certificate pinning", o.ID)
 	}
+	if o.TLS.KeyShare != "" {
+		// Fail closed behind the FeatureRealityKeyShare gate: Xray
+		// has no REALITY key_share knob — the uTLS parrot decides
+		// which key shares the ClientHello offers — so rendering
+		// here would silently offer a different share than the plan
+		// pins (CENSOR-P1 in sora; ported as the render backstop
+		// REVIEW-SP45 §3.3 found missing here). A bare Render in
+		// bypass of Supervisor.admit now refuses like the reference
+		// instead of silently dropping the pin.
+		return nil, fmt.Errorf("xray: outbound %s pins a REALITY key_share, which Xray does not expose (the fingerprint parrot decides the key share); use the sing-box or mihomo engine", o.ID)
+	}
 	tag := r.tags[o.ID]
 	server := obj{"address": o.Server, "port": int(o.Port)}
 	var settings obj
