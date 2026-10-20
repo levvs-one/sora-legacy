@@ -443,6 +443,20 @@ func parseLink(raw string) (OutboundSpec, error) {
 		if o.Password == "" {
 			o.Password = getq(q, "password")
 		}
+		// SIP002 plugin: the combined form "plugin=v2ray-plugin;tls;host=x"
+		// or the split form "plugin=v2ray-plugin" + "plugin_opts=tls;host=x".
+		// Canonical keys keep the raw "plugin" copy (from the loop above)
+		// from leaking into the credential document under two names.
+		if opts := getq(q, "plugin_opts", "plugin-opts"); opts != "" {
+			o.Options["ss_plugin_opts"] = opts
+		}
+		if plug := getq(q, "plugin"); plug != "" {
+			name, rest, _ := strings.Cut(plug, ";")
+			o.Options["ss_plugin"] = strings.TrimSpace(name)
+			if o.Options["ss_plugin_opts"] == "" && rest != "" {
+				o.Options["ss_plugin_opts"] = rest
+			}
+		}
 	case "tuic":
 		o.UUID = o.User
 		o.Security = "tls"
@@ -747,6 +761,17 @@ func (p LinkParser) parseJSON(b []byte, f Format) (ImportResult, error) {
 		if o.Protocol == "" {
 			r.Report.Unsupported++
 			continue
+		}
+		// SIP008/sing-box JSON entries carry the SIP002 plugin under its
+		// plain names; map them onto the canonical option keys the
+		// credential document copies (the generic Options dump
+		// JSON-quotes them under their raw names). DisplayName already
+		// comes from "remarks" via mapJSONSpec above.
+		if s, ok := m["plugin"].(string); ok && s != "" {
+			o.Options["ss_plugin"] = s
+		}
+		if s, ok := m["plugin_opts"].(string); ok && s != "" {
+			o.Options["ss_plugin_opts"] = s
 		}
 		k := o.StableKey()
 		if _, ok := seen[k]; ok {

@@ -110,13 +110,20 @@ type Outbound struct {
 
 	// UUID and the following credential fields must be masked in logs and
 	// events.
-	UUID       string
-	Password   string
-	Cipher     string
-	UserID     string
-	Flow       string
-	Obfs       string
-	ObfsParam  string
+	UUID      string
+	Password  string
+	Cipher    string
+	UserID    string
+	Flow      string
+	Obfs      string
+	ObfsParam string
+	// Plugin and PluginOpts carry a Shadowsocks SIP002 obfuscation plugin
+	// (e.g. v2ray-plugin) and its raw option string, verbatim from the
+	// import link. When set, Plugin wins over the legacy Obfs/ObfsParam
+	// obfs-local mapping. Like the other credential fields, PluginOpts
+	// must be masked in logs and events.
+	Plugin     string
+	PluginOpts string
 	PrivateKey string
 	PublicKey  string
 	ShortID    string

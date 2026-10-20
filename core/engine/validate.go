@@ -30,7 +30,7 @@ func (p *Plan) Secrets() []string {
 // Secrets lists the secret fields of one outbound. Values shorter than four
 // characters are skipped: masking them would destroy ordinary log text.
 func (o Outbound) Secrets() []string {
-	candidates := []string{o.UUID, o.Password, o.UserID, o.ObfsParam, o.PrivateKey, o.OriginalLink}
+	candidates := []string{o.UUID, o.Password, o.UserID, o.ObfsParam, o.PluginOpts, o.PrivateKey, o.OriginalLink}
 	if o.Encryption != "none" {
 		candidates = append(candidates, o.Encryption)
 	}

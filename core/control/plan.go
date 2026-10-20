@@ -86,6 +86,7 @@ var credentialKeys = map[string]struct{}{
 	"service_name": {}, "alpn": {}, "security": {}, "encryption": {},
 	"obfs": {}, "obfs_param": {}, "private_key": {}, "addresses": {},
 	"peers": {}, "insecure": {}, "xray_profile": {}, "amneziawg": {},
+	"ss_plugin": {}, "ss_plugin_opts": {},
 }
 
 // credentialDocument serializes only supported credential fields for storage.
@@ -118,6 +119,11 @@ func credentialDocument(spec parser.OutboundSpec) ([]byte, error) {
 			break
 		}
 	}
+	// SIP002 plugin/plugin_opts for Shadowsocks. The raw "plugin" query
+	// key stays in Options but is never stored under that name; only the
+	// parser's canonical ss_plugin keys reach the vault.
+	values["ss_plugin"] = spec.Options["ss_plugin"]
+	values["ss_plugin_opts"] = spec.Options["ss_plugin_opts"]
 	if strings.EqualFold(spec.Protocol, "wireguard") {
 		key, addresses, peers := wireguardMaterial(spec)
 		values["private_key"] = key
@@ -442,6 +448,8 @@ func applyCredential(outbound *engine.Outbound, values map[string]string) error 
 	outbound.Flow = values["flow"]
 	outbound.Obfs = values["obfs"]
 	outbound.ObfsParam = values["obfs_param"]
+	outbound.Plugin = values["ss_plugin"]
+	outbound.PluginOpts = values["ss_plugin_opts"]
 	outbound.PublicKey = values["public_key"]
 	outbound.ShortID = values["short_id"]
 	outbound.Encryption = values["encryption"]

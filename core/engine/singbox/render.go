@@ -206,8 +206,21 @@ func (r *renderer) outbound(o engine.Outbound) (obj, error) {
 		needsTLS = true
 	case engine.ProtocolShadowsocks:
 		out.set("type", "shadowsocks").set("method", orDefault(o.Cipher, "aes-256-gcm")).set("password", o.Password)
-		if o.Obfs != "" {
-			out.set("plugin", "obfs-local").set("plugin_opts", "obfs="+o.Obfs+";obfs-host="+o.ObfsParam)
+		// An explicit SIP002 plugin wins over the legacy obfs-local
+		// mapping; sing-box passes plugin/plugin_opts to the plugin
+		// binary verbatim.
+		switch {
+		case o.Plugin != "":
+			out.set("plugin", o.Plugin)
+			if o.PluginOpts != "" {
+				out.set("plugin_opts", o.PluginOpts)
+			}
+		case o.Obfs != "":
+			opts := "obfs=" + o.Obfs
+			if o.ObfsParam != "" {
+				opts += ";obfs-host=" + o.ObfsParam
+			}
+			out.set("plugin", "obfs-local").set("plugin_opts", opts)
 		}
 	case engine.ProtocolHysteria2:
 		out.set("type", "hysteria2").set("password", o.Password)

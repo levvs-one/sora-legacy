@@ -387,4 +387,46 @@ func TestParseSIP008Document(t *testing.T) {
 		o.Password != "SipPass123" || o.Cipher != "aes-256-gcm" || o.DisplayName != "SIP008 NL" {
 		t.Fatalf("spec = %+v", o)
 	}
+	if o.Options["ss_plugin"] != "obfs-local" || o.Options["ss_plugin_opts"] != "obfs=tls" {
+		t.Fatalf("SIP008 plugin must reach the canonical keys: %#v", o.Options)
+	}
+}
+
+func TestParseShadowsocksPlugin(t *testing.T) {
+	// Combined SIP002 form: one plugin parameter with ;-separated options.
+	r, err := (LinkParser{}).Parse([]byte("ss://YWVzLTI1Ni1nY206cGFzcw@example.com:8388?plugin=v2ray-plugin%3Btls%3Bhost%3Dexample.com#SS"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	o := r.Servers[0].Options
+	if o["ss_plugin"] != "v2ray-plugin" || o["ss_plugin_opts"] != "tls;host=example.com" {
+		t.Fatalf("combined plugin form: %#v", o)
+	}
+	// Split form: plugin_opts wins over the ;-suffix of plugin.
+	r, err = (LinkParser{}).Parse([]byte("ss://YWVzLTI1Ni1nY206cGFzcw@example.com:8388?plugin=v2ray-plugin%3Btls&plugin_opts=tls%3Bhost%3Dother.example#SS"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	o = r.Servers[0].Options
+	if o["ss_plugin"] != "v2ray-plugin" || o["ss_plugin_opts"] != "tls;host=other.example" {
+		t.Fatalf("split plugin form: %#v", o)
+	}
+	// obfs-local form from the §4 probes.
+	r, err = (LinkParser{}).Parse([]byte("ss://YWVzLTI1Ni1nY206cGFzcw@example.com:8388?plugin=obfs-local%3Bobfs%3Dtls%3Bobfs-host%3Dexample.com#SS"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	o = r.Servers[0].Options
+	if o["ss_plugin"] != "obfs-local" || o["ss_plugin_opts"] != "obfs=tls;obfs-host=example.com" {
+		t.Fatalf("obfs-local plugin form: %#v", o)
+	}
+	// No plugin: canonical keys stay empty.
+	r, err = (LinkParser{}).Parse([]byte("ss://YWVzLTI1Ni1nY206cGFzcw@example.com:8388#SS"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	o = r.Servers[0].Options
+	if o["ss_plugin"] != "" || o["ss_plugin_opts"] != "" {
+		t.Fatalf("no plugin: %#v", o)
+	}
 }

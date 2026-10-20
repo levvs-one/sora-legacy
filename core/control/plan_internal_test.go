@@ -50,6 +50,32 @@ func TestRealityAndTransportSurviveTheVault(t *testing.T) {
 	}
 }
 
+// TestShadowsocksPluginSurvivesTheVault pins S5-SP3 end to end at the
+// control seam: a SIP002 plugin parsed from the link must survive the
+// credential document and land on the engine plan, not drop silently.
+func TestShadowsocksPluginSurvivesTheVault(t *testing.T) {
+	link := "ss://YWVzLTI1Ni1nY206cGFzcw@example.com:8388?plugin=v2ray-plugin%3Btls%3Bhost%3Dexample.com#SS"
+	result, err := parser.LinkParser{}.Parse([]byte(link))
+	if err != nil || len(result.Servers) != 1 {
+		t.Fatalf("Parse = %+v, %v", result, err)
+	}
+	document, err := credentialDocument(result.Servers[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	var o engine.Outbound
+	values, err := parseCredential(document)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := applyCredential(&o, values); err != nil {
+		t.Fatal(err)
+	}
+	if o.Plugin != "v2ray-plugin" || o.PluginOpts != "tls;host=example.com" {
+		t.Errorf("SIP002 plugin lost on the way to the engine: plugin=%q opts=%q", o.Plugin, o.PluginOpts)
+	}
+}
+
 func TestRuleDestinationsFollowTheXrayVocabulary(t *testing.T) {
 	for destination, want := range map[string]engine.Rule{
 		"domain:example.com": {Type: engine.RuleDomainSuffix, Value: "example.com"},
