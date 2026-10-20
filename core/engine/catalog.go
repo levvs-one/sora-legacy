@@ -37,8 +37,8 @@ var Catalog = map[Kind]Capabilities{
 			FeatureProxyProviders: true, FeatureURLTest: true, FeatureLatencyTest: true,
 			FeatureHotApply: true, FeatureGeoData: true, FeatureFallbackGroup: true,
 			FeatureLoadBalance: true, FeatureXHTTP: true, FeatureVLESSEncrypt: true,
-			FeatureXHTTPDownloadSplit: true, FeatureXHTTPXmux: true, FeatureXHTTPPadding: true,
-			FeatureAmneziaWG: true, FeaturePrivateControl: true,
+			FeatureXHTTPDownloadSplit: true, FeatureXHTTPXmux: true, FeatureXHTTPPadding: true, FeatureRealityKeyShare: true,
+			FeatureAmneziaWG: true, FeaturePrivateControl: true, FeatureECH: true,
 		},
 	},
 	KindSingBox: {
@@ -55,7 +55,15 @@ var Catalog = map[Kind]Capabilities{
 		Features: map[Feature]bool{
 			FeatureTun: true, FeatureFakeIP: true, FeatureRuleSets: true,
 			FeatureURLTest: true, FeatureLatencyTest: true, FeatureGeoData: true,
-			FeaturePerAppRouting: true, FeatureTLSFragment: true,
+			FeaturePerAppRouting: true, FeatureTLSFragment: true, FeatureECH: true,
+			// Deliberately no static FeatureRealityKeyShare: the
+			// key_share spelling is the lx fork's (probed on lx.22
+			// in sora, whose shipped pin IS the fork); legacy ships
+			// upstream 1.14.3, which has no such field and refuses
+			// unknown keys at load. The claim rides the lx build in
+			// BuildCapabilities, exactly like FeatureXHTTP
+			// (SP5-render; a deliberate divergence from the
+			// reference's static claim, driven by the shipped pin).
 			// Deliberately no FeatureXHTTPDownloadSplit: the lx
 			// fork's xhttp transport has no download_settings field
 			// at all. Its xmux and x_padding_bytes claims ride the
@@ -82,6 +90,19 @@ var Catalog = map[Kind]Capabilities{
 			FeatureGeoData: true, FeatureTLSFragment: true,
 			FeatureXHTTP: true, FeatureVLESSEncrypt: true, FeaturePrivateControl: true,
 			FeatureXHTTPDownloadSplit: true, FeatureXHTTPXmux: true, FeatureXHTTPPadding: true,
+			// FeatureECH is claimed as of the SP5-render port (from
+			// sora snapshot 63faf1d, where the CENSOR-FP wire probe
+			// on 26.10.17 showed the outer SNI becoming the pinned
+			// list's public_name): the renderer emits echConfigList
+			// and echForceQuery. Legacy's shipped pin is 26.3.27 —
+			// the same floor the reference claims from — but the
+			// wire probe was not re-run on 26.3.27 here.
+			FeatureECH: true,
+			// Deliberately no FeatureRealityKeyShare: Xray has no
+			// key-share knob — the chosen parrot decides whether the
+			// hybrid group is offered — so a plan pinning the choice
+			// reports it missing here instead of losing it silently,
+			// and the renderer refuses it as a backstop (29d9cc4).
 		},
 	},
 }
@@ -101,6 +122,12 @@ func BuildCapabilities(kind Kind, version Version, tags []string) Capabilities {
 		// FeatureXHTTPDownloadSplit is never claimed here (S5-SP4).
 		caps.Features[FeatureXHTTPXmux] = caps.Features[FeatureXHTTP]
 		caps.Features[FeatureXHTTPPadding] = caps.Features[FeatureXHTTP]
+		// The lx fork's REALITY spells key_share (probed on the
+		// pinned lx.22 binary in sora); upstream sing-box — legacy's
+		// shipped pin — has no such field, so the claim exists only
+		// here, on the fork build, not in the static entry
+		// (SP5-render).
+		caps.Features[FeatureRealityKeyShare] = true
 		caps.Features[FeatureVLESSEncrypt] = true
 		caps.Features[FeatureAmneziaWG] = slices.Contains(tags, "with_awg")
 	}

@@ -7,12 +7,15 @@ import (
 )
 
 // The tests in this file are ported from sora's validate_ech_test.go
-// (S5-SP5), with one deliberate inversion, marked at
-// TestECHPlanRequiresFeatureECH: sora's engines all render ECH and
-// claim FeatureECH, legacy's render none of it and claim nothing —
-// the gate must therefore refuse an ECH plan everywhere here.
-// TestValidateKeyShare comes from sora's reality_test.go, which
-// legacy does not have as a file.
+// (S5-SP5). SP5's gate assertions were deliberately inverted (no
+// legacy renderer spelled ECH/KeyShare, so every engine had to
+// report the features missing); SP5-render ported the renderers
+// from sora snapshot 63faf1d3480d5429b6bcec3483c19c8e03defb85 and
+// the gate assertions now state the new truth — for ECH exactly the
+// reference's, for KeyShare the reference's except sing-box, whose
+// claim rides the lx fork build (legacy ships upstream sing-box;
+// see catalog.go). TestValidateKeyShare comes from sora's
+// reality_test.go, which legacy does not have as a file.
 //
 // ECH honesty rules: ECH must never silently degrade into leaking
 // the very name it is supposed to hide.
@@ -70,17 +73,17 @@ func TestValidateAcceptsECHQueryServerName(t *testing.T) {
 
 func TestECHPlanRequiresFeatureECH(t *testing.T) {
 	// An ECH plan must route only to engines whose renderer emits
-	// ECH. No legacy renderer does, so — inverted from sora, whose
-	// pins all claim the feature — every legacy catalog entry must
-	// report it missing: the plan fails selection instead of sending
-	// the SNI in the clear.
+	// ECH. Since SP5-render all three legacy renderers emit it (the
+	// reference's matrix, from sora snapshot 63faf1d), no catalog
+	// entry may report it missing; the gate itself remains what
+	// keeps a future non-ECH engine out.
 	p := &Plan{SessionID: "s1", Outbounds: []Outbound{echOutbound()}}
 	if !p.RequiredFeatures()[FeatureECH] {
 		t.Fatal("an ECH-enabled plan must require feature ech")
 	}
 	for _, kind := range []Kind{KindSingBox, KindMihomo, KindXray} {
-		if missing := Catalog[kind].Missing(p); !slices.Contains(missing, "feature "+string(FeatureECH)) {
-			t.Errorf("%s must not carry an ECH plan (no renderer emits ECH), got missing %v", kind, missing)
+		if missing := Catalog[kind].Missing(p); slices.Contains(missing, "feature "+string(FeatureECH)) {
+			t.Errorf("%s renders ECH and must not miss feature ech, got %v", kind, missing)
 		}
 	}
 }
@@ -192,16 +195,31 @@ func TestValidateKeyShare(t *testing.T) {
 	if err := o.Validate(); err == nil || !strings.Contains(err.Error(), "key_share needs REALITY") {
 		t.Errorf("KeyShare without REALITY: Validate = %v, want a key_share error", err)
 	}
-	// A KeyShare plan must also fail engine selection everywhere:
-	// no legacy renderer spells the knob.
+	// The selection gate, updated by SP5-render to the new truth:
+	// mihomo carries a KeyShare plan (it renders the knob), Xray
+	// never does (no knob — the plan must fail selection there, and
+	// its renderer refuses as a backstop), and sing-box carries it
+	// only on the lx fork build: legacy ships upstream sing-box,
+	// whose REALITY has no key_share field, so the static entry
+	// reports it missing while BuildCapabilities for an lx build
+	// claims it. (The reference claims it statically because its
+	// shipped sing-box pin IS the lx fork.)
 	p := &Plan{SessionID: "s1", Outbounds: []Outbound{keyShareRealityOutbound()}}
 	p.Outbounds[0].TLS.KeyShare = "hybrid"
 	if !p.RequiredFeatures()[FeatureRealityKeyShare] {
 		t.Fatal("a KeyShare plan must require feature reality-key-share")
 	}
-	for _, kind := range []Kind{KindSingBox, KindMihomo, KindXray} {
-		if missing := Catalog[kind].Missing(p); !slices.Contains(missing, "feature "+string(FeatureRealityKeyShare)) {
-			t.Errorf("%s must not carry a KeyShare plan (no renderer spells it), got missing %v", kind, missing)
+	ksMissing := "feature " + string(FeatureRealityKeyShare)
+	if missing := Catalog[KindMihomo].Missing(p); slices.Contains(missing, ksMissing) {
+		t.Errorf("mihomo renders key_share and must carry the plan, got missing %v", missing)
+	}
+	for _, kind := range []Kind{KindSingBox, KindXray} {
+		if missing := Catalog[kind].Missing(p); !slices.Contains(missing, ksMissing) {
+			t.Errorf("%s static entry must not carry a KeyShare plan, got missing %v", kind, missing)
 		}
+	}
+	lx := BuildCapabilities(KindSingBox, Version{Major: 1, Minor: 14, Patch: 3, PreRelease: "lx.22"}, nil)
+	if missing := lx.Missing(p); slices.Contains(missing, ksMissing) {
+		t.Errorf("an lx sing-box build renders key_share and must carry the plan, got missing %v", missing)
 	}
 }

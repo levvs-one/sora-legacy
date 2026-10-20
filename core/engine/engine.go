@@ -59,17 +59,25 @@ const (
 	// plan must not demand padding (S5-SP4, ported from sora).
 	FeatureXHTTPPadding Feature = "xhttp-padding"
 	// FeatureECH marks engines whose renderer actually emits Encrypted
-	// Client Hello. No legacy engine claims it — no legacy renderer
-	// spells ECH yet — so the constant exists for RequiredFeatures: an
-	// ECH plan demands it, every engine reports it missing, and the
-	// plan fails selection instead of sending the SNI in the clear
-	// while promising it hidden (S5-SP5, ported from sora).
+	// Client Hello for an outbound that enables it: sing-box (ech
+	// block with canonical PEM config and query_server_name), mihomo
+	// (ech-opts with pinned config and query-server-name) and Xray
+	// (echConfigList + echForceQuery; a query_server_name override
+	// has no Xray spelling and is refused at render). All three claim
+	// it since the SP5-render port (from sora snapshot 63faf1d,
+	// CENSOR-FP); before that no legacy engine claimed it and an ECH
+	// plan failed selection instead of sending the SNI in the clear
+	// while promising it hidden (S5-SP5).
 	FeatureECH Feature = "ech"
 	// FeatureRealityKeyShare marks engines whose renderer can spell
-	// the plan's REALITY key-share choice (TLS.KeyShare). Like
-	// FeatureECH it is claimed by no legacy engine yet; it exists so a
-	// plan setting KeyShare fails selection instead of silently
-	// losing the choice (S5-SP5, ported from sora).
+	// the plan's REALITY key-share choice (TLS.KeyShare): mihomo
+	// (support-x25519mlkem768) and the sing-box lx fork
+	// (tls.reality.key_share, claimed in BuildCapabilities — legacy
+	// ships upstream sing-box, which has no such field). Xray claims
+	// it nowhere: it has no key-share knob, so a plan setting
+	// KeyShare fails selection there instead of silently losing the
+	// choice, and its renderer refuses the pin as a backstop
+	// (S5-SP5, SP5-render).
 	FeatureRealityKeyShare Feature = "reality-key-share"
 	FeatureVLESSEncrypt    Feature = "vless-encryption"
 	FeatureAmneziaWG       Feature = "amneziawg"

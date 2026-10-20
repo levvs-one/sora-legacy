@@ -55,12 +55,7 @@ const (
 )
 
 // ECHConfig holds Encrypted Client Hello (RFC 9849) parameters of an
-// outbound. The zero value disables ECH. No legacy renderer spells ECH
-// yet: the type exists so a plan can carry it and validation can judge
-// it (TLS.validate and the plan-level bootstrap rule in validate.go),
-// while RequiredFeatures demands FeatureECH — which no engine claims —
-// so an ECH plan fails engine selection instead of silently sending
-// the SNI in the clear (S5-SP5, ported from sora).
+// outbound. The zero value disables ECH.
 type ECHConfig struct {
 	// Enabled turns ECH on. Without a pinned Config the engine fetches
 	// the ECHConfigList from the server's HTTPS DNS record, so a working
@@ -70,6 +65,13 @@ type ECHConfig struct {
 	// lookup. Useful where encrypted DNS itself is blocked.
 	Config []string
 	// QueryServerName overrides the domain used for the ECH DNS query.
+	// Rendered by sing-box (ech.query_server_name, available since
+	// 1.13 — below the shipped 1.14.3 pin) and by mihomo
+	// (ech-opts.query-server-name). The Xray renderer spells ECH
+	// itself but has no query-name spelling and refuses the override
+	// at render; see FeatureECH. (SP5-render, from sora snapshot
+	// 63faf1d — whose own comment here is stale and still says the
+	// Xray renderer does not emit ECH at all.)
 	QueryServerName string
 }
 
@@ -94,11 +96,13 @@ type TLS struct {
 	// "hybrid" offers the X25519MLKEM768 hybrid. REALITY servers on
 	// Xray >= 26.9.8 accept only the hybrid share, so against them
 	// "classical" (or a default that omits the hybrid) fails the
-	// handshake with an opaque verification error. No legacy renderer
-	// spells it yet; RequiredFeatures demands FeatureRealityKeyShare,
-	// which no engine claims, so a plan setting it fails engine
+	// handshake with an opaque verification error. Rendered by
+	// mihomo (support-x25519mlkem768) and by the sing-box lx fork
+	// (tls.reality.key_share); RequiredFeatures demands
+	// FeatureRealityKeyShare, which upstream sing-box and Xray do
+	// not claim, so on those builds a plan setting it fails engine
 	// selection instead of silently losing the choice (S5-SP5,
-	// ported from sora).
+	// SP5-render).
 	KeyShare string
 }
 

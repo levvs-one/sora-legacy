@@ -9,15 +9,15 @@ import (
 )
 
 // REVIEW-SP45 §3.3 / SP6b commit C: the production path is fail-closed
-// (no legacy engine claims FeatureRealityKeyShare, so Supervisor.admit
-// refuses a KeyShare plan), but a bare Render in bypass of admit used
-// to drop the pin silently. The reference's xray renderer refuses it;
-// this backstop is ported verbatim, error text included. Sing-box and
-// mihomo in the reference RENDER key_share rather than refusing it,
-// so no symmetric refusal is ported there — and legacy's bare-Render
-// ECH drop likewise has no reference refusal to port (the reference
-// renders ECH on all three engines; that is a feature port, not a
-// backstop). Both stay gated at admit, as before.
+// (Xray claims FeatureRealityKeyShare nowhere, so Supervisor.admit
+// refuses a KeyShare plan for Xray), but a bare Render in bypass of
+// admit used to drop the pin silently. The reference's xray renderer
+// refuses it; this backstop is ported verbatim, error text included.
+// Sing-box and mihomo RENDER key_share rather than refusing it (their
+// renderers and gates landed in SP5-render), and ECH is likewise
+// rendered on all three engines since SP5-render — Xray included,
+// with its own refusal for the query_server_name shape it cannot
+// spell (see render_ech_test.go).
 func TestRenderRefusesRealityKeyShare(t *testing.T) {
 	for _, ks := range []string{"hybrid", "classical"} {
 		p := enginetest.Plan(engine.ProtocolVLESS)

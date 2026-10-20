@@ -374,10 +374,12 @@ func validateXHTTP(o Outbound) []error {
 //   - ECH and REALITY are incompatible: REALITY owns the ClientHello, an
 //     ECH extension on top of it is misconfiguration, not stealth.
 //
-// QueryServerName is NOT rejected here: it is plan data a future ECH
-// renderer will spell, and rejecting it would make the field unusable
-// the moment one lands. The "no legacy renderer spells ECH yet" side
-// is closed by the FeatureECH capability gate, not by validation.
+// QueryServerName is NOT rejected here: sing-box renders it
+// (ech.query_server_name, available since 1.13 — below the shipped
+// 1.14.3 pin) and mihomo renders it (ech-opts.query-server-name).
+// The Xray path, which renders ECH without a query-name spelling, is
+// closed by the renderer's own refusal, not by validation
+// (SP5-render, from sora snapshot 63faf1d).
 func (t TLS) validate(what string) []error {
 	var errs []error
 	// KeyShare is the REALITY key-share knob: only the two documented

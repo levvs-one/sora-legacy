@@ -80,8 +80,9 @@ func (p *Plan) RequiredFeatures() map[Feature]bool {
 		if o.TLS.ECH.Enabled {
 			// An engine that does not render ECH would send the SNI
 			// in the clear while the plan promises it hidden: route
-			// ECH plans only to engines that emit it. None do yet,
-			// so such a plan fails selection (S5-SP5, from sora).
+			// ECH plans only to engines that emit it (PASS3 deep S4
+			// in sora; all three legacy renderers emit it since
+			// SP5-render).
 			out[FeatureECH] = true
 		}
 		if o.TLS.KeyShare != "" {
