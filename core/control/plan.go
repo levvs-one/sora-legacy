@@ -58,7 +58,34 @@ func parseCredential(material []byte) (map[string]string, error) {
 		return nil, errs.Newf(errs.CodeInvalidArgument, errs.KeyPlanOutbounds,
 			"control: credential material is not a credential document: %v", err)
 	}
+	// "null", "{}", and documents of only unknown keys all unmarshal
+	// cleanly into a map applyCredential would drop field by field: each
+	// yields the empty credential SORA-M8 rejects. credentialDocument
+	// writes only known keys with non-empty values, so a document without
+	// any is foreign or empty and fails closed.
+	known := false
+	for key, value := range out {
+		if _, ok := credentialKeys[key]; ok && value != "" {
+			known = true
+			break
+		}
+	}
+	if !known {
+		return nil, errs.Newf(errs.CodeInvalidArgument, errs.KeyPlanOutbounds,
+			"control: credential material holds no credential field")
+	}
 	return out, nil
+}
+
+// credentialKeys lists every field credentialDocument may store. Only
+// these fields survive applyCredential; anything else is dropped.
+var credentialKeys = map[string]struct{}{
+	"uuid": {}, "password": {}, "method": {}, "user": {}, "flow": {},
+	"public_key": {}, "short_id": {}, "server_name": {}, "fingerprint": {},
+	"spider_x": {}, "mode": {}, "path": {}, "host_header": {},
+	"service_name": {}, "alpn": {}, "security": {}, "encryption": {},
+	"obfs": {}, "obfs_param": {}, "private_key": {}, "addresses": {},
+	"peers": {}, "insecure": {}, "xray_profile": {}, "amneziawg": {},
 }
 
 // credentialDocument serializes only supported credential fields for storage.
@@ -440,9 +467,12 @@ func applyCredential(outbound *engine.Outbound, values map[string]string) error 
 		outbound.Addresses = strings.Split(addresses, ",")
 	}
 	if peers := values["peers"]; peers != "" {
-		// Invalid peer documents leave no peers; plan validation
-		// identifies the failing outbound.
-		_ = json.Unmarshal([]byte(peers), &outbound.Peers)
+		// A broken peers document fails closed like xray_profile and
+		// amneziawg above: silently dropping peers would leave the
+		// WireGuard outbound without its endpoints.
+		if err := json.Unmarshal([]byte(peers), &outbound.Peers); err != nil {
+			return fmt.Errorf("control: a stored peers document is unreadable: %v", err)
+		}
 	}
 	if packed := values["xray_profile"]; packed != "" {
 		profile, err := unpackProfile(packed)

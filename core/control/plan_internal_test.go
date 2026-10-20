@@ -108,6 +108,9 @@ func TestParseCredentialRejectsForeignMaterial(t *testing.T) {
 	for name, material := range map[string][]byte{
 		"empty":         {},
 		"whitespace":    []byte("  \n "),
+		"null":          []byte("null"),
+		"empty object":  []byte("{}"),
+		"unknown keys":  []byte(`{"evil":"x"}`),
 		"proxy URL":     []byte("vless://11111111-1111-1111-1111-111111111111@example.com:443?security=reality#x"),
 		"truncated":     []byte(`{"uuid": "11111111-`),
 		"not an object": []byte(`["uuid"]`),
@@ -439,6 +442,22 @@ func TestARuleCanNameAProgram(t *testing.T) {
 	}
 	if r := p.Rules[0]; r.Type != engine.RuleProcess || r.Value != "telegram-desktop" {
 		t.Fatalf("rule = %+v", r)
+	}
+}
+
+// TestBrokenPeersFailClosed: a stored peers document that does not parse
+// must fail the credential like the xray_profile and amneziawg blocks do,
+// not silently leave the WireGuard outbound without its endpoints.
+func TestBrokenPeersFailClosed(t *testing.T) {
+	var o engine.Outbound
+	if err := applyCredential(&o, map[string]string{"peers": "not json"}); err == nil {
+		t.Fatal("a broken peers document must fail the credential")
+	}
+	if err := applyCredential(&o, map[string]string{"peers": `[{"PublicKey":"x"}]`}); err != nil {
+		t.Fatalf("a valid peers document must be accepted: %v", err)
+	}
+	if len(o.Peers) != 1 || o.Peers[0].PublicKey != "x" {
+		t.Fatalf("peers = %+v, want the one peer", o.Peers)
 	}
 }
 
