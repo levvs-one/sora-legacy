@@ -336,7 +336,7 @@ func TestRenderRealityForcesAClientFingerprint(t *testing.T) {
 			ID: "srv-1", Name: "Reality 01", Protocol: engine.ProtocolVLESS,
 			Server: "re.example.com", Port: 443, UUID: "11111111-2222-3333-4444-555555555555",
 			TLS: engine.TLS{Enabled: true, ServerName: "www.example.com", Fingerprint: fp,
-				Reality: true, RealityPublicKey: "QUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVo"},
+				Reality: true, RealityPublicKey: "Z84J2IelR9ch3k8VtlVhhs5ycBUlXA7wHBWcBrjqnAw"},
 		}
 		p.Groups = []engine.Group{{Name: "sel", Type: engine.GroupSelect, Outbounds: []string{"srv-1"}}}
 		p.Rules = []engine.Rule{{Type: engine.RuleMatchAll, Target: "srv-1"}}
