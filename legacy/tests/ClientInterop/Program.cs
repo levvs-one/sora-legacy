@@ -23,6 +23,8 @@ internal static class Program
         try
         {
             if (args.Length != 1) throw new ArgumentException("Expected the screenshot directory.");
+            // Pure-logic pin tests (PinTests.cs): no GUI, no service.
+            if (args[0] == "--logic") return PinTests.Run();
             if (new WindowsPrincipal(WindowsIdentity.GetCurrent()).IsInRole(WindowsBuiltInRole.Administrator))
                 throw new Exception("The GUI check must run without administrator rights.");
             Directory.CreateDirectory(args[0]);
