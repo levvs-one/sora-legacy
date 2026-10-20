@@ -595,7 +595,11 @@ namespace v2rayN
 
                 string value = RegReadValue(autoRunRegPath, autoRunName, "");
                 string exePath = GetExePath();
-                if (value?.Equals(exePath) == true || value?.Equals($"\"{exePath}\"") == true)
+                // SetAutoRun writes "\"{exe}\" --silent"; the check must accept
+                // exactly what is written, or the option reads back as off
+                // while autostart is in fact registered.
+                if (value?.Equals(exePath) == true || value?.Equals($"\"{exePath}\"") == true
+                    || value?.Equals($"\"{exePath}\" --silent") == true)
                 {
                     return true;
                 }
