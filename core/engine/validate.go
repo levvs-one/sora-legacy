@@ -60,6 +60,18 @@ func (o Outbound) Identifiers() []string {
 	if o.TLS.ServerName != "" {
 		out = append(out, o.TLS.ServerName)
 	}
+	// REALITY parameters are public but identify the server (sora
+	// SORA-L9, ported by S5 seams): they join the redaction set so a
+	// server's key, shortId and spider path never reach a log verbatim.
+	if o.TLS.RealityPublicKey != "" {
+		out = append(out, o.TLS.RealityPublicKey)
+	}
+	if o.TLS.RealityShortID != "" {
+		out = append(out, o.TLS.RealityShortID)
+	}
+	if o.TLS.SpiderX != "" {
+		out = append(out, o.TLS.SpiderX)
+	}
 	out = append(out, o.Name)
 	return out
 }
@@ -89,6 +101,16 @@ func (o Outbound) Warnings() []string {
 	if o.Transport.Type == "ws" && !o.TLS.Enabled {
 		out = append(out, "websocket-without-tls")
 	}
+	if o.Transport.Type == "xhttp" {
+		// XHTTP is under active development upstream: the client and
+		// server cores must run matching versions, or the stream fails
+		// with "strange glitches". The core cannot probe the server's
+		// version, so every XHTTP outbound carries the reminder
+		// (mirrors sora's Warnings).
+		out = append(out, "xhttp-version-sync")
+	}
+	// REALITY hardening (T002): vision/TLS-in-TLS and dest-shape warnings.
+	out = append(out, o.RealityWarnings()...)
 	return out
 }
 
@@ -105,6 +127,11 @@ func (o Outbound) Validate() error {
 	}
 	if o.Protocol == "" {
 		errs = append(errs, fmt.Errorf("outbound %s: empty protocol", o.ID))
+	} else if !validProtocols[o.Protocol] {
+		errs = append(errs, fmt.Errorf("outbound %s: unknown protocol %q", o.ID, o.Protocol))
+	}
+	if !validTransports[o.Transport.Type] {
+		errs = append(errs, fmt.Errorf("outbound %s: unknown transport %q", o.ID, o.Transport.Type))
 	}
 	serverless := o.Protocol == ProtocolDirect || o.Protocol == ProtocolBypass
 	if !serverless && o.Port == 0 {
@@ -158,7 +185,72 @@ func (o Outbound) Validate() error {
 			errs = append(errs, err)
 		}
 	}
+	// REALITY hardening (T002, ported from sora by S5 seams): malformed
+	// keys or shortIds fail here, not at the engine.
+	if err := o.ValidateReality(); err != nil {
+		errs = append(errs, err)
+	}
+	errs = append(errs, validateXHTTP(o)...)
 	return errors.Join(errs...)
+}
+
+// validProtocols whitelists the protocols a plan may hold, so an
+// unknown protocol fails validation with a clear error instead of
+// surfacing late at engine apply (sora SORA-L16, ported by S5 seams).
+// The set is exactly sora's: every Protocol constant of this package.
+var validProtocols = map[Protocol]bool{
+	ProtocolVLESS: true, ProtocolVMess: true, ProtocolTrojan: true,
+	ProtocolShadowsocks: true, ProtocolHysteria2: true, ProtocolTUIC: true,
+	ProtocolWireGuard: true, ProtocolSOCKS5: true, ProtocolHTTP: true,
+	ProtocolAnyTLS: true, ProtocolBypass: true, ProtocolXrayProfile: true,
+	ProtocolDirect: true,
+}
+
+// validTransports whitelists the stream transports a plan may hold.
+// "h2" is accepted at plan level for sing-box; engines that dropped it
+// (Xray) reject it when rendering. Same set as sora.
+var validTransports = map[string]bool{
+	"": true, "tcp": true, "ws": true, "grpc": true,
+	"h2": true, "httpupgrade": true, "xhttp": true,
+}
+
+// validXHTTPModes whitelists the XHTTP stream modes every engine
+// implements. Same set as sora.
+var validXHTTPModes = map[string]bool{
+	"": true, "auto": true, "packet-up": true, "stream-up": true, "stream-one": true,
+}
+
+// validateXHTTP checks the XHTTP-only transport options that legacy's
+// Transport can represent (mode, vision flow, ALPN h3 gating),
+// mirroring sora's validateXHTTP. Sora's downloadSettings/xmux/
+// xPaddingBytes checks have no legacy counterpart: legacy's Transport
+// has no such fields, so there is nothing to misapply — the fields
+// themselves are the remaining structural gap (see S5 report).
+func validateXHTTP(o Outbound) []error {
+	t := o.Transport
+	if t.Type != "xhttp" {
+		return nil
+	}
+	var errs []error
+	bad := func(format string, args ...any) {
+		args = append([]any{o.ID}, args...)
+		errs = append(errs, fmt.Errorf("outbound %s: xhttp "+format, args...))
+	}
+	if !validXHTTPModes[t.Mode] {
+		bad("mode %q is not one of auto, packet-up, stream-up, stream-one", t.Mode)
+	}
+	if strings.HasPrefix(o.Flow, "xtls-rprx-vision") && !o.HasVLESSEncryption() {
+		// XTLS is available only under TCP+TLS/REALITY — or under
+		// VLESS Encryption, which carries the flow on any transport.
+		// Without Encryption, vision on XHTTP cannot work.
+		bad("flow %q cannot be combined with the xhttp transport (Vision needs TCP or VLESS Encryption)", o.Flow)
+	}
+	if slices.Contains(o.TLS.ALPN, "h3") && !o.TLS.Enabled && !o.TLS.Reality {
+		// Xray dials QUIC for XHTTP only when ALPN is exactly ["h3"]
+		// on a TLS stream; without TLS the option does nothing.
+		bad("ALPN h3 needs TLS (or REALITY) on the xhttp transport")
+	}
+	return errs
 }
 
 // validatePeerEndpoint checks the host:port of a WireGuard peer. Renderers

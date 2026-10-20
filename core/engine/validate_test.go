@@ -117,3 +117,67 @@ func TestValidateTunMTUAcceptsTheRendererDefault(t *testing.T) {
 		}
 	}
 }
+
+// TestValidateRealityParity pins the REALITY/XHTTP/whitelist vectors the
+// S5 seams probe ran against both repos: sora rejected every malformed
+// case below, legacy accepted all of them before the reality.go port.
+// The vector set is shared with sora (its reality_test.go and
+// validate_xhttp_test.go carry the superset, including the XHTTP
+// tuning fields legacy's Transport does not have).
+func TestValidateRealityParity(t *testing.T) {
+	const goodKey = "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8" // 32-byte base64url
+	reality := func(pbk, sid string) Outbound {
+		o := Outbound{ID: "r1", Protocol: ProtocolVLESS, Server: "r.example.com", Port: 443}
+		o.TLS.Enabled = true
+		o.TLS.Reality = true
+		o.TLS.RealityPublicKey = pbk
+		o.TLS.RealityShortID = sid
+		o.TLS.ServerName = "cdn.example.com"
+		o.Transport.Type = "tcp"
+		return o
+	}
+	xhttp := func(mut func(*Outbound)) Outbound {
+		o := Outbound{ID: "x1", Protocol: ProtocolVLESS, Server: "x.example.com", Port: 443}
+		o.Transport.Type = "xhttp"
+		if mut != nil {
+			mut(&o)
+		}
+		return o
+	}
+	cases := []struct {
+		name    string
+		out     Outbound
+		wantErr bool
+	}{
+		{"reality good", reality(goodKey, "ab12"), false},
+		{"reality empty pbk", reality("", "ab12"), true},
+		{"reality short pbk", reality("AAAA", "ab12"), true},
+		{"reality nonhex sid", reality(goodKey, "zz11"), true},
+		{"reality long sid", reality(goodKey, "aabbccddeeff00112233"), true},
+		{"xhttp minimal", xhttp(nil), false},
+		{"xhttp bad mode", xhttp(func(o *Outbound) { o.Transport.Mode = "stream-sideways" }), true},
+		{"xhttp packet-up mode", xhttp(func(o *Outbound) { o.Transport.Mode = "packet-up" }), false},
+		{"xhttp vision no enc", xhttp(func(o *Outbound) { o.Flow = "xtls-rprx-vision" }), true},
+		{"xhttp vision with enc", xhttp(func(o *Outbound) {
+			o.Flow = "xtls-rprx-vision"
+			o.Encryption = "mlkem768x25519plus.native.0rtt.AAAA"
+		}), false},
+		{"unknown protocol", Outbound{ID: "u1", Protocol: Protocol("bogusproto"), Server: "u.example.com", Port: 443}, true},
+		{"unknown transport", func() Outbound {
+			o := Outbound{ID: "u2", Protocol: ProtocolVLESS, Server: "u.example.com", Port: 443}
+			o.Transport.Type = "bogustransport"
+			return o
+		}(), true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := tc.out.Validate()
+			if tc.wantErr && err == nil {
+				t.Fatalf("Validate = nil, want error")
+			}
+			if !tc.wantErr && err != nil {
+				t.Fatalf("Validate = %v, want nil", err)
+			}
+		})
+	}
+}
