@@ -36,7 +36,9 @@ namespace v2rayN.Handler
         /// </summary>
         public event Action<int> CoreExited;
         private int processId = 0;
-        private Process _process;
+        // _process читается и пишется из UI-потока и из threadpool-потока
+        // Exited — volatile гарантирует видимость между потоками.
+        private volatile Process _process;
 
         public bool IsRunning => _process != null && !_process.HasExited;
 
@@ -431,6 +433,9 @@ namespace v2rayN.Handler
                             exitCode = -1;
                         }
                         OnCoreExited(exitCode);
+                        // Ссылку отцепили — процесс больше никому не нужен;
+                        // штатная остановка его уже не освободит.
+                        completed.Dispose();
                     }
                 };
                 p.Start();
@@ -446,8 +451,22 @@ namespace v2rayN.Handler
                     p.WaitForExit();
                     string error;
                     lock (startupErrorSync) error = startupErrors.ToString();
+                    int code;
+                    try
+                    {
+                        code = p.ExitCode;
+                    }
+                    catch (Exception ex)
+                    {
+                        Utils.SaveLog(ex.Message, ex);
+                        code = -1;
+                    }
+                    // Стартовый фейл: мёртвый процесс освобождаем здесь;
+                    // Exited-обработчик может Dispose'ить его параллельно —
+                    // Dispose идемпотентен.
+                    p.Dispose();
                     throw new Exception(string.IsNullOrWhiteSpace(error)
-                        ? $"Ядро завершилось сразу после запуска (код {p.ExitCode}). Проверьте вкладку «Ядро»."
+                        ? $"Ядро завершилось сразу после запуска (код {code}). Проверьте вкладку «Ядро»."
                         : error.Trim());
                 }
 
