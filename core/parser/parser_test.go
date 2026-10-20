@@ -295,3 +295,62 @@ func TestParseJSONAndYAMLKeepDistinctServers(t *testing.T) {
 		t.Fatalf("identical profiles: servers = %d, report = %+v, want 1 kept and 1 skipped duplicate", len(r.Servers), r.Report)
 	}
 }
+
+// TestParsePasswordOnlyCredentials mirrors sora's test of the same name
+// (S5 seams): trojan/hysteria2 share links carry the credential as the
+// userinfo username; it must land in Password, not be parked in UUID.
+func TestParsePasswordOnlyCredentials(t *testing.T) {
+	tests := []struct{ name, input, protocol string }{
+		{"trojan", "trojan://s3cret@example.com:443?sni=example.com#T", "trojan"},
+		{"hysteria2", "hysteria2://s3cret@example.com:443?sni=example.com#H", "hysteria2"},
+		{"hy2 alias", "hy2://s3cret@example.com:443#H", "hysteria2"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r, err := (LinkParser{}).Parse([]byte(tt.input))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(r.Servers) != 1 {
+				t.Fatalf("servers = %d", len(r.Servers))
+			}
+			o := r.Servers[0]
+			if o.Protocol != tt.protocol || o.Password != "s3cret" {
+				t.Fatalf("protocol/password = %q %q", o.Protocol, o.Password)
+			}
+			if o.UUID != "" {
+				t.Fatalf("the password must not be parked in UUID, got %q", o.UUID)
+			}
+		})
+	}
+	// The UUID protocols keep their shape: vless UUID set, no password.
+	r, err := (LinkParser{}).Parse([]byte("vless://123e4567-e89b-12d3-a456-426614174000@example.com:443#V"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(r.Servers) != 1 || r.Servers[0].UUID == "" || r.Servers[0].Password != "" {
+		t.Fatalf("vless shape = %+v", r.Servers)
+	}
+}
+
+// TestParseSIP008Document pins the SIP008 promise (docs list SIP008 as a
+// supported subscription format): entries carry no "type" field — the
+// format itself means Shadowsocks — and are named by "remarks".
+func TestParseSIP008Document(t *testing.T) {
+	payload := `{"version":2,"servers":[{"id":"1","remarks":"SIP008 NL","server":"sip.example.com","server_port":8388,"password":"SipPass123","method":"aes-256-gcm","plugin":"obfs-local","plugin_opts":"obfs=tls"}]}`
+	r, err := (LinkParser{}).Parse([]byte(payload))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Format != FormatSIP008 {
+		t.Fatalf("format = %s, want %s", r.Format, FormatSIP008)
+	}
+	if len(r.Servers) != 1 {
+		t.Fatalf("servers = %d, report = %+v, want 1", len(r.Servers), r.Report)
+	}
+	o := r.Servers[0]
+	if o.Protocol != "shadowsocks" || o.Host != "sip.example.com" || o.Port != 8388 ||
+		o.Password != "SipPass123" || o.Cipher != "aes-256-gcm" || o.DisplayName != "SIP008 NL" {
+		t.Fatalf("spec = %+v", o)
+	}
+}

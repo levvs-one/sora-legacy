@@ -446,6 +446,21 @@ func parseLink(raw string) (OutboundSpec, error) {
 	case "tuic":
 		o.UUID = o.User
 		o.Security = "tls"
+	case "trojan", "hysteria2", "hy2":
+		// Password-only protocols: the credential is the userinfo
+		// username (trojan://<password>@host, hysteria2://<password>@host —
+		// the canonical share forms). The generic branch parks the
+		// username in UUID and leaves Password empty, so every such
+		// link imported without its credential and engines rejected
+		// the rendered plan ("unset fields: password") or failed
+		// authentication. Mirrors sora's parser (integration fix
+		// 1b094621, WAVE-INTEGRATION E2E); pinned by
+		// TestParsePasswordOnlyCredentials in both repos.
+		if o.Password == "" {
+			o.Password = o.User
+		}
+		o.Transport = getq(q, "type", "transport")
+		o.Security = getq(q, "security")
 	default:
 		o.UUID = o.User
 		o.Transport = getq(q, "type", "transport")
@@ -605,6 +620,10 @@ func mapJSONSpec(m map[string]any, fallback string) (OutboundSpec, error) {
 	}
 	o.Flow = stringValue(m["flow"])
 	o.DisplayName = stringValue(m["tag"])
+	if o.DisplayName == "" {
+		// SIP008 names its entries "remarks", not "tag".
+		o.DisplayName = stringValue(m["remarks"])
+	}
 	o.Security = stringValue(m["security"])
 	for k, v := range m {
 		if b, err := json.Marshal(v); err == nil {
@@ -711,7 +730,16 @@ func (p LinkParser) parseJSON(b []byte, f Format) (ImportResult, error) {
 			r.Report.Imported++
 			continue
 		}
-		o, e := mapJSONSpec(m, "")
+		// SIP008 entries carry no "type": the format is Shadowsocks
+		// by definition, so the protocol comes from the format, not
+		// the entry. Without this fallback every real SIP008
+		// document imported zero servers (the entry failed
+		// validation on its empty protocol).
+		fallback := ""
+		if f == FormatSIP008 {
+			fallback = "shadowsocks"
+		}
+		o, e := mapJSONSpec(m, fallback)
 		if e != nil {
 			r.Report.Invalid++
 			continue
