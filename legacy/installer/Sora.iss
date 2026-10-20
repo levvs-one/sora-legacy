@@ -69,6 +69,18 @@ Name: "{group}\Sora"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"
 Name: "{autodesktop}\Sora"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; Tasks: desktopicon
 Name: "{userstartup}\Sora"; Filename: "{app}\{#MyAppExeName}"; Parameters: "--silent"; WorkingDir: "{app}"; Tasks: autorun
 
+[Registry]
+; sora:// opens the subscription import in the client: the shell passes
+; the whole link as "%1" and the client imports what it carries
+; (sora://add/…). The registration names the shipped executable, whose
+; command-line contract (Program.cs of the client behind that name)
+; handles the argument; uninsdeletekey removes the whole protocol key
+; at uninstall.
+Root: HKA; Subkey: "Software\Classes\sora"; ValueType: string; ValueData: "URL:Sora"; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Classes\sora"; ValueType: string; ValueName: "URL Protocol"; ValueData: ""
+Root: HKA; Subkey: "Software\Classes\sora\DefaultIcon"; ValueType: string; ValueData: """{app}\{#MyAppExeName}"",0"
+Root: HKA; Subkey: "Software\Classes\sora\shell\open\command"; ValueType: string; ValueData: """{app}\{#MyAppExeName}"" ""%1"""
+
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "Запустить Sora"; WorkingDir: "{app}"; Flags: nowait postinstall skipifsilent; Check: not WizardNoIcons
 
