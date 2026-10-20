@@ -297,6 +297,13 @@ func applyTLS(px *proxy, o engine.Outbound) error {
 	if len(o.TLS.ALPN) > 0 {
 		px.ALPN = o.TLS.ALPN
 	}
+	if o.TLS.ECH.Enabled {
+		cfg, err := mihomoECHConfig(o.TLS.ECH.Config)
+		if err != nil {
+			return err
+		}
+		px.ECH = &echOpts{Enable: true, Config: cfg, QueryServerName: o.TLS.ECH.QueryServerName}
+	}
 	if o.TLS.Insecure {
 		skip := true
 		px.SkipCertVerify = &skip
@@ -309,10 +316,46 @@ func applyTLS(px *proxy, o engine.Outbound) error {
 		// like the sing-box and Xray renderers do.
 		px.Fingerprint = orDefault(o.TLS.Fingerprint, "chrome")
 		px.Reality = &reality{PublicKey: o.TLS.RealityPublicKey, ShortID: o.TLS.RealityShortID}
+		// PASS3 deep S2 in sora: the plan's REALITY key-share knob,
+		// third leg of PASS2 S3. hybrid -> support-x25519mlkem768:
+		// true, classical -> false explicitly; unset leaves the key
+		// out. The unset default is MEASURED in the reference, not
+		// just undocumented: a wire capture against the pinned
+		// 1.19.32 binary shows the default ClientHello carrying NO
+		// X25519MLKEM768 group (a ~590-byte hello vs ~1780 with the
+		// hybrid), so "" honestly means "mihomo's default, which
+		// offers no hybrid" (CENSOR-FP; ported SP5-render from sora
+		// snapshot 63faf1d3480d5429b6bcec3483c19c8e03defb85).
+		switch o.TLS.KeyShare {
+		case "hybrid":
+			v := true
+			px.Reality.SupportMLKEM768 = &v
+		case "classical":
+			v := false
+			px.Reality.SupportMLKEM768 = &v
+		}
 	} else if o.TLS.Fingerprint != "" {
 		px.Fingerprint = o.TLS.Fingerprint
 	}
 	return nil
+}
+
+// mihomoECHConfig converts the plan's pinned ECHConfigList to the
+// ech-opts.config spelling: one base64 string. The conversion itself
+// is the shared engine helper (echconfig.go): strip any armor, verify
+// the body is one base64 ECHConfigList, re-encode canonically. More
+// than one PEM block cannot be merged into mihomo's single config
+// value — each block is a complete ECHConfigList — so that shape
+// fails closed here with the mihomo context attached.
+func mihomoECHConfig(lines []string) (string, error) {
+	if len(lines) == 0 {
+		return "", nil
+	}
+	out, err := engine.ECHConfigListBase64(lines)
+	if err != nil {
+		return "", fmt.Errorf("mihomo: %w", err)
+	}
+	return out, nil
 }
 
 // ssPluginOpts translates a SIP002 plugin option string ("k=v;k;flag")

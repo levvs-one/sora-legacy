@@ -117,7 +117,13 @@ type proxy struct {
 	SkipCertVerify *bool    `yaml:"skip-cert-verify,omitempty"`
 	Fingerprint    string   `yaml:"client-fingerprint,omitempty"`
 	ALPN           []string `yaml:"alpn,omitempty"`
-	Reality        *reality `yaml:"reality-opts,omitempty"`
+	// ECH carries Encrypted Client Hello as ech-opts: the enable
+	// toggle, the pinned config (one base64 string) and the DNS query
+	// name override. The legacy flat `ech: true` spelling dropped the
+	// pinned config and the query name (PASS3 deep S4 in sora;
+	// ported SP5-render).
+	ECH     *echOpts `yaml:"ech-opts,omitempty"`
+	Reality *reality `yaml:"reality-opts,omitempty"`
 
 	PrivateKey string          `yaml:"private-key,omitempty"`
 	IP         string          `yaml:"ip,omitempty"`
@@ -206,6 +212,20 @@ type smux struct {
 type reality struct {
 	PublicKey string `yaml:"public-key,omitempty"`
 	ShortID   string `yaml:"short-id,omitempty"`
+	// SupportMLKEM768 is reality-opts.support-x25519mlkem768 of the
+	// pinned docs. A pointer, so an explicit false (plan KeyShare
+	// "classical") renders as false instead of vanishing, and nil
+	// (KeyShare unset) omits the key entirely.
+	SupportMLKEM768 *bool `yaml:"support-x25519mlkem768,omitempty"`
+}
+
+// echOpts is mihomo's ECH block (ech-opts in the pinned docs):
+// enable, the pinned ECHConfigList as one base64 string (empty means
+// "resolve via DNS"), and the name to use for that DNS resolution.
+type echOpts struct {
+	Enable          bool   `yaml:"enable"`
+	Config          string `yaml:"config,omitempty"`
+	QueryServerName string `yaml:"query-server-name,omitempty"`
 }
 
 // proxyGroup models a selectable group. Interval uses seconds and Timeout uses
