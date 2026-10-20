@@ -10,12 +10,12 @@ import (
 // is the legacy pre-AEAD protocol and must be refused as unsupported at
 // import, never silently upgraded to AEAD. Ported from sora's
 // TestCensorP2VMessAlterIDLegacyRefused, adapted to the legacy parser
-// shape: legacy has no mapVMessJSON specialization, so AEAD acceptance
-// is pinned on the URL form and on the sing-box-shaped JSON documents
+// shape: AEAD acceptance here is pinned on the URL form and on the
+// sing-box-shaped JSON documents
 // mapJSONSpec imports, and the classic v2rayN documents of sora's test
-// are pinned at the mapJSONSpec level itself (in legacy's parseVMess
-// the base64 blob never reaches that mapper — a separate, pre-existing
-// gap outside G2).
+// are pinned at the mapJSONSpec level itself. The classic-link path
+// itself (vmess://<base64 JSON> through Parse) reaches mapVMessJSON
+// since the G4 port and is pinned end-to-end in vmess_classic_test.go.
 
 func TestVMessAlterIDLegacyRefused(t *testing.T) {
 	for _, doc := range []string{
