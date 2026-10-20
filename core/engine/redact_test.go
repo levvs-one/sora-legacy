@@ -93,3 +93,24 @@ func TestRedactorKeepsHostsAndBenignTextReadable(t *testing.T) {
 		t.Errorf("credentials leaked: %q", out)
 	}
 }
+
+// TestRedactorQuotedPhrasesMaskedWhole pins the separator fix shared with
+// sora: the key/value separator must not consume the opening quote of a
+// quoted value, or the value alternation falls through to a bare token
+// and the phrase tail leaks word by word (token: "a b" used to mask
+// only "a).
+func TestRedactorQuotedPhrasesMaskedWhole(t *testing.T) {
+	for in, leaks := range map[string][]string{
+		`token: "a b"`:                      {"a b", `b"`},
+		`password: "correct horse battery"`: {"correct", "horse", "battery"},
+		`"token": "abc def"`:                {"abc", "def"},
+		`user = "bob jones"`:                {"bob", "jones"},
+	} {
+		out := maskPatterns(in)
+		for _, leak := range leaks {
+			if strings.Contains(out, leak) {
+				t.Errorf("secret leaked:\n in: %q\nout: %q\nleak: %q", in, out, leak)
+			}
+		}
+	}
+}
