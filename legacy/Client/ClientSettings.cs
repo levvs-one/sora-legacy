@@ -19,6 +19,12 @@ internal sealed class ClientSettings : ApplicationSettingsBase
     [UserScopedSetting, DefaultSettingValue("False")]
     public bool KillSwitch { get => (bool)this[nameof(KillSwitch)]; set => this[nameof(KillSwitch)] = value; }
 
+    // The in-app "launch at sign-in" option (ARB key launchAtLogin).
+    // Program reconciles it with the registry Run value AutoRun owns at
+    // startup; the value itself is the contract the uninstaller scans.
+    [UserScopedSetting, DefaultSettingValue("False")]
+    public bool AutoRun { get => (bool)this[nameof(AutoRun)]; set => this[nameof(AutoRun)] = value; }
+
     [UserScopedSetting, DefaultSettingValue("gvisor")]
     public string XrayStack { get => (string)this[nameof(XrayStack)]; set => this[nameof(XrayStack)] = value; }
 
