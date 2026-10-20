@@ -83,7 +83,7 @@ var credentialKeys = map[string]struct{}{
 	"uuid": {}, "password": {}, "method": {}, "user": {}, "flow": {},
 	"public_key": {}, "short_id": {}, "server_name": {}, "fingerprint": {},
 	"spider_x": {}, "mode": {}, "path": {}, "host_header": {},
-	"service_name": {}, "alpn": {}, "security": {}, "encryption": {},
+	"service_name": {}, "headers": {}, "alpn": {}, "security": {}, "encryption": {},
 	"obfs": {}, "obfs_param": {}, "private_key": {}, "addresses": {},
 	"peers": {}, "insecure": {}, "xray_profile": {}, "amneziawg": {},
 	"ss_plugin": {}, "ss_plugin_opts": {},
@@ -91,6 +91,17 @@ var credentialKeys = map[string]struct{}{
 
 // credentialDocument serializes only supported credential fields for storage.
 func credentialDocument(spec parser.OutboundSpec) ([]byte, error) {
+	// sing-box and Clash imports carry REALITY/TLS/transport settings
+	// only as raw blobs in Options (S5-SP6): resolve them onto the typed
+	// fields first, so the document below stores the same values a
+	// share link would have produced. A blob that claims REALITY
+	// without its public key, or that does not parse, fails here
+	// instead of storing a silently half-configured credential.
+	resolved, headers, err := resolveImportedSpec(spec)
+	if err != nil {
+		return nil, err
+	}
+	spec = resolved
 	values := map[string]string{
 		"uuid":         spec.UUID,
 		"password":     spec.Password,
@@ -124,6 +135,16 @@ func credentialDocument(spec parser.OutboundSpec) ([]byte, error) {
 	// parser's canonical ss_plugin keys reach the vault.
 	values["ss_plugin"] = spec.Options["ss_plugin"]
 	values["ss_plugin_opts"] = spec.Options["ss_plugin_opts"]
+	// Transport headers from a sing-box transport blob or a Clash
+	// *-opts blob (S5-SP6) have no flat spec field: they travel as one
+	// JSON document, restored by applyCredential like the peers block.
+	if len(headers) > 0 {
+		raw, err := json.Marshal(headers)
+		if err != nil {
+			return nil, errs.Wrap(err, errs.CodeInternal, errs.KeySecretStoreUnavailable)
+		}
+		values["headers"] = string(raw)
+	}
 	if strings.EqualFold(spec.Protocol, "wireguard") {
 		key, addresses, peers := wireguardMaterial(spec)
 		values["private_key"] = key
@@ -163,6 +184,619 @@ func credentialDocument(spec parser.OutboundSpec) ([]byte, error) {
 		return nil, errs.Wrap(err, errs.CodeInternal, errs.KeySecretStoreUnavailable)
 	}
 	return document, nil
+}
+
+// blobFields holds the typed settings extracted from the raw option
+// blobs of a sing-box or Clash import (S5-SP6). The parser stores every
+// field of those documents JSON-encoded in OutboundSpec.Options and
+// fills only the flat fields (server, uuid, network, flow), so REALITY
+// keys, the TLS server name and the stream-transport path/host used to
+// stop at the credential document: a REALITY server imported from a
+// sing-box or Clash subscription reached the plan with no public key
+// and ran — silently — without REALITY.
+type blobFields struct {
+	security    string // "reality" or "tls", derived from the blobs
+	publicKey   string
+	shortID     string
+	serverName  string
+	fingerprint string
+	insecure    bool
+	transport   string
+	path        string
+	host        string
+	serviceName string
+	mode        string
+	alpn        []string
+	headers     map[string]string
+	// realityClaimed reports that a blob itself turned REALITY on
+	// (a sing-box tls.reality block or a Clash reality-opts block),
+	// as opposed to a bare security=reality label. Only a claimed
+	// REALITY is required to carry its public key at import time;
+	// share links and Xray profiles keep their existing behaviour
+	// and are judged by plan validation instead.
+	realityClaimed bool
+}
+
+// blobError reports a malformed or partial import blob in the style of
+// this package: invalid_argument against the plan's outbounds.
+func blobError(format string, args ...any) error {
+	return errs.Newf(errs.CodeInvalidArgument, errs.KeyPlanOutbounds,
+		"control: "+format, args...)
+}
+
+// resolveImportedSpec fills the typed fields of spec from its option
+// blobs wherever the typed field is still empty, and returns the
+// transport headers the spec type cannot hold. Typed fields always
+// win: the blobs are the fallback for the formats whose parser cannot
+// represent them, never an override of a share link's explicit values.
+func resolveImportedSpec(spec parser.OutboundSpec) (parser.OutboundSpec, map[string]string, error) {
+	f, err := extractBlobFields(spec)
+	if err != nil {
+		return parser.OutboundSpec{}, nil, err
+	}
+	out := spec
+	if out.PublicKey == "" {
+		out.PublicKey = f.publicKey
+	}
+	if out.ShortID == "" {
+		out.ShortID = f.shortID
+	}
+	if out.ServerName == "" {
+		out.ServerName = f.serverName
+	}
+	if out.Fingerprint == "" {
+		out.Fingerprint = f.fingerprint
+	}
+	if f.insecure {
+		out.AllowInsecure = true
+	}
+	if out.Path == "" {
+		out.Path = f.path
+	}
+	if out.HostHeader == "" {
+		out.HostHeader = f.host
+	}
+	if out.ServiceName == "" {
+		out.ServiceName = f.serviceName
+	}
+	if out.Mode == "" {
+		out.Mode = f.mode
+	}
+	if f.transport != "" {
+		// The blob is the same source the parser derived Transport
+		// from, in its structured form: a sing-box transport object
+		// knows its type where the flat field only saw the parser's
+		// "tcp" default.
+		out.Transport = f.transport
+	}
+	switch {
+	case f.security == "reality":
+		out.Security = "reality"
+	case out.Security == "":
+		out.Security = f.security
+	}
+	if len(out.ALPN) == 0 {
+		out.ALPN = f.alpn
+	}
+	if f.realityClaimed && out.PublicKey == "" {
+		return parser.OutboundSpec{}, nil, blobError(
+			"an imported %s outbound claims REALITY but carries no public key", orDefault(out.Protocol, "proxy"))
+	}
+	return out, f.headers, nil
+}
+
+// extractBlobFields reads the sing-box and Clash option blobs of a
+// parsed spec. Values arrive JSON-encoded (the parser marshals every
+// field of those documents into Options); plain scalars, which share
+// links store raw, are accepted as-is. A value that looks like a JSON
+// object but does not parse, or a field of the wrong shape inside a
+// blob this conversion consumes, is an honest error — never a
+// silently dropped setting.
+func extractBlobFields(spec parser.OutboundSpec) (blobFields, error) {
+	var f blobFields
+	// sing-box: "tls" is an object; Clash: "tls" is a plain boolean.
+	if v, ok, err := optionBlob(spec, "tls"); err != nil {
+		return blobFields{}, err
+	} else if ok {
+		if err := f.applyTLSBlob(v); err != nil {
+			return blobFields{}, err
+		}
+	}
+	// Clash spells the TLS name "servername" or "sni"; the flat
+	// JSON/YAML fields land in Options under the same names.
+	for _, key := range []string{"servername", "sni"} {
+		if f.serverName != "" {
+			break
+		}
+		if v, ok, err := optionBlob(spec, key); err != nil {
+			return blobFields{}, err
+		} else if ok {
+			name, err := blobString(v, key)
+			if err != nil {
+				return blobFields{}, err
+			}
+			f.serverName = name
+		}
+	}
+	if v, ok, err := optionBlob(spec, "client-fingerprint"); err != nil {
+		return blobFields{}, err
+	} else if ok && f.fingerprint == "" {
+		fp, err := blobString(v, "client-fingerprint")
+		if err != nil {
+			return blobFields{}, err
+		}
+		f.fingerprint = fp
+	}
+	if v, ok, err := optionBlob(spec, "skip-cert-verify"); err != nil {
+		return blobFields{}, err
+	} else if ok {
+		skip, err := blobBool(v, "skip-cert-verify")
+		if err != nil {
+			return blobFields{}, err
+		}
+		if skip {
+			f.insecure = true
+		}
+	}
+	if v, ok, err := optionBlob(spec, "network"); err != nil {
+		return blobFields{}, err
+	} else if ok {
+		network, err := blobString(v, "network")
+		if err != nil {
+			return blobFields{}, err
+		}
+		if network != "" {
+			f.transport = network
+		}
+	}
+	if v, ok, err := optionBlob(spec, "alpn"); err != nil {
+		return blobFields{}, err
+	} else if ok && len(f.alpn) == 0 {
+		alpn, err := blobStringList(v, "alpn")
+		if err != nil {
+			return blobFields{}, err
+		}
+		f.alpn = alpn
+	}
+	// Clash REALITY: reality-opts {public-key, short-id}.
+	if v, ok, err := optionBlob(spec, "reality-opts"); err != nil {
+		return blobFields{}, err
+	} else if ok {
+		if err := f.applyRealityOpts(v); err != nil {
+			return blobFields{}, err
+		}
+	}
+	// sing-box transport object {type, path, host, headers,
+	// service_name}; a plain string names the transport directly.
+	if v, ok, err := optionBlob(spec, "transport"); err != nil {
+		return blobFields{}, err
+	} else if ok {
+		if err := f.applyTransportBlob(v); err != nil {
+			return blobFields{}, err
+		}
+	}
+	// Clash per-transport option blocks.
+	if v, ok, err := optionBlob(spec, "ws-opts"); err != nil {
+		return blobFields{}, err
+	} else if ok {
+		if err := f.applyWSOpts(v); err != nil {
+			return blobFields{}, err
+		}
+	}
+	if v, ok, err := optionBlob(spec, "grpc-opts"); err != nil {
+		return blobFields{}, err
+	} else if ok {
+		obj, err := blobObject(v, "grpc-opts")
+		if err != nil {
+			return blobFields{}, err
+		}
+		for _, key := range []string{"grpc-service-name", "service-name", "service_name"} {
+			if raw, present := obj[key]; present {
+				name, err := blobString(raw, "grpc-opts."+key)
+				if err != nil {
+					return blobFields{}, err
+				}
+				if name != "" && f.serviceName == "" {
+					f.serviceName = name
+				}
+			}
+		}
+	}
+	if v, ok, err := optionBlob(spec, "xhttp-opts"); err != nil {
+		return blobFields{}, err
+	} else if ok {
+		obj, err := blobObject(v, "xhttp-opts")
+		if err != nil {
+			return blobFields{}, err
+		}
+		if err := f.applyPathHostMode(obj, "xhttp-opts"); err != nil {
+			return blobFields{}, err
+		}
+	}
+	return f, nil
+}
+
+// applyTLSBlob reads a "tls" option: a sing-box object, a Clash
+// boolean, or a plain security label ("tls"/"reality") as the classic
+// VMess JSON spells it.
+func (f *blobFields) applyTLSBlob(v any) error {
+	switch tlsValue := v.(type) {
+	case bool:
+		if tlsValue && f.security == "" {
+			f.security = "tls"
+		}
+		return nil
+	case string:
+		switch strings.ToLower(strings.TrimSpace(tlsValue)) {
+		case "", "none":
+		case "tls", "reality":
+			f.security = strings.ToLower(strings.TrimSpace(tlsValue))
+		default:
+			f.security = tlsValue
+		}
+		return nil
+	case map[string]any:
+		obj := tlsValue
+		if raw, present := obj["server_name"]; present {
+			name, err := blobString(raw, "tls.server_name")
+			if err != nil {
+				return err
+			}
+			f.serverName = name
+		}
+		if raw, present := obj["alpn"]; present && len(f.alpn) == 0 {
+			alpn, err := blobStringList(raw, "tls.alpn")
+			if err != nil {
+				return err
+			}
+			f.alpn = alpn
+		}
+		if raw, present := obj["insecure"]; present {
+			insecure, err := blobBool(raw, "tls.insecure")
+			if err != nil {
+				return err
+			}
+			if insecure {
+				f.insecure = true
+			}
+		}
+		if raw, present := obj["utls"]; present {
+			utlsObj, err := blobObject(raw, "tls.utls")
+			if err != nil {
+				return err
+			}
+			if fpRaw, present := utlsObj["fingerprint"]; present {
+				fp, err := blobString(fpRaw, "tls.utls.fingerprint")
+				if err != nil {
+					return err
+				}
+				f.fingerprint = fp
+			}
+		}
+		if raw, present := obj["reality"]; present {
+			realityObj, err := blobObject(raw, "tls.reality")
+			if err != nil {
+				return err
+			}
+			enabled := true
+			if rawEnabled, present := realityObj["enabled"]; present {
+				enabled, err = blobBool(rawEnabled, "tls.reality.enabled")
+				if err != nil {
+					return err
+				}
+			}
+			if enabled {
+				f.realityClaimed = true
+				f.security = "reality"
+				if rawKey, present := realityObj["public_key"]; present {
+					key, err := blobString(rawKey, "tls.reality.public_key")
+					if err != nil {
+						return err
+					}
+					f.publicKey = key
+				}
+				if rawID, present := realityObj["short_id"]; present {
+					id, err := blobString(rawID, "tls.reality.short_id")
+					if err != nil {
+						return err
+					}
+					f.shortID = id
+				}
+			}
+		}
+		if f.security == "" {
+			if raw, present := obj["enabled"]; present {
+				enabled, err := blobBool(raw, "tls.enabled")
+				if err != nil {
+					return err
+				}
+				if enabled {
+					f.security = "tls"
+				}
+			}
+		}
+		return nil
+	default:
+		return blobError("the tls option of an imported outbound is %T, not an object or a boolean", v)
+	}
+}
+
+// applyRealityOpts reads a Clash reality-opts block. Its presence
+// claims REALITY; resolveImportedSpec refuses the import when no
+// public key survives.
+func (f *blobFields) applyRealityOpts(v any) error {
+	obj, err := blobObject(v, "reality-opts")
+	if err != nil {
+		return err
+	}
+	f.realityClaimed = true
+	f.security = "reality"
+	for _, key := range []string{"public-key", "public_key"} {
+		if raw, present := obj[key]; present {
+			pbk, err := blobString(raw, "reality-opts."+key)
+			if err != nil {
+				return err
+			}
+			if pbk != "" {
+				f.publicKey = pbk
+			}
+		}
+	}
+	for _, key := range []string{"short-id", "short_id"} {
+		if raw, present := obj[key]; present {
+			sid, err := blobString(raw, "reality-opts."+key)
+			if err != nil {
+				return err
+			}
+			if sid != "" {
+				f.shortID = sid
+			}
+		}
+	}
+	return nil
+}
+
+// applyTransportBlob reads a sing-box transport value: an object with
+// type/path/host/headers/service_name, or a plain type name.
+func (f *blobFields) applyTransportBlob(v any) error {
+	if name, ok := v.(string); ok {
+		if name != "" {
+			f.transport = name
+		}
+		return nil
+	}
+	obj, err := blobObject(v, "transport")
+	if err != nil {
+		return err
+	}
+	if raw, present := obj["type"]; present {
+		kind, err := blobString(raw, "transport.type")
+		if err != nil {
+			return err
+		}
+		if kind != "" {
+			f.transport = kind
+		}
+	}
+	if raw, present := obj["service_name"]; present {
+		name, err := blobString(raw, "transport.service_name")
+		if err != nil {
+			return err
+		}
+		if name != "" && f.serviceName == "" {
+			f.serviceName = name
+		}
+	}
+	if raw, present := obj["headers"]; present {
+		headers, err := blobHeaders(raw, "transport.headers")
+		if err != nil {
+			return err
+		}
+		f.mergeHeaders(headers)
+	}
+	return f.applyPathHostMode(obj, "transport")
+}
+
+// applyWSOpts reads a Clash ws-opts block {path, headers}.
+func (f *blobFields) applyWSOpts(v any) error {
+	obj, err := blobObject(v, "ws-opts")
+	if err != nil {
+		return err
+	}
+	if raw, present := obj["headers"]; present {
+		headers, err := blobHeaders(raw, "ws-opts.headers")
+		if err != nil {
+			return err
+		}
+		f.mergeHeaders(headers)
+	}
+	return f.applyPathHostMode(obj, "ws-opts")
+}
+
+// applyPathHostMode fills path, host and mode from a transport-shaped
+// object, wherever the fields are still empty. The Host header of a
+// headers block, merged before this runs, is the host when the object
+// carries no host field of its own.
+func (f *blobFields) applyPathHostMode(obj map[string]any, what string) error {
+	if raw, present := obj["path"]; present {
+		path, err := blobString(raw, what+".path")
+		if err != nil {
+			return err
+		}
+		if path != "" && f.path == "" {
+			f.path = path
+		}
+	}
+	if raw, present := obj["host"]; present {
+		host, err := blobHost(raw, what+".host")
+		if err != nil {
+			return err
+		}
+		if host != "" && f.host == "" {
+			f.host = host
+		}
+	}
+	if raw, present := obj["mode"]; present {
+		mode, err := blobString(raw, what+".mode")
+		if err != nil {
+			return err
+		}
+		if mode != "" && f.mode == "" {
+			f.mode = mode
+		}
+	}
+	if f.host == "" {
+		for key, value := range f.headers {
+			if strings.EqualFold(key, "host") && value != "" {
+				f.host = value
+				break
+			}
+		}
+	}
+	return nil
+}
+
+// mergeHeaders adds headers that are not already present, keeping the
+// extraction order (sing-box transport before Clash *-opts) stable.
+func (f *blobFields) mergeHeaders(headers map[string]string) {
+	if len(headers) == 0 {
+		return
+	}
+	if f.headers == nil {
+		f.headers = make(map[string]string, len(headers))
+	}
+	for key, value := range headers {
+		if _, ok := f.headers[key]; !ok {
+			f.headers[key] = value
+		}
+	}
+}
+
+// optionBlob decodes one Options value. JSON/YAML imports store every
+// field JSON-encoded; share links store plain scalars, which pass
+// through unchanged. A value that opens like a JSON object, array or
+// string but does not parse is a broken blob and fails closed.
+func optionBlob(spec parser.OutboundSpec, key string) (any, bool, error) {
+	raw := strings.TrimSpace(spec.Options[key])
+	if raw == "" {
+		return nil, false, nil
+	}
+	var v any
+	if err := json.Unmarshal([]byte(raw), &v); err == nil {
+		return v, true, nil
+	}
+	if strings.HasPrefix(raw, "{") || strings.HasPrefix(raw, "[") || strings.HasPrefix(raw, "\"") {
+		return nil, false, blobError("the %s option of an imported outbound is not readable JSON", key)
+	}
+	return raw, true, nil
+}
+
+// blobObject requires v to be a JSON object.
+func blobObject(v any, what string) (map[string]any, error) {
+	obj, ok := v.(map[string]any)
+	if !ok {
+		return nil, blobError("the %s option of an imported outbound is %T, not an object", what, v)
+	}
+	return obj, nil
+}
+
+// blobString requires v to be a string (or absent/null, read as empty).
+func blobString(v any, what string) (string, error) {
+	switch value := v.(type) {
+	case nil:
+		return "", nil
+	case string:
+		return value, nil
+	default:
+		return "", blobError("the %s option of an imported outbound is %T, not a string", what, v)
+	}
+}
+
+// blobBool reads a loosely typed boolean: a JSON boolean, a "true"/
+// "false" string, or 0/1.
+func blobBool(v any, what string) (bool, error) {
+	switch value := v.(type) {
+	case bool:
+		return value, nil
+	case string:
+		parsed, err := strconv.ParseBool(strings.TrimSpace(value))
+		if err != nil {
+			return false, blobError("the %s option of an imported outbound is %q, not a boolean", what, value)
+		}
+		return parsed, nil
+	case float64:
+		if value == 0 {
+			return false, nil
+		}
+		if value == 1 {
+			return true, nil
+		}
+	}
+	return false, blobError("the %s option of an imported outbound is %T, not a boolean", what, v)
+}
+
+// blobStringList reads a string or a list of strings (an ALPN list in
+// either spelling).
+func blobStringList(v any, what string) ([]string, error) {
+	switch value := v.(type) {
+	case string:
+		if strings.TrimSpace(value) == "" {
+			return nil, nil
+		}
+		parts := strings.Split(value, ",")
+		out := make([]string, 0, len(parts))
+		for _, part := range parts {
+			if part = strings.TrimSpace(part); part != "" {
+				out = append(out, part)
+			}
+		}
+		return out, nil
+	case []any:
+		out := make([]string, 0, len(value))
+		for _, item := range value {
+			s, err := blobString(item, what)
+			if err != nil {
+				return nil, err
+			}
+			if s != "" {
+				out = append(out, s)
+			}
+		}
+		return out, nil
+	default:
+		return nil, blobError("the %s option of an imported outbound is %T, not a string or a list", what, v)
+	}
+}
+
+// blobHost reads a transport host: one name, or the first entry of a
+// host list (the http transport's spelling).
+func blobHost(v any, what string) (string, error) {
+	if list, ok := v.([]any); ok {
+		if len(list) == 0 {
+			return "", nil
+		}
+		return blobString(list[0], what)
+	}
+	return blobString(v, what)
+}
+
+// blobHeaders reads a headers object into a flat string map. Header
+// values are strings in both dialects; anything else is a shape the
+// engines would misapply, so it fails closed like the other blobs.
+func blobHeaders(v any, what string) (map[string]string, error) {
+	obj, err := blobObject(v, what)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]string, len(obj))
+	for key, raw := range obj {
+		value, err := blobString(raw, what+"."+key)
+		if err != nil {
+			return nil, err
+		}
+		out[key] = value
+	}
+	return out, nil
 }
 
 func kinds(names []string) []engine.Kind {
@@ -474,6 +1108,14 @@ func applyCredential(outbound *engine.Outbound, values map[string]string) error 
 	outbound.Transport.Host = values["host_header"]
 	outbound.Transport.Service = values["service_name"]
 	outbound.Transport.Mode = values["mode"]
+	if raw := values["headers"]; raw != "" {
+		// A broken headers document fails closed like the peers
+		// document below: silently dropping headers would change
+		// the handshake the server expects.
+		if err := json.Unmarshal([]byte(raw), &outbound.Transport.Headers); err != nil {
+			return fmt.Errorf("control: a stored transport headers document is unreadable: %v", err)
+		}
+	}
 	outbound.PrivateKey = values["private_key"]
 	if addresses := values["addresses"]; addresses != "" {
 		outbound.Addresses = strings.Split(addresses, ",")
@@ -760,6 +1402,16 @@ func referenceOf(spec parser.OutboundSpec) (string, error) {
 // outboundToProto converts a parsed server for the client, exposing only a
 // credential reference. The core resolves it when applying the plan.
 func outboundToProto(spec parser.OutboundSpec, reference string) *corev1.OutboundSpec {
+	// The wire spec carries Transport and Security, which a sing-box
+	// or Clash import leaves in its option blobs (S5-SP6): resolve
+	// them so the client — and planFromProto after it — see the real
+	// transport and REALITY, not the parser's defaults. Extraction
+	// errors are reported by credentialDocument, which parsePayload
+	// runs before this conversion; the fallback here only keeps a
+	// direct caller's display spec at the typed fields.
+	if resolved, _, err := resolveImportedSpec(spec); err == nil {
+		spec = resolved
+	}
 	return &corev1.OutboundSpec{
 		Id:              spec.StableKey(),
 		DisplayName:     spec.DisplayName,

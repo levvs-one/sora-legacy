@@ -966,6 +966,16 @@ func (s *Server) parsePayload(payload []byte, refFor func(parser.OutboundSpec) (
 	}
 	out := make([]importedServer, 0, len(result.Servers))
 	for _, server := range result.Servers {
+		// Resolve sing-box/Clash option blobs onto the typed fields
+		// before anything else reads the spec (S5-SP6): a blob that
+		// claims REALITY without its public key, or that does not
+		// parse, fails the whole import here instead of producing a
+		// silently half-configured server.
+		resolved, _, err := resolveImportedSpec(server)
+		if err != nil {
+			return nil, err
+		}
+		server = resolved
 		reference, err := refFor(server)
 		if err != nil {
 			return nil, err
