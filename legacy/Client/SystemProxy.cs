@@ -18,21 +18,30 @@ namespace Sora.Legacy.Client;
 //
 // The replay is native instead of shelling out to the sysproxy.exe the
 // old client bundles: the recorded flags are the WinINet per-connection
-// flags, mapped onto the HKCU Internet Settings values. One honest
-// degradation: the PROXY_TYPE_AUTO_DETECT bit lives only in the binary
-// DefaultConnectionSettings blob, which this restore deliberately does
-// not rewrite; the named values (proxy on/off, server, bypass list, PAC
-// URL) — everything Sora itself changes — are restored exactly.
+// flags, mapped onto the HKCU Internet Settings values, and the named
+// values (proxy on/off, server, bypass list, PAC URL) are restored
+// exactly — including for the numeric flag form the recorder actually
+// writes ("5" = DIRECT|AUTO_PROXY_URL restores the PAC URL).
+// Two honest degradations:
+//  - the PROXY_TYPE_AUTO_DETECT bit is not restored: it lives only in
+//    the binary DefaultConnectionSettings blob, which this restore
+//    deliberately does not rewrite;
+//  - the replay covers only the default (LAN) connection values under
+//    HKCU Internet Settings. sysproxy.exe also applies settings to RAS
+//    connections; per-connection RAS entries are not replayed here.
 internal static class SystemProxy
 {
     private const string InternetSettingsPath = @"Software\Microsoft\Windows\CurrentVersion\Internet Settings";
     private const string BackupFileName = "user-wininet.json";
 
-    // WinINet per-connection flags (INTERNET_PER_CONN_FLAGS).
+    // WinINet per-connection flags (INTERNET_PER_CONN_FLAGS). The
+    // values are the ones the reference client declares in
+    // v2rayN/Handler/ProxySetting.cs (PerConnFlags); that enum is the
+    // source of truth — do not re-derive the bits here.
     private const int FlagDirect = 1;
     private const int FlagProxy = 2;
-    private const int FlagAutoDetect = 4;
-    private const int FlagAutoProxyUrl = 8;
+    private const int FlagAutoProxyUrl = 4;
+    private const int FlagAutoDetect = 8;
 
     private const int InternetOptionSettingsChanged = 39;
     private const int InternetOptionRefresh = 37;
@@ -78,7 +87,9 @@ internal static class SystemProxy
     // The recorder stores the numeric bitmask ("1" for direct). Accept
     // the PROXY_TYPE_* token form too, so a record written by another
     // build of the shipped client still restores instead of failing.
-    private static int? ParseFlags(string? raw)
+    // Internal, not private, so the ClientInterop pin tests can hold
+    // the numeric vectors (and the flag values above) to the standard.
+    internal static int? ParseFlags(string? raw)
     {
         if (raw == null) return FlagDirect;
         raw = raw.Trim();
