@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.Globalization;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -21,9 +22,12 @@ internal sealed class MainForm : Form
     private static readonly Color Background = Color.FromArgb(246, 246, 248);
     private readonly ClientSettings settings = new();
     private readonly Strings text;
-    private readonly Font body = new("Segoe UI", 13, FontStyle.Regular, GraphicsUnit.Pixel);
-    private readonly Font heading = new("Segoe UI", 22, FontStyle.Bold, GraphicsUnit.Pixel);
-    private readonly Font strong = new("Segoe UI", 15, FontStyle.Bold, GraphicsUnit.Pixel);
+    // The design sizes are pixels at 96 DPI, expressed in points so the
+    // Dpi scaling of the form (and the PerMonitorV2 manifest) grows the
+    // glyphs themselves at 150-200% instead of stretching a bitmap.
+    private readonly Font body = new("Segoe UI", 13f * 72f / 96f, FontStyle.Regular, GraphicsUnit.Point);
+    private readonly Font heading = new("Segoe UI", 22f * 72f / 96f, FontStyle.Bold, GraphicsUnit.Point);
+    private readonly Font strong = new("Segoe UI", 15f * 72f / 96f, FontStyle.Bold, GraphicsUnit.Point);
     private readonly CancellationTokenSource lifetime = new();
     private readonly Dictionary<string, SubscriptionState> subscriptions = new();
     private readonly HashSet<string> collapsed = new(), hiddenDescriptions = new();
@@ -39,6 +43,17 @@ internal sealed class MainForm : Form
     private readonly Panel mainView = new() { Dock = DockStyle.Fill };
     private readonly LogsPage logsPage;
     private readonly ToolTip navigationHints = new();
+    // Tray state is a projection of the same status the form renders
+    // (SessionStatus + connectionPending + the core-loss paths below);
+    // it is never a second source of truth.
+    private enum TrayState { Disconnected, Connecting, Connected, Error }
+    private readonly NotifyIcon tray = new();
+    private readonly ContextMenuStrip trayMenu = new();
+    private readonly ToolStripMenuItem trayOpenItem = new(), trayToggleItem = new(), trayQuitItem = new();
+    private readonly Dictionary<TrayState, Icon> trayIcons = new();
+    private readonly List<IntPtr> trayIconHandles = new();
+    private TrayState? trayState;
+    private bool coreLost;
     private CoreConnection? core;
     private SessionRequests? requests;
     private Task? subscriptionWatch;
@@ -46,6 +61,9 @@ internal sealed class MainForm : Form
     private SessionStatus? status;
     private bool desiredConnected, closing, polling, connectionPending;
     private long revision;
+
+    [DllImport("user32.dll")]
+    private static extern bool DestroyIcon(IntPtr handle);
 
     public MainForm()
     {
@@ -85,7 +103,8 @@ internal sealed class MainForm : Form
         apply = MakeButton("reconnectNow", 340);
         apply.Visible = false;
         apply.Click += async (_, _) => await Run(() => ChooseConnection(true));
-        center.Controls.AddRange(new FormsControl[] { MakeLanguageSelect(), state, orb, modes, apply, add, error, retry });
+        var language = MakeLanguageSelect();
+        center.Controls.AddRange(new FormsControl[] { language, state, orb, modes, apply, add, error, retry });
         center.SizeChanged += (_, _) =>
         {
             var width = center.ClientSize.Width - center.Padding.Horizontal;
@@ -132,6 +151,36 @@ internal sealed class MainForm : Form
         });
         Controls.Add(content);
         Controls.Add(navigation);
+        // Tab order is designed, not the incidental creation order:
+        // navigation first, then the subscription column (add, search,
+        // cards), then the connection column top to bottom. Labels and
+        // panels are not tab stops; the indexes order their children.
+        navigation.TabIndex = 0;
+        content.TabIndex = 1;
+        homeNavigation.TabIndex = 0;
+        logsNavigation.TabIndex = 1;
+        mainView.TabIndex = 0;
+        logsPage.TabIndex = 1;
+        left.TabIndex = 0;
+        center.TabIndex = 1;
+        bar.TabIndex = 0;
+        addAbove.TabIndex = 0;
+        search.TabIndex = 1;
+        cards.TabIndex = 2;
+        language.TabIndex = 0;
+        orb.TabIndex = 1;
+        modes.TabIndex = 2;
+        apply.TabIndex = 3;
+        add.TabIndex = 4;
+        retry.TabIndex = 5;
+        foreach (var kind in Enum.GetValues(typeof(TrayState)).Cast<TrayState>()) trayIcons[kind] = CreateTrayIcon(kind);
+        trayOpenItem.Click += (_, _) => ShowFromTray();
+        trayToggleItem.Click += async (_, _) => await Run(() => ChooseConnection(!desiredConnected));
+        trayQuitItem.Click += (_, _) => Close();
+        trayMenu.Items.AddRange(new ToolStripItem[] { trayOpenItem, trayToggleItem, new ToolStripSeparator(), trayQuitItem });
+        tray.ContextMenuStrip = trayMenu;
+        tray.DoubleClick += (_, _) => ShowFromTray();
+        tray.Visible = true;
         Shown += async (_, _) => await Run(OpenCore);
         poll.Tick += async (_, _) =>
         {
@@ -139,7 +188,7 @@ internal sealed class MainForm : Form
             polling = true;
             try { await ReadStatus(); }
             catch (OperationCanceledException) when (closing) { }
-            catch { error.Text = text["errCore"]; retry.Visible = true; }
+            catch { coreLost = true; error.Text = text["errCore"]; retry.Visible = true; RenderStatus(); }
             finally { polling = false; }
         };
         ApplyText();
@@ -219,6 +268,7 @@ internal sealed class MainForm : Form
         catch { connected.Dispose(); throw; }
         if (closing) { connected.Dispose(); return; }
         core = connected;
+        coreLost = false;
         requests = new SessionRequests(connected);
         subscriptions.Clear();
         foreach (var subscription in listed.Subscriptions) subscriptions[subscription.Settings.Id] = subscription;
@@ -253,8 +303,10 @@ internal sealed class MainForm : Form
         requests = null;
         poll.Stop();
         orb.Enabled = false;
+        coreLost = true;
         error.Text = text["errCore"];
         retry.Visible = true;
+        RenderStatus();
         await logsPage.LoadAsync(null);
         if (worker != null) await worker.StopAsync();
         connected.Dispose();
@@ -269,6 +321,7 @@ internal sealed class MainForm : Form
         var answer = await connected.CallAsync(new GetStatusRequest { ApiVersion = connected.Version }, GetStatusResponse.Parser, timeout.Token);
         if (closing || current != revision || !ReferenceEquals(core, connected)) return;
         Check(answer.Error);
+        coreLost = false;
         status = answer.Status;
         if (!connectionPending)
         {
@@ -278,16 +331,120 @@ internal sealed class MainForm : Form
         RenderStatus();
     }
 
-    private void RenderStatus()
-    {
-        var key = status?.Connection.Value switch
+    private string StateKey() => connectionPending
+        ? desiredConnected ? "stateConnecting" : "stateDisconnecting"
+        : status?.Connection.Value switch
         {
             ConnectionStateValue.Connected => "stateConnected",
             ConnectionStateValue.Connecting => "stateConnecting",
             ConnectionStateValue.Reconnecting => "stateReconnecting",
+            ConnectionStateValue.Failed => "stateFailed",
             _ => "stateOff"
         };
-        state.Text = text[connectionPending ? desiredConnected ? "stateConnecting" : "stateDisconnecting" : key];
+
+    private void RenderStatus()
+    {
+        state.Text = text[StateKey()];
+        UpdateTray();
+    }
+
+    private TrayState CurrentTrayState() => coreLost ? TrayState.Error
+        : connectionPending ? TrayState.Connecting
+        : status?.Connection.Value switch
+        {
+            ConnectionStateValue.Connected => TrayState.Connected,
+            ConnectionStateValue.Connecting or ConnectionStateValue.Reconnecting => TrayState.Connecting,
+            ConnectionStateValue.Failed => TrayState.Error,
+            _ => TrayState.Disconnected
+        };
+
+    private void UpdateTray()
+    {
+        if (trayIcons.Count == 0) return;
+        var next = CurrentTrayState();
+        var label = text[StateKey()];
+        tray.Icon = trayIcons[next];
+        var tip = text["trayTooltip"].Replace("{state}", label);
+        // The pre-XP tooltip field holds 63 characters; longer texts
+        // are cut by the shell itself on newer versions, so cut here
+        // where the cut is at least deterministic.
+        tray.Text = tip.Length > 63 ? tip.Substring(0, 63) : tip;
+        var used = new HashSet<char>();
+        trayOpenItem.Text = Mnemonic.Mark(text["trayOpen"], used, 'O', 'О');
+        trayToggleItem.Text = Mnemonic.Mark(text[desiredConnected ? "trayDisconnect" : "trayConnect"], used, 'C', 'П', 'О');
+        trayQuitItem.Text = Mnemonic.Mark(text["trayQuit"], used, 'Q', 'В');
+        trayToggleItem.Enabled = core != null && !connectionPending;
+        // Balloons only on the transitions a user in tray mode cannot
+        // see on the form: connected, failed, or dropped after being
+        // connected. NotifyIcon balloons exist since Windows 2000 and
+        // are the honest ceiling on the old versions — where the user
+        // or policy disabled them, the shell drops them silently.
+        if (trayState is TrayState previous && previous != next &&
+            (next == TrayState.Connected || next == TrayState.Error ||
+             (next == TrayState.Disconnected && previous == TrayState.Connected)))
+        {
+            try
+            {
+                tray.ShowBalloonTip(3000, "Sora", label, next == TrayState.Error ? ToolTipIcon.Error
+                    : next == TrayState.Connected ? ToolTipIcon.Info : ToolTipIcon.Warning);
+            }
+            catch { /* A hidden icon or a shell refusal must not break status rendering. */ }
+        }
+        trayState = next;
+    }
+
+    // The four states differ in shape as well as colour, so the icon
+    // stays readable for colour-blind users and in grayscale themes:
+    // a check, three dots, a hollow ring with a dash, an exclamation.
+    private Icon CreateTrayIcon(TrayState kind)
+    {
+        var size = Math.Max(16, SystemInformation.SmallIconSize.Width);
+        using var bitmap = new Bitmap(size, size);
+        using (var graphics = Graphics.FromImage(bitmap))
+        {
+            graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+            float Unit(float value) => value * size;
+            if (kind == TrayState.Disconnected)
+            {
+                using var pen = new Pen(Color.FromArgb(140, 140, 148), Math.Max(1.5f, Unit(0.09f)));
+                graphics.DrawEllipse(pen, Unit(0.10f), Unit(0.10f), Unit(0.80f), Unit(0.80f));
+                graphics.DrawLine(pen, Unit(0.30f), Unit(0.50f), Unit(0.70f), Unit(0.50f));
+            }
+            else
+            {
+                var fill = kind == TrayState.Connected ? Color.FromArgb(38, 150, 70)
+                    : kind == TrayState.Error ? Color.FromArgb(198, 48, 42)
+                    : Color.FromArgb(222, 152, 0);
+                using var brush = new SolidBrush(fill);
+                graphics.FillEllipse(brush, Unit(0.04f), Unit(0.04f), Unit(0.92f), Unit(0.92f));
+                using var glyph = new Pen(Color.White, Math.Max(1.5f, Unit(0.11f))) { StartCap = System.Drawing.Drawing2D.LineCap.Round, EndCap = System.Drawing.Drawing2D.LineCap.Round };
+                if (kind == TrayState.Connected)
+                    graphics.DrawLines(glyph, new[]
+                    { new PointF(Unit(0.28f), Unit(0.52f)), new PointF(Unit(0.44f), Unit(0.68f)), new PointF(Unit(0.74f), Unit(0.34f)) });
+                else if (kind == TrayState.Error)
+                {
+                    graphics.DrawLine(glyph, Unit(0.50f), Unit(0.24f), Unit(0.50f), Unit(0.58f));
+                    using var dot = new SolidBrush(Color.White);
+                    graphics.FillEllipse(dot, Unit(0.44f), Unit(0.66f), Unit(0.12f), Unit(0.12f));
+                }
+                else
+                {
+                    using var dot = new SolidBrush(Color.White);
+                    foreach (var x in new[] { 0.30f, 0.50f, 0.70f })
+                        graphics.FillEllipse(dot, Unit(x - 0.055f), Unit(0.445f), Unit(0.11f), Unit(0.11f));
+                }
+            }
+        }
+        var handle = bitmap.GetHicon();
+        trayIconHandles.Add(handle);
+        return Icon.FromHandle(handle);
+    }
+
+    private void ShowFromTray()
+    {
+        Show();
+        if (WindowState == FormWindowState.Minimized) WindowState = FormWindowState.Normal;
+        Activate();
     }
 
     private async Task ChooseConnection(bool connect)
@@ -340,16 +497,26 @@ internal sealed class MainForm : Form
     {
         using var dialog = new Form { Text = text["modes"], Font = body, BackColor = Color.White, AutoSize = true,
             AutoSizeMode = AutoSizeMode.GrowAndShrink, FormBorderStyle = FormBorderStyle.FixedDialog,
+            AutoScaleMode = AutoScaleMode.Dpi,
             MaximizeBox = false, MinimizeBox = false, StartPosition = FormStartPosition.CenterParent };
         var layout = new FlowLayoutPanel { AutoSize = true, FlowDirection = FlowDirection.TopDown, WrapContents = false, Padding = new Padding(20) };
-        var tun = new RadioButton { Text = text["tunMode"], Checked = settings.Tun, AutoSize = true, Margin = new Padding(0, 8, 0, 8) };
-        var proxy = new RadioButton { Text = text["tunnelProxy"], Checked = !settings.Tun, AutoSize = true, Margin = tun.Margin };
-        var killSwitch = new CheckBox { Text = text["killSwitch"], Checked = settings.KillSwitch, AutoSize = true, Margin = tun.Margin };
-        var engine = new AntdUI.Select { Width = 300, Height = 44, List = true, Font = strong, BackColor = Field, ForeColor = ForeColor, Radius = 8 };
+        // One mnemonic set for the whole dialog: letters are unique by
+        // construction (see Mnemonic). The radio/check controls are
+        // standard WinForms and render the markers; the AntdUI selects
+        // and buttons below are reached by the designed tab order.
+        var used = new HashSet<char>();
+        var tun = new RadioButton { Text = Mnemonic.Mark(text["tunMode"], used, 'T', 'Т'), Checked = settings.Tun, AutoSize = true, Margin = new Padding(0, 8, 0, 8), TabIndex = 0 };
+        var proxy = new RadioButton { Text = Mnemonic.Mark(text["tunnelProxy"], used, 'P', 'П'), Checked = !settings.Tun, AutoSize = true, Margin = tun.Margin, TabIndex = 1 };
+        var killSwitch = new CheckBox { Text = Mnemonic.Mark(text["killSwitch"], used, 'K', 'I', 'И'), Checked = settings.KillSwitch, AutoSize = true, Margin = tun.Margin, TabIndex = 2 };
+        // The registry is the truth for autostart (AutoRun owns the Run
+        // value the uninstaller scans), so the box opens with the
+        // read-back, not with what settings last hoped was written.
+        var autoRun = new CheckBox { Text = Mnemonic.Mark(text["launchAtLogin"], used, 'L', 'В', 'A'), Checked = AutoRun.IsEnabled(), AutoSize = true, Margin = tun.Margin, TabIndex = 3 };
+        var engine = new AntdUI.Select { Width = 300, Height = 44, List = true, Font = strong, BackColor = Field, ForeColor = ForeColor, Radius = 8, TabIndex = 4 };
         engine.Items.Add(new AntdUI.SelectItem(text["engineAuto"], ""));
         foreach (var kind in new[] { "sing-box", "xray", "mihomo" }) engine.Items.Add(new AntdUI.SelectItem(kind, kind));
         engine.SelectedValue = settings.Engine;
-        var stack = new AntdUI.Select { Width = 300, Height = 44, List = true, Font = body, Radius = 8 };
+        var stack = new AntdUI.Select { Width = 300, Height = 44, List = true, Font = body, Radius = 8, TabIndex = 5 };
         foreach (var name in new[] { "gvisor", "system", "mixed", "mips" }) stack.Items.Add(name);
         void RenderStack()
         {
@@ -359,8 +526,26 @@ internal sealed class MainForm : Form
         engine.SelectedValueChanged += (_, _) => RenderStack();
         tun.CheckedChanged += (_, _) => RenderStack();
         var save = MakeButton("save", 300);
+        save.TabIndex = 6;
+        var cancel = MakeButton("cancel", 300);
+        cancel.TabIndex = 7;
+        cancel.Click += (_, _) => dialog.DialogResult = DialogResult.Cancel;
         save.Click += (_, _) =>
         {
+            // Autostart is written first and read back: when the
+            // registry refuses (policy locks the Run key), the box
+            // stays open showing the state that is actually in effect
+            // and nothing else is saved on a false premise.
+            var wantAutoRun = autoRun.Checked;
+            AutoRun.SetEnabled(wantAutoRun);
+            var actualAutoRun = AutoRun.IsEnabled();
+            settings.AutoRun = actualAutoRun;
+            if (actualAutoRun != wantAutoRun)
+            {
+                autoRun.Checked = actualAutoRun;
+                settings.Save();
+                return;
+            }
             settings.Tun = tun.Checked;
             settings.KillSwitch = killSwitch.Checked;
             settings.Engine = (string?)engine.SelectedValue ?? "";
@@ -370,9 +555,11 @@ internal sealed class MainForm : Form
             apply.Visible = desiredConnected;
             dialog.DialogResult = DialogResult.OK;
         };
-        layout.Controls.AddRange(new FormsControl[] { tun, proxy, killSwitch, engine, stack, save });
+        layout.Controls.AddRange(new FormsControl[] { tun, proxy, killSwitch, autoRun, engine, stack, save, cancel });
         dialog.Controls.Add(layout);
         dialog.AcceptButton = save;
+        dialog.CancelButton = cancel;
+        dialog.ActiveControl = tun;
         RenderStack();
         dialog.ShowDialog(this);
     }
@@ -381,13 +568,26 @@ internal sealed class MainForm : Form
     {
         if (core == null) throw new InvalidOperationException("core.error.unavailable");
         using var dialog = new Form { Text = text["addSubscription"], Font = body, BackColor = Color.White, ClientSize = new Size(460, 156),
+            AutoScaleMode = AutoScaleMode.Dpi,
             FormBorderStyle = FormBorderStyle.FixedDialog, StartPosition = FormStartPosition.CenterParent, MaximizeBox = false, MinimizeBox = false };
-        var input = new AntdUI.Input { Bounds = new Rectangle(20, 20, 420, 48), PlaceholderText = text["subscriptionLink"], Font = body, Radius = 8 };
+        // Anchored to the dialog edges instead of bare coordinates, so
+        // the fixed layout follows the Dpi-scaled client area.
+        var input = new AntdUI.Input { Bounds = new Rectangle(20, 20, 420, 48), Anchor = AnchorStyles.Left | AnchorStyles.Top | AnchorStyles.Right,
+            PlaceholderText = text["subscriptionLink"], Font = body, Radius = 8, TabIndex = 0 };
         var confirm = MakeButton("add", 120);
         confirm.Location = new Point(320, 88);
+        confirm.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+        confirm.TabIndex = 1;
         confirm.Click += (_, _) => dialog.DialogResult = DialogResult.OK;
-        dialog.Controls.AddRange(new FormsControl[] { input, confirm });
+        var cancel = MakeButton("cancel", 120);
+        cancel.Location = new Point(192, 88);
+        cancel.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+        cancel.TabIndex = 2;
+        cancel.Click += (_, _) => dialog.DialogResult = DialogResult.Cancel;
+        dialog.Controls.AddRange(new FormsControl[] { input, confirm, cancel });
         dialog.AcceptButton = confirm;
+        dialog.CancelButton = cancel;
+        dialog.ActiveControl = input;
         if (dialog.ShowDialog(this) != DialogResult.OK) return;
         var answer = await core.CallAsync(new SaveSubscriptionRequest
         {
@@ -458,8 +658,10 @@ internal sealed class MainForm : Form
 
     private async Task DeleteSubscription(SubscriptionState subscription)
     {
+        // Destructive confirmation: the default button and the
+        // initial focus are on Cancel, so Enter never deletes.
         if (core == null || MessageBox.Show(this, text["deleteSubscription"].Replace("{name}", subscription.DisplayName),
-            text["delete"], MessageBoxButtons.OKCancel, MessageBoxIcon.None) != DialogResult.OK) return;
+            text["delete"], MessageBoxButtons.OKCancel, MessageBoxIcon.None, MessageBoxDefaultButton.Button2) != DialogResult.OK) return;
         var answer = await core.CallAsync(new DeleteSubscriptionRequest
         { ApiVersion = core.Version, ControlAuthenticator = core.Authenticator, Id = subscription.Settings.Id }, DeleteSubscriptionResponse.Parser, lifetime.Token);
         Check(answer.Error);
@@ -511,6 +713,13 @@ internal sealed class MainForm : Form
     {
         base.Dispose(disposing);
         if (!disposing) return;
+        tray.Visible = false;
+        tray.Dispose();
+        trayMenu.Dispose();
+        foreach (var icon in trayIcons.Values) icon.Dispose();
+        foreach (var handle in trayIconHandles) DestroyIcon(handle);
+        trayIcons.Clear();
+        trayIconHandles.Clear();
         poll.Dispose();
         navigationHints.Dispose();
         lifetime.Dispose();
