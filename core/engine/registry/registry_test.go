@@ -203,6 +203,30 @@ func TestXrayBridgeRequiresTheInstalledPacketEngineBeforeConstruction(t *testing
 	}
 }
 
+// TestXrayBridgeAdjustmentNeverMutatesTheCallerPlan pins the copy-on-write
+// behind the admit path: with a new-enough packet engine installed, the
+// bridge adjustment (gvisor stack, fake-IP demotion) applies to the
+// selection plan only, never to the caller's plan.
+func TestXrayBridgeAdjustmentNeverMutatesTheCallerPlan(t *testing.T) {
+	p := enginetest.Plan(engine.ProtocolVLESS)
+	p.Engines = []engine.Kind{engine.KindXray}
+	p.Tun = engine.Tun{Enabled: true, Stack: "system"}
+	p.DNS.Mode = string(engine.DNSFakeIP)
+	r := &Registry{
+		preference: engine.DefaultPreference,
+		binaries:   map[engine.Kind]supervise.Binary{engine.KindMihomo: {Version: engine.Version{Major: 1, Minor: 19, Patch: 32}}},
+		availability: []engine.Availability{
+			{Kind: engine.KindMihomo, Usable: true, Version: engine.Version{Major: 1, Minor: 19, Patch: 32}},
+		},
+	}
+	if _, err := r.Factory()(t.Context(), p); err == nil {
+		t.Fatal("xray itself is not installed: admit must fail")
+	}
+	if p.Tun.Stack != "system" || p.DNS.Mode != string(engine.DNSFakeIP) {
+		t.Fatalf("factory mutated the caller's plan: stack %q, dns mode %q", p.Tun.Stack, p.DNS.Mode)
+	}
+}
+
 // TestVerifyTpwsChecksTheManifestWhenItListsTpws is the regression test for
 // R5-LG-1-3: zapret's proxy used to skip the SHA256SUMS check the engine
 // binaries get. A manifest that lists tpws with a wrong digest must

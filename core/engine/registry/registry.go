@@ -191,8 +191,15 @@ func (r *Registry) Factory() func(context.Context, *engine.Plan) (engine.Engine,
 				"registry: bypass outbounds need zapret's tpws in the engines directory")
 		}
 		// Select capabilities against the SOCKS5 plan produced by
-		// bypass rewriting.
-		selectPlan := bypass.Rewrite(p, nil)
+		// bypass rewriting. Plans without a bypass outbound (the common
+		// case) select against themselves: rewriting them only cloned
+		// every outbound to produce an identical plan. The bridge
+		// adjustment below mutates the selection plan, so it copies on
+		// write when the plan was not already rewritten.
+		selectPlan := p
+		if withBypass {
+			selectPlan = bypass.Rewrite(p, nil)
+		}
 		bridge := len(order) == 1 && order[0] == engine.KindXray && p.Tun.Enabled &&
 			slices.Contains([]string{"system", "mixed", "mips"}, p.Tun.Stack)
 		if bridge {
@@ -207,6 +214,10 @@ func (r *Registry) Factory() func(context.Context, *engine.Plan) (engine.Engine,
 			}
 			// Admit Xray's actual transports and routing independently of the
 			// packet stack supplied by the second installed engine.
+			if selectPlan == p {
+				copied := *p
+				selectPlan = &copied
+			}
 			selectPlan.Tun.Stack = "gvisor"
 			if selectPlan.DNS.Mode == string(engine.DNSFakeIP) {
 				selectPlan.DNS.Mode = "rule"
