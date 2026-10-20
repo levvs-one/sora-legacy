@@ -705,8 +705,17 @@ func parseVMess(raw string, u *url.URL) (OutboundSpec, error) {
 	if o.Transport == "" {
 		o.Transport = "tcp"
 	}
-	if aid := getq(q, "aid", "alterId", "alter_id"); aid != "" && aid != "0" {
-		return OutboundSpec{}, fmt.Errorf("%w: vmess alterId %q is legacy pre-AEAD; sora renders AEAD (alterId 0) only", ErrUnsupported, aid)
+	// Every value of every alterId spelling is checked, not just
+	// the first non-empty one getq would return (REVIEW-GFOLLOWUP
+	// G2-F3): ?aid=0&alter_id=16 — and likewise a repeated key —
+	// must refuse, because whichever value the rendering engine
+	// honoured, a non-zero one names the pre-AEAD protocol.
+	for _, k := range []string{"aid", "alterId", "alter_id"} {
+		for _, aid := range q[k] {
+			if aid != "" && aid != "0" {
+				return OutboundSpec{}, fmt.Errorf("%w: vmess alterId %q is legacy pre-AEAD; sora renders AEAD (alterId 0) only", ErrUnsupported, aid)
+			}
+		}
 	}
 	o.Security = getq(q, "security")
 	if o.Security == "" {
@@ -847,14 +856,19 @@ func mapJSONSpec(m map[string]any, fallback string) (OutboundSpec, error) {
 		o.DisplayName = stringValue(m["remarks"])
 	}
 	o.Security = stringValue(m["security"])
-	if o.Protocol == "vmess" {
-		// sing-box-shaped VMess documents spell it alter_id and
-		// Clash documents spell it alterId; every spelling is legacy
-		// pre-AEAD when non-zero (see checkVMessAlterID). The
-		// alterId check is a deliberate divergence BEYOND sora
-		// (REVIEW-G G2 follow-up): the reference still accepts the
-		// camelCase key in JSON/Clash documents, legacy refuses it —
-		// stricter here on purpose, not a parity break to repair.
+	if strings.EqualFold(o.Protocol, "vmess") {
+		// The type match is case-insensitive (REVIEW-GFOLLOWUP
+		// G2-F2): providers also write "VMess"/"VMESS", and a
+		// case-sensitive gate let those documents skip the alterId
+		// check entirely while checkProfileVMessAlterID already
+		// matched EqualFold. sing-box-shaped VMess documents spell
+		// it alter_id and Clash documents spell it alterId; every
+		// spelling is legacy pre-AEAD when non-zero (see
+		// checkVMessAlterID). The alterId check is a deliberate
+		// divergence BEYOND sora (REVIEW-G G2 follow-up): the
+		// reference still accepts the camelCase key in JSON/Clash
+		// documents, legacy refuses it — stricter here on purpose,
+		// not a parity break to repair.
 		for _, k := range []string{"aid", "alter_id", "alterId"} {
 			if err := checkVMessAlterID(m[k]); err != nil {
 				return OutboundSpec{}, err
@@ -869,23 +883,72 @@ func mapJSONSpec(m map[string]any, fallback string) (OutboundSpec, error) {
 	return o, o.validate()
 }
 
-// checkVMessAlterID refuses a non-zero VMess alterId in any of its
-// loosely typed forms (JSON number, numeric string). Zero, "0" and an
-// absent value are AEAD and pass.
+// checkVMessAlterID refuses a VMess alterId that is not AEAD: a
+// non-zero integer is the legacy pre-AEAD protocol, and anything that
+// is not a non-negative integer at all is refused rather than coerced
+// (REVIEW-GFOLLOWUP G2-F1, deliberately stricter than sora exactly as
+// the spellings in 6ac5553 were). The loosely typed number() path
+// used to coerce silently — a float64 -1 or 0.5 and a bool true all
+// read as 0 there and passed, while an Xray profile carried such a
+// value into the runtime verbatim. Zero, "0", "" and an absent value
+// (nil — JSON null included, it decodes to nil) are AEAD and pass.
+// An integer-valued float (64.0, as JSON/YAML emit it) counts as the
+// integer it denotes, in number and string form alike.
 func checkVMessAlterID(v any) error {
 	if v == nil {
 		return nil
 	}
-	if s, ok := v.(string); ok {
-		if s == "" || s == "0" {
-			return nil
-		}
-		return fmt.Errorf("%w: vmess alterId %q is legacy pre-AEAD; sora renders AEAD (alterId 0) only", ErrUnsupported, s)
+	n, ok := alterIDInteger(v)
+	if !ok || n < 0 {
+		return fmt.Errorf("%w: vmess alterId %v is not a non-negative integer", ErrUnsupported, v)
 	}
-	if n := number(v); n != 0 {
+	if n != 0 {
 		return fmt.Errorf("%w: vmess alterId %d is legacy pre-AEAD; sora renders AEAD (alterId 0) only", ErrUnsupported, n)
 	}
 	return nil
+}
+
+// alterIDInteger reads v as an integer alterId: JSON/YAML numbers
+// (float and int forms), numeric strings, and integer-valued floats
+// in either form ("64.0", 64.0). ok is false for booleans, fractional
+// values, non-numeric strings and every other type — callers must
+// refuse those, not coerce them to zero the way number() does.
+func alterIDInteger(v any) (int64, bool) {
+	switch x := v.(type) {
+	case string:
+		if x == "" {
+			return 0, true
+		}
+		if n, err := strconv.ParseInt(x, 10, 64); err == nil {
+			return n, true
+		}
+		f, err := strconv.ParseFloat(x, 64)
+		if err != nil || f != math.Trunc(f) {
+			return 0, false
+		}
+		return int64(f), true
+	case float64:
+		if x != math.Trunc(x) {
+			return 0, false
+		}
+		return int64(x), true
+	case float32:
+		f := float64(x)
+		if f != math.Trunc(f) {
+			return 0, false
+		}
+		return int64(f), true
+	case int:
+		return int64(x), true
+	case int64:
+		return x, true
+	case uint64:
+		if x > math.MaxInt64 {
+			return 0, false
+		}
+		return int64(x), true
+	}
+	return 0, false
 }
 
 // jsonBool reads the loosely typed boolean flags of share-link JSON
