@@ -88,6 +88,18 @@ func (p *Plan) RequiredFeatures() map[Feature]bool {
 		if o.TLS.KeyShare != "" {
 			out[FeatureRealityKeyShare] = true
 		}
+		if o.Protocol == ProtocolHysteria2 && o.HopPorts != "" {
+			// Xray's hysteria2 outbound cannot hop ports; without the
+			// feature gate a hopping plan would silently collapse to a
+			// single port on Xray.
+			out[FeatureHy2PortHop] = true
+		}
+		if o.Protocol == ProtocolHysteria2 && o.Obfs != "" {
+			// Xray's hysteria transport has no obfs option; without
+			// the gate an obfuscated plan was selected for Xray and
+			// only failed at render time.
+			out[FeatureHy2Obfs] = true
+		}
 	}
 	if p.Options.Fragment.Enabled {
 		out[FeatureTLSFragment] = true

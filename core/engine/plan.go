@@ -190,6 +190,45 @@ type Outbound struct {
 	// Encryption configures VLESS. Empty or "none" disables it; other
 	// values use Xray's post-quantum VLESS Encryption.
 	Encryption string
+	// UpMbps and DownMbps are the client's Hysteria2 bandwidth caps in
+	// Mbps (from upmbps/downmbps in the import link). Positive values
+	// switch sing-box and mihomo from BBR to Hysteria (Brutal) congestion
+	// control; zero means auto (BBR).
+	UpMbps   int
+	DownMbps int
+	// HopPorts is the Hysteria2 port-hopping spec, e.g.
+	// "20000-30000,40000" (from mport/ports in the import link). Empty
+	// keeps the single Port.
+	HopPorts string
+	// HopInterval is the Hysteria2 port hop interval in seconds. Zero
+	// keeps the engine default (30s); the protocol requires at least 5s.
+	HopInterval int
+	// HopIntervalMax is the randomized upper bound of the port hop
+	// interval in seconds (sing-box 1.14 hop_interval_max; Hysteria
+	// 2.8's randomized hop interval). Zero keeps a fixed HopInterval.
+	HopIntervalMax int
+	// BBRProfile selects the sing-box 1.14 Hysteria2 BBR congestion
+	// profile: "standard", "conservative" or "aggressive". Empty keeps
+	// the engine default. It applies only while BBR is in charge (no
+	// bandwidth caps — caps switch the client to Brutal).
+	BBRProfile string
+	// CongestionControl selects the TUIC QUIC congestion controller:
+	// "bbr" (default), "cubic" or "new_reno". Unknown values are rejected.
+	CongestionControl string
+	// UDPRelayMode selects the TUIC UDP relay mode: "native" (default)
+	// or "quic".
+	UDPRelayMode string
+	// TUICHeartbeat is the TUIC heartbeat (keepalive) interval in
+	// seconds. Zero keeps DefaultTUICHeartbeatSeconds (see
+	// quic_defaults.go); renderers emit the effective value on both
+	// TUIC engines (sing-box heartbeat duration, mihomo
+	// heartbeat-interval in milliseconds) so a session's keepalive
+	// never depends on which engine carries it.
+	TUICHeartbeat int
+	// Token is the TUIC v4 pre-shared token; v5 authenticates with
+	// UUID+Password. Like the other credential fields, it must be masked
+	// in logs and events.
+	Token string
 
 	Peers []WireGuardPeer
 	// Amnezia turns a WireGuard outbound into AmneziaWG. Nil is plain

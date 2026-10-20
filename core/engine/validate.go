@@ -31,7 +31,7 @@ func (p *Plan) Secrets() []string {
 // Secrets lists the secret fields of one outbound. Values shorter than four
 // characters are skipped: masking them would destroy ordinary log text.
 func (o Outbound) Secrets() []string {
-	candidates := []string{o.UUID, o.Password, o.UserID, o.ObfsParam, o.PluginOpts, o.PrivateKey, o.OriginalLink}
+	candidates := []string{o.UUID, o.Password, o.UserID, o.ObfsParam, o.PluginOpts, o.Token, o.PrivateKey, o.OriginalLink}
 	// Secret-typed plugin option values (shadow-tls/restls/jls
 	// passwords, kcptun keys) live ONLY inside the PluginOpts string:
 	// masking the whole string does not mask a log line that quotes
@@ -245,6 +245,12 @@ func (o Outbound) Validate() error {
 	// keys or shortIds fail here, not at the engine.
 	if err := o.ValidateReality(); err != nil {
 		errs = append(errs, err)
+	}
+	if o.Protocol == ProtocolHysteria2 {
+		errs = append(errs, validateHysteria2Tuning(o)...)
+	}
+	if o.Protocol == ProtocolTUIC {
+		errs = append(errs, validateTUICTuning(o)...)
 	}
 	errs = append(errs, validateXHTTP(o)...)
 	return errors.Join(errs...)
@@ -718,4 +724,97 @@ func parseAmneziaMagic(raw string) (lo, hi int64, err error) {
 		return 0, 0, fmt.Errorf("range %q has its lower bound above the upper bound", raw)
 	}
 	return lo, hi, nil
+}
+
+// validateHysteria2Tuning checks the bandwidth caps and port-hopping spec of
+// a Hysteria2 outbound. Engines pick BBR or Brutal congestion control and
+// the hopping behavior from these fields, so malformed values must fail here
+// instead of producing a config the engine silently misapplies.
+func validateHysteria2Tuning(o Outbound) []error {
+	var errs []error
+	if o.UpMbps < 0 || o.DownMbps < 0 {
+		errs = append(errs, fmt.Errorf("outbound %s: hysteria2 bandwidth caps must not be negative", o.ID))
+	}
+	if o.UpMbps > MaxHy2BandwidthMbps || o.DownMbps > MaxHy2BandwidthMbps {
+		errs = append(errs, fmt.Errorf("outbound %s: hysteria2 bandwidth caps must not exceed %d Mbps", o.ID, MaxHy2BandwidthMbps))
+	}
+	// Obfs is a plan-level promise of wire obfuscation: the type must
+	// be one the engines implement and its password (credential data,
+	// carried in ObfsParam and masked via Secrets) must be present —
+	// both hopping engines reject an obfs block without a password
+	// at config load (verified on the pins, CENSOR-P3), so accepting
+	// it here would defer a plan error to a dead engine start.
+	if o.Obfs != "" && !ValidHy2Obfs[o.Obfs] {
+		errs = append(errs, fmt.Errorf("outbound %s: hysteria2 obfs %q is not salamander or gecko", o.ID, o.Obfs))
+	}
+	if o.Obfs != "" && o.ObfsParam == "" {
+		errs = append(errs, fmt.Errorf("outbound %s: hysteria2 obfs %q needs its password", o.ID, o.Obfs))
+	}
+	if o.Obfs == "" && o.ObfsParam != "" {
+		errs = append(errs, fmt.Errorf("outbound %s: hysteria2 obfs password without an obfs type does nothing", o.ID))
+	}
+	if err := validateHopPorts(o.ID, o.HopPorts); err != nil {
+		errs = append(errs, err)
+	}
+	switch {
+	case o.HopInterval < 0:
+		errs = append(errs, fmt.Errorf("outbound %s: hysteria2 hop interval must not be negative", o.ID))
+	case o.HopInterval > 0 && o.HopInterval < MinHy2HopIntervalSeconds:
+		// Hysteria2 requires at least 5s between hops.
+		errs = append(errs, fmt.Errorf("outbound %s: hysteria2 hop interval must be at least %ds", o.ID, MinHy2HopIntervalSeconds))
+	case o.HopInterval > 0 && o.HopPorts == "":
+		errs = append(errs, fmt.Errorf("outbound %s: hysteria2 hop interval needs hop ports", o.ID))
+	}
+	switch {
+	case o.HopIntervalMax < 0:
+		errs = append(errs, fmt.Errorf("outbound %s: hysteria2 hop interval max must not be negative", o.ID))
+	case o.HopIntervalMax > 0 && o.HopPorts == "":
+		errs = append(errs, fmt.Errorf("outbound %s: hysteria2 hop interval max needs hop ports", o.ID))
+	case o.HopIntervalMax > 0 && o.HopInterval > 0 && o.HopIntervalMax < o.HopInterval:
+		// sing-box renders hop_interval..hop_interval_max as the
+		// randomized hop range; an inverted range is a config bug.
+		errs = append(errs, fmt.Errorf("outbound %s: hysteria2 hop interval max %ds is below the hop interval %ds", o.ID, o.HopIntervalMax, o.HopInterval))
+	}
+	if o.BBRProfile != "" && !validBBRProfiles[o.BBRProfile] {
+		errs = append(errs, fmt.Errorf("outbound %s: hysteria2 bbr profile %q is not standard, conservative or aggressive", o.ID, o.BBRProfile))
+	}
+	return errs
+}
+
+// validBBRProfiles lists the BBR congestion profiles sing-box 1.14
+// accepts for Hysteria2 outbounds (bbr_profile).
+var validBBRProfiles = map[string]bool{"standard": true, "conservative": true, "aggressive": true}
+
+// validateHopPorts checks a Hysteria2 port-hopping spec such as
+// "20000-30000,40000": comma-separated single ports or ascending ranges.
+// The parse itself lives in HopPortRanges (quic_defaults.go), the same
+// parser the renderers translate from, so validation and rendering
+// can never disagree about what a spec means.
+func validateHopPorts(id, spec string) error {
+	if _, err := HopPortRanges(spec); err != nil {
+		return fmt.Errorf("outbound %s: %w", id, err)
+	}
+	return nil
+}
+
+// validateTUICTuning checks the congestion controller, UDP relay mode
+// and heartbeat of a TUIC outbound against what the engines implement,
+// so an unknown value fails validation instead of silently falling
+// back to an engine default. The vocabularies live in
+// quic_defaults.go (ValidTUICCongestion / ValidTUICUDPRelayMode);
+// mihomo accepts unknown values silently at config load, so this
+// gate is the only thing standing between a typo and a silent
+// default there (verified on the pins, CENSOR-P3).
+func validateTUICTuning(o Outbound) []error {
+	var errs []error
+	if o.CongestionControl != "" && !ValidTUICCongestion[o.CongestionControl] {
+		errs = append(errs, fmt.Errorf("outbound %s: unknown tuic congestion control %q", o.ID, o.CongestionControl))
+	}
+	if o.UDPRelayMode != "" && !ValidTUICUDPRelayMode[o.UDPRelayMode] {
+		errs = append(errs, fmt.Errorf("outbound %s: unknown tuic udp relay mode %q", o.ID, o.UDPRelayMode))
+	}
+	if o.TUICHeartbeat < 0 || (o.TUICHeartbeat > 0 && o.TUICHeartbeat < MinTUICHeartbeatSeconds) || o.TUICHeartbeat > MaxTUICHeartbeatSeconds {
+		errs = append(errs, fmt.Errorf("outbound %s: tuic heartbeat %ds is outside %d-%ds (0 keeps the default)", o.ID, o.TUICHeartbeat, MinTUICHeartbeatSeconds, MaxTUICHeartbeatSeconds))
+	}
+	return errs
 }

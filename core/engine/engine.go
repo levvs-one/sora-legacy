@@ -80,8 +80,21 @@ const (
 	// (S5-SP5, SP5-render).
 	FeatureRealityKeyShare Feature = "reality-key-share"
 	FeatureVLESSEncrypt    Feature = "vless-encryption"
-	FeatureAmneziaWG       Feature = "amneziawg"
-	FeaturePrivateControl  Feature = "private-control"
+	// FeatureHy2PortHop marks engines whose Hysteria2 outbound supports
+	// port hopping (sing-box server_ports, mihomo ports). Xray's hysteria2
+	// outbound has no port-hopping support, so a hopping plan must never
+	// be routed to it: hopping rendered nowhere would silently pin the
+	// client to one port.
+	FeatureHy2PortHop Feature = "hy2-port-hop"
+	// FeatureHy2Obfs marks engines whose Hysteria2 outbound implements
+	// obfuscation (salamander/gecko): sing-box and mihomo do, Xray's
+	// hysteria transport exposes no obfs option and its renderer
+	// refuses the field. Without the gate an obfuscated plan routed
+	// to Xray failed only at render time, after selection had promised
+	// it could run.
+	FeatureHy2Obfs        Feature = "hy2-obfs"
+	FeatureAmneziaWG      Feature = "amneziawg"
+	FeaturePrivateControl Feature = "private-control"
 )
 
 // Capabilities describes the protocols and features supported by an engine

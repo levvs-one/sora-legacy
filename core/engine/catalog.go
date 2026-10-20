@@ -39,6 +39,7 @@ var Catalog = map[Kind]Capabilities{
 			FeatureLoadBalance: true, FeatureXHTTP: true, FeatureVLESSEncrypt: true,
 			FeatureXHTTPDownloadSplit: true, FeatureXHTTPXmux: true, FeatureXHTTPPadding: true, FeatureRealityKeyShare: true,
 			FeatureAmneziaWG: true, FeaturePrivateControl: true, FeatureECH: true,
+			FeatureHy2PortHop: true, FeatureHy2Obfs: true,
 		},
 	},
 	KindSingBox: {
@@ -56,6 +57,7 @@ var Catalog = map[Kind]Capabilities{
 			FeatureTun: true, FeatureFakeIP: true, FeatureRuleSets: true,
 			FeatureURLTest: true, FeatureLatencyTest: true, FeatureGeoData: true,
 			FeaturePerAppRouting: true, FeatureTLSFragment: true, FeatureECH: true,
+			FeatureHy2PortHop: true, FeatureHy2Obfs: true,
 			// Deliberately no static FeatureRealityKeyShare: the
 			// key_share spelling is the lx fork's (probed on lx.22
 			// in sora, whose shipped pin IS the fork); legacy ships
@@ -98,6 +100,10 @@ var Catalog = map[Kind]Capabilities{
 			// the same floor the reference claims from — but the
 			// wire probe was not re-run on 26.3.27 here.
 			FeatureECH: true,
+			// Deliberately no FeatureHy2PortHop: Xray's hysteria2
+			// outbound cannot hop ports (see FeatureHy2PortHop).
+			// Deliberately no FeatureHy2Obfs: Xray's hysteria
+			// transport exposes no obfs option (see FeatureHy2Obfs).
 			// Deliberately no FeatureRealityKeyShare: Xray has no
 			// key-share knob — the chosen parrot decides whether the
 			// hybrid group is offered — so a plan pinning the choice
