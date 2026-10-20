@@ -176,3 +176,19 @@ func TestReportItemsAreBounded(t *testing.T) {
 		t.Errorf("Unsupported = %d, want 4999", r.Report.Unsupported)
 	}
 }
+
+// TestPinnedHysteria2LinkIsRefusedNotUnpinned mirrors the sora
+// pass1-detail test: pinSHA256 is defined for Hysteria2 links, but no
+// engine consumes it, so the link must be refused (counted
+// unsupported) instead of imported without its pin.
+func TestPinnedHysteria2LinkIsRefusedNotUnpinned(t *testing.T) {
+	r, err := (LinkParser{}).Parse([]byte(
+		"hysteria2://secret@example.com:443#plain\n" +
+			"hy2://secret@example.com:443?pinSHA256=PEgHXXPzTsMBr6Uf5FYZ9CDpGHuCkSKpAZcJZU1hRVc%3D#pinned"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Report.Imported != 1 || r.Report.Unsupported != 1 {
+		t.Fatalf("report = %+v, want 1 imported and 1 unsupported", r.Report)
+	}
+}
