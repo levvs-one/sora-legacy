@@ -122,6 +122,47 @@ func TestParseClassicVMessBrokenBlob(t *testing.T) {
 	}
 }
 
+// TestParseClassicVMessAllowInsecure pins the classic path's
+// AllowInsecure field (REVIEW-G4 remark Z1: the reviewer verified
+// the behaviour by probes in both repositories — eight forms — but
+// no test pinned it in either). Both spellings feed it, and
+// jsonBool's truth set is the whole contract: JSON true, a non-zero
+// number, "1" and case-insensitive "true" are true; everything else,
+// including "yes", is false.
+func TestParseClassicVMessAllowInsecure(t *testing.T) {
+	parse := func(t *testing.T, extra string) OutboundSpec {
+		t.Helper()
+		doc := `{"v":"2","add":"vmess.example.com","port":443,"id":"123e4567-e89b-12d3-a456-426614174000","aid":0` + extra + `}`
+		r, err := (LinkParser{}).Parse([]byte("vmess://" + base64.StdEncoding.EncodeToString([]byte(doc))))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(r.Servers) != 1 {
+			t.Fatalf("servers = %d, want 1 (report %+v)", len(r.Servers), r.Report)
+		}
+		return r.Servers[0]
+	}
+	if o := parse(t, `,"insecure":true`); !o.AllowInsecure {
+		t.Error(`"insecure":true must set AllowInsecure`)
+	}
+	if o := parse(t, `,"allowInsecure":true`); !o.AllowInsecure {
+		t.Error(`"allowInsecure":true must set AllowInsecure`)
+	}
+	for _, form := range []string{`1`, `"1"`, `"true"`, `"TRUE"`} {
+		if o := parse(t, `,"insecure":`+form); !o.AllowInsecure {
+			t.Errorf(`"insecure":%s must set AllowInsecure`, form)
+		}
+	}
+	for _, form := range []string{`false`, `0`, `"yes"`, `"false"`} {
+		if o := parse(t, `,"insecure":`+form); o.AllowInsecure {
+			t.Errorf(`"insecure":%s must not set AllowInsecure`, form)
+		}
+	}
+	if o := parse(t, ``); o.AllowInsecure {
+		t.Error("a document without the key must not set AllowInsecure")
+	}
+}
+
 // TestParseVMessURLStyleStillWorks guards the Xray query form, the
 // only VMess dialect the suite exercised before the classic form was
 // restored.

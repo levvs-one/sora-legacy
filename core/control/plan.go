@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net"
 	"net/netip"
 	"net/url"
@@ -251,9 +252,17 @@ func blobError(format string, args ...any) error {
 
 // resolveImportedSpec fills the typed fields of spec from its option
 // blobs wherever the typed field is still empty, and returns the
-// transport headers the spec type cannot hold. Typed fields always
-// win: the blobs are the fallback for the formats whose parser cannot
-// represent them, never an override of a share link's explicit values.
+// transport headers the spec type cannot hold. Typed fields win over
+// blob values for every scalar: the blobs are the fallback for the
+// formats whose parser cannot represent them, never an override of a
+// share link's explicit values. Two deliberate exceptions, both
+// unreachable for real parser output, exist where the blob is the
+// primary source: the transport (the parser defaults the flat field
+// to "tcp" for a document whose transport object names the real type,
+// so the blob always replaces it), and a REALITY claim (a blob that
+// claims REALITY outranks a typed "tls" label — Clash spells the pair
+// as tls:true plus reality-opts — while any other typed security,
+// including an explicit "none", keeps winning over the blob's label).
 func resolveImportedSpec(spec parser.OutboundSpec) (parser.OutboundSpec, map[string]string, error) {
 	f, err := extractBlobFields(spec)
 	if err != nil {
@@ -304,6 +313,14 @@ func resolveImportedSpec(spec parser.OutboundSpec) (parser.OutboundSpec, map[str
 		out.ALPN = f.alpn
 	}
 	if f.realityClaimed && out.PublicKey == "" {
+		// Only absence is refused here. A present but malformed key
+		// or short-id is deliberately not form-checked at import:
+		// plan validation (Outbound.ValidateReality) names the defect
+		// when the plan is built, in both repositories — the
+		// reference's import performs no form check at all, so
+		// refusing malformed forms here would make legacy stricter
+		// than the reference on documents both accept at import.
+		// TestImportedMalformedRealityFailsAtValidate pins the split.
 		return parser.OutboundSpec{}, nil, blobError(
 			"an imported %s outbound claims REALITY but carries no public key", orDefault(out.Protocol, "proxy"))
 	}
@@ -369,6 +386,18 @@ func extractBlobFields(spec parser.OutboundSpec) (blobFields, error) {
 		network, err := blobString(v, "network")
 		if err != nil {
 			return blobFields{}, err
+		}
+		if network == "http" {
+			// Clash "http" is an HTTP/1.1 transport with its own
+			// http-opts dialect. No engine here carries it: the plan
+			// whitelist (identical in the reference) holds no "http",
+			// and the plan's "h2" is a different wire protocol in
+			// this dialect, so renaming would silently change the
+			// handshake. Refuse at import, where the cause can be
+			// named, instead of after a successful import at session
+			// build — the reference refuses the same plans there.
+			return blobFields{}, blobError(
+				"an imported %s outbound uses the http transport, which no engine carries (h2 is a different transport in the Clash dialect)", orDefault(spec.Protocol, "proxy"))
 		}
 		if network != "" {
 			f.transport = network
@@ -438,6 +467,13 @@ func extractBlobFields(spec parser.OutboundSpec) (blobFields, error) {
 			return blobFields{}, err
 		}
 	}
+	if v, ok, err := optionBlob(spec, "h2-opts"); err != nil {
+		return blobFields{}, err
+	} else if ok {
+		if err := f.applyH2Opts(v); err != nil {
+			return blobFields{}, err
+		}
+	}
 	return f, nil
 }
 
@@ -485,7 +521,7 @@ func (f *blobFields) applyTLSBlob(v any) error {
 				f.insecure = true
 			}
 		}
-		if raw, present := obj["utls"]; present {
+		if raw, present := obj["utls"]; present && raw != nil {
 			utlsObj, err := blobObject(raw, "tls.utls")
 			if err != nil {
 				return err
@@ -498,7 +534,7 @@ func (f *blobFields) applyTLSBlob(v any) error {
 				f.fingerprint = fp
 			}
 		}
-		if raw, present := obj["reality"]; present {
+		if raw, present := obj["reality"]; present && raw != nil {
 			realityObj, err := blobObject(raw, "tls.reality")
 			if err != nil {
 				return err
@@ -521,7 +557,7 @@ func (f *blobFields) applyTLSBlob(v any) error {
 					f.publicKey = key
 				}
 				if rawID, present := realityObj["short_id"]; present {
-					id, err := blobString(rawID, "tls.reality.short_id")
+					id, err := blobShortID(rawID, "tls.reality.short_id")
 					if err != nil {
 						return err
 					}
@@ -569,7 +605,7 @@ func (f *blobFields) applyRealityOpts(v any) error {
 	}
 	for _, key := range []string{"short-id", "short_id"} {
 		if raw, present := obj[key]; present {
-			sid, err := blobString(raw, "reality-opts."+key)
+			sid, err := blobShortID(raw, "reality-opts."+key)
 			if err != nil {
 				return err
 			}
@@ -586,7 +622,7 @@ func (f *blobFields) applyRealityOpts(v any) error {
 func (f *blobFields) applyTransportBlob(v any) error {
 	if name, ok := v.(string); ok {
 		if name != "" {
-			f.transport = name
+			f.transport = singBoxTransportName(name)
 		}
 		return nil
 	}
@@ -600,7 +636,7 @@ func (f *blobFields) applyTransportBlob(v any) error {
 			return err
 		}
 		if kind != "" {
-			f.transport = kind
+			f.transport = singBoxTransportName(kind)
 		}
 	}
 	if raw, present := obj["service_name"]; present {
@@ -620,6 +656,39 @@ func (f *blobFields) applyTransportBlob(v any) error {
 		f.mergeHeaders(headers)
 	}
 	return f.applyPathHostMode(obj, "transport")
+}
+
+// singBoxTransportName maps a sing-box transport type onto the plan
+// vocabulary. sing-box spells its HTTP transport "http"; the plan
+// calls the same transport "h2" (the plan whitelist, identical in the
+// reference, holds no "http"), and the sing-box renderer spells "h2"
+// back to "http" — the mapping is a rename between dialects, not a
+// protocol change. The Clash network of the same name is NOT renamed
+// (see the network handling in extractBlobFields): there "http" and
+// "h2" are different wire protocols.
+func singBoxTransportName(kind string) string {
+	if kind == "http" {
+		return "h2"
+	}
+	return kind
+}
+
+// applyH2Opts reads a Clash h2-opts block {path, host, headers}; the
+// host is a list in this dialect, of which blobHost keeps the first
+// entry, exactly as for the sing-box http transport's host list.
+func (f *blobFields) applyH2Opts(v any) error {
+	obj, err := blobObject(v, "h2-opts")
+	if err != nil {
+		return err
+	}
+	if raw, present := obj["headers"]; present {
+		headers, err := blobHeaders(raw, "h2-opts.headers")
+		if err != nil {
+			return err
+		}
+		f.mergeHeaders(headers)
+	}
+	return f.applyPathHostMode(obj, "h2-opts")
 }
 
 // applyWSOpts reads a Clash ws-opts block {path, headers}.
@@ -708,6 +777,13 @@ func optionBlob(spec parser.OutboundSpec, key string) (any, bool, error) {
 	}
 	var v any
 	if err := json.Unmarshal([]byte(raw), &v); err == nil {
+		// A JSON null is an absent value in both dialects — an empty
+		// "tls:" line in a Clash document, "tls": null in sing-box
+		// JSON: the option is simply not there, never a shape error
+		// that would fail the whole subscription.
+		if v == nil {
+			return nil, false, nil
+		}
 		return v, true, nil
 	}
 	if strings.HasPrefix(raw, "{") || strings.HasPrefix(raw, "[") || strings.HasPrefix(raw, "\"") {
@@ -735,6 +811,25 @@ func blobString(v any, what string) (string, error) {
 	default:
 		return "", blobError("the %s option of an imported outbound is %T, not a string", what, v)
 	}
+}
+
+// blobShortID reads a REALITY short-id. A string passes through; an
+// integral JSON number converts to its decimal form: YAML decoders
+// turn an unquoted all-digit short-id (12345678) into a number, and
+// mihomo — whose field is a string — reads the same document back as
+// exactly those digits, so converting is the dialect's own reading,
+// not a guess. A fractional or negative number is a short-id in no
+// dialect and fails closed like any other wrong shape. The public
+// key deliberately gets no such treatment (it stays blobString): a
+// valid key is never numeric, so a number there is a broken blob.
+func blobShortID(v any, what string) (string, error) {
+	if n, ok := v.(float64); ok {
+		if n < 0 || n != math.Trunc(n) {
+			return "", blobError("the %s option of an imported outbound is %v, not a short-id", what, n)
+		}
+		return strconv.FormatFloat(n, 'f', 0, 64), nil
+	}
+	return blobString(v, what)
 }
 
 // blobBool reads a loosely typed boolean: a JSON boolean, a "true"/
