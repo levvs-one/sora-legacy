@@ -184,3 +184,35 @@ begin
       NeedsRestart := True;
   end;
 end;
+
+// The app writes its own autostart value when the in-app "launch at sign-in"
+// option is on (v2rayN Tool/Utils.cs): the value name is
+// SoraAutoRun_<MD5 of the install directory>, so this script cannot name it
+// in a [Registry] entry. Scan the Run key at uninstall and remove only values
+// whose command line points at this installation's executable; anything else
+// (another copy of Sora elsewhere, another program) is left alone.
+procedure RemoveOrphanedAutoRun();
+var
+  Names: TArrayOfString;
+  I: Integer;
+  Value: String;
+  ExePath: String;
+begin
+  ExePath := Lowercase(ExpandConstant('{app}\{#MyAppExeName}'));
+  if RegGetValueNames(HKCU, 'Software\Microsoft\Windows\CurrentVersion\Run', Names) then
+  begin
+    for I := 0 to GetArrayLength(Names) - 1 do
+    begin
+      if (Pos('soraautorun_', Lowercase(Names[I])) = 1) and
+         RegQueryStringValue(HKCU, 'Software\Microsoft\Windows\CurrentVersion\Run', Names[I], Value) and
+         (Pos(ExePath, Lowercase(Value)) > 0) then
+        RegDeleteValue(HKCU, 'Software\Microsoft\Windows\CurrentVersion\Run', Names[I]);
+    end;
+  end;
+end;
+
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+begin
+  if CurUninstallStep = usPostUninstall then
+    RemoveOrphanedAutoRun();
+end;
