@@ -36,23 +36,29 @@ internal sealed class SubscriptionCard : AntdUI.Panel
             BackColor = Color.White, BackHover = Color.FromArgb(235, 235, 240), ForeColor = ForeColor,
             IconSvg = Strings.Read("Icons.caret-" + (closed ? "right" : "down") + "-bold.svg"), IconSize = new Size(16, 16), WaveSize = 0
         };
+        header.AccessibleName = text[closed ? "expandServers" : "collapseServers"];
+        header.TabIndex = 0;
         header.Click += (_, _) => { if (!collapsed.Remove(id)) collapsed.Add(id); render(); };
         Controls.Add(header);
-        Button ActionButton(string icon, int x, Func<Task> action)
+        // Icon-only buttons: the header reads left to right, then the
+        // actions in their visual order; every action carries its name
+        // for assistive tools, since the icons alone do not speak.
+        Button ActionButton(string icon, int x, Func<Task> action, string accessibleName, int tabIndex)
         {
             var button = new Button
             {
                 Bounds = new Rectangle(x, 12, 30, 36), Radius = 8, BorderWidth = 0,
                 Font = body, BackColor = Color.White, BackHover = Color.FromArgb(235, 235, 240),
-                ForeColor = ForeColor, IconSvg = Strings.Read("Icons." + icon + "-bold.svg"), IconSize = new Size(18, 18), WaveSize = 0
+                ForeColor = ForeColor, IconSvg = Strings.Read("Icons." + icon + "-bold.svg"), IconSize = new Size(18, 18), WaveSize = 0,
+                AccessibleName = accessibleName, TabIndex = tabIndex
             };
             button.Click += async (_, _) => await action();
             Controls.Add(button);
             return button;
         }
-        ActionButton("gauge", width - 102, probe).Enabled = !connecting;
-        ActionButton("arrows-clockwise", width - 70, refresh).Loading = subscription.Updating;
-        ActionButton("trash", width - 38, delete);
+        ActionButton("gauge", width - 102, probe, text["probeServers"], 1).Enabled = !connecting;
+        ActionButton("arrows-clockwise", width - 70, refresh, text["refresh"], 2).Loading = subscription.Updating;
+        ActionButton("trash", width - 38, delete, text["delete"], 3);
         var y = 56;
         if (subscription.Info?.HasUsage == true)
         {
@@ -81,6 +87,8 @@ internal sealed class SubscriptionCard : AntdUI.Panel
                 BackColor = Color.White, BackHover = Color.FromArgb(235, 235, 240), ForeColor = ForeColor,
                 IconSvg = Strings.Read("Icons.caret-" + (hide ? "down" : "up") + "-bold.svg"), IconSize = new Size(14, 14), WaveSize = 0
             };
+            toggle.AccessibleName = text[hide ? "showDescription" : "hideDescription"];
+            toggle.TabIndex = 4;
             toggle.Click += (_, _) => { if (!hiddenDescriptions.Remove(id)) hiddenDescriptions.Add(id); render(); };
             Controls.Add(toggle);
             y += 32;
@@ -103,7 +111,7 @@ internal sealed class SubscriptionCard : AntdUI.Panel
                 View = View.Details, HeaderStyle = ColumnHeaderStyle.None, BorderStyle = System.Windows.Forms.BorderStyle.None,
                 VirtualMode = true, OwnerDraw = true, FullRowSelect = true, MultiSelect = false,
                 HideSelection = false, Font = body, BackColor = Color.White, ForeColor = ForeColor,
-                SmallImageList = rowSize, ShowItemToolTips = true
+                SmallImageList = rowSize, ShowItemToolTips = true, TabIndex = 5
             };
             list.Columns.Add("", list.ClientSize.Width - 20);
             list.RetrieveVirtualItem += (_, e) => e.Item = new ListViewItem(nodes[e.ItemIndex].DisplayName) { ToolTipText = nodes[e.ItemIndex].DisplayName };

@@ -43,6 +43,7 @@ internal sealed class LogsPage : UserControl
     {
         this.text = text;
         Font = body;
+        AutoScaleMode = AutoScaleMode.Dpi;
         metadata = new Font(body, FontStyle.Bold);
         Padding = new Padding(24);
         BackColor = Color.FromArgb(246, 246, 248);
@@ -89,6 +90,16 @@ internal sealed class LogsPage : UserControl
         Controls.Add(categoryBar);
         Controls.Add(levelBar);
         Controls.Add(header);
+        // Designed tab order: header actions, level filter, category
+        // filter, search, then the list itself.
+        export.TabIndex = 0;
+        clear.TabIndex = 1;
+        refresh.TabIndex = 2;
+        var tab = 3;
+        foreach (var choice in new[] { LogLevel.Debug, LogLevel.Warning, LogLevel.Error }) levels[choice].TabIndex = tab++;
+        foreach (var name in new[] { "all", "engine", "tun", "dns", "subscriptions", "core" }) categories[name].TabIndex = tab++;
+        search.TabIndex = tab++;
+        list.TabIndex = tab;
         search.TextChanged += (_, _) => { debounce.Stop(); debounce.Start(); };
         debounce.Tick += async (_, _) => { debounce.Stop(); await ReloadAsync(); };
         refresh.Click += async (_, _) => await ReloadAsync();
@@ -242,8 +253,9 @@ internal sealed class LogsPage : UserControl
         if (list.SelectedIndices.Count != 1) return;
         var entry = entries.Values[entries.Count - list.SelectedIndices[0] - 1];
         using var dialog = new Form { Text = entry.Source, Font = Font, ClientSize = new Size(640, 360),
+            AutoScaleMode = AutoScaleMode.Dpi,
             StartPosition = FormStartPosition.CenterParent, MinimizeBox = false, BackColor = BackColor, Padding = new Padding(16) };
-        dialog.Controls.Add(new RichTextBox { Dock = DockStyle.Fill, ReadOnly = true, Text = entry.Message,
+        dialog.Controls.Add(new RichTextBox { Dock = DockStyle.Fill, ReadOnly = true, Text = entry.Message, TabIndex = 0,
             Font = Font, BackColor = BackColor, ForeColor = ForeColor, BorderStyle = BorderStyle.None });
         dialog.ShowDialog(this);
     }

@@ -59,3 +59,30 @@ internal sealed class Strings : IDisposable
         images.Clear();
     }
 }
+
+// Alt-key mnemonics for standard WinForms controls and menus. The ARB
+// texts are shared with the sora app and carry no '&', so the marker is
+// inserted at display time: the first candidate letter actually present
+// in the localized text is marked, and a letter already taken on the
+// same surface (one shared `used` set per form or menu) is skipped, so
+// mnemonics on a surface are unique by construction. A locale whose
+// text contains none of the candidates simply gets no mnemonic for
+// that control — the control stays reachable by tab, never mislabeled.
+internal static class Mnemonic
+{
+    public static string Mark(string text, HashSet<char> used, params char[] candidates)
+    {
+        foreach (var candidate in candidates)
+        {
+            var key = char.ToUpperInvariant(candidate);
+            if (used.Contains(key)) continue;
+            for (var index = 0; index < text.Length; index++)
+            {
+                if (char.ToUpperInvariant(text[index]) != key) continue;
+                used.Add(key);
+                return text.Insert(index, "&");
+            }
+        }
+        return text;
+    }
+}
