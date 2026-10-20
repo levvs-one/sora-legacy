@@ -5,13 +5,20 @@ import (
 	"testing"
 )
 
-// The decoder tests are ported from sora's echconfig_test.go
-// (S5-SP5). The fixture is one ECHConfig with public_name
-// "public.example.com", config_id 7, X25519. The canonical-PEM and
-// base64 render tests are not ported: legacy ports only the decoder
-// (see echconfig.go), so there is no render spelling to pin yet.
+// The tests are ported from sora's echconfig_test.go (S5-SP5
+// decoder; SP5-render helpers, sora snapshot
+// 63faf1d3480d5429b6bcec3483c19c8e03defb85).
 
+// testECHList is the CENSOR-FP probe fixture: one ECHConfig with
+// public_name "public.example.com", config_id 7, X25519 — the list
+// whose wire effect (outer SNI becomes the public_name) was captured
+// on all three pinned binaries.
 var testECHListLines = strings.Split(testECHListPEM, "\n")
+
+var testECHListB64 = func() string {
+	b, _ := ECHConfigListBase64(testECHListLines)
+	return b
+}()
 
 const testECHListPEM = `-----BEGIN ECH CONFIGS-----
 AEX+DQBBBwAgACAAAQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHwAEAAEAAQAScHVibGlj
@@ -52,5 +59,30 @@ func TestECHConfigListBytesRejects(t *testing.T) {
 		if _, err := ECHConfigListBytes(lines); err == nil {
 			t.Errorf("%s: must be rejected", name)
 		}
+	}
+}
+
+func TestECHConfigPEMCanonical(t *testing.T) {
+	// Whatever label the plan arrived with, the canonical PEM uses
+	// the label the pinned sing-box binary accepts ("ECH CONFIGS" —
+	// the space is load-bearing, probed on lx.22) and round-trips.
+	historical := strings.Split(strings.ReplaceAll(testECHListPEM, "ECH CONFIGS", "ECHCONFIG"), "\n")
+	lines, err := ECHConfigPEM(historical)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if lines[0] != "-----BEGIN ECH CONFIGS-----" || lines[len(lines)-1] != "-----END ECH CONFIGS-----" {
+		t.Fatalf("canonical PEM armor = %v", lines)
+	}
+	back, err := ECHConfigListBytes(lines)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, _ := ECHConfigListBytes(testECHListLines)
+	if string(back) != string(want) {
+		t.Errorf("round trip changed the list bytes")
+	}
+	if testECHListB64 == "" {
+		t.Error("base64 form must be non-empty")
 	}
 }
