@@ -5,6 +5,7 @@
 package parser
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
@@ -71,48 +72,74 @@ type ImportDetector struct{ MaxItems int }
 // Detect identifies src's format. Empty or oversized input returns an empty
 // Detection; other errors include the best format guess.
 func (d ImportDetector) Detect(src []byte) (Detection, error) {
-	if len(src) == 0 || strings.TrimSpace(string(src)) == "" {
-		return Detection{}, ErrEmptySource
+	det, _, err := detect(src)
+	return det, err
+}
+
+// detect is Detect plus the decoded payload for FormatBase64 input, so Parse
+// does not have to decode twice.
+func detect(src []byte) (Detection, []byte, error) {
+	if len(bytes.TrimSpace(src)) == 0 {
+		return Detection{}, nil, ErrEmptySource
 	}
 	if len(src) > MaxInputSize {
-		return Detection{}, ErrInputTooLarge
+		return Detection{}, nil, ErrInputTooLarge
 	}
 	s := strings.TrimSpace(string(src))
-	low := strings.ToLower(s)
-	if strings.HasPrefix(low, "https://") {
-		return Detection{Format: FormatSubscription}, nil
+	if hasPrefixFold(s, "https://") {
+		return Detection{Format: FormatSubscription}, nil, nil
 	}
-	if strings.HasPrefix(low, "http://") {
-		return Detection{Format: FormatHTTPSubscription, Reason: "subscriptions require HTTPS"}, nil
+	if hasPrefixFold(s, "http://") {
+		return Detection{Format: FormatHTTPSubscription, Reason: "subscriptions require HTTPS"}, nil, nil
 	}
 	if hasScheme(s) {
-		return Detection{Format: FormatLink}, nil
+		return Detection{Format: FormatLink}, nil, nil
 	}
 	if strings.HasPrefix(s, "{") || strings.HasPrefix(s, "[") {
 		var v any
 		if json.Unmarshal([]byte(s), &v) == nil {
-			return classifyJSON(v), nil
+			return classifyJSON(v), nil, nil
 		}
 	}
 	if strings.Contains(s, "proxies:") {
-		return Detection{Format: FormatClash}, nil
+		return Detection{Format: FormatClash}, nil, nil
 	}
 	if looksWG(s) {
-		return Detection{Format: FormatWireGuard}, nil
+		return Detection{Format: FormatWireGuard}, nil, nil
 	}
 	if b, ok := decodeBase64(s); ok && (hasScheme(string(b)) || looksList(string(b))) {
-		return Detection{Format: FormatBase64}, nil
+		return Detection{Format: FormatBase64}, b, nil
 	}
 	if looksList(s) {
-		return Detection{Format: FormatPlainList}, nil
+		return Detection{Format: FormatPlainList}, nil, nil
 	}
-	return Detection{Format: FormatUnknown, Reason: "no supported parser matched"}, ErrUnsupported
+	return Detection{Format: FormatUnknown, Reason: "no supported parser matched"}, nil, ErrUnsupported
 }
+
+// linkSchemes are the share-link URI schemes recognised by hasScheme.
+var linkSchemes = []string{"vless://", "vmess://", "trojan://", "ss://", "socks://", "socks5://", "http://", "https://", "hysteria2://", "hy2://", "tuic://", "wireguard://", "wg://"}
+
+// linkProtocols is the set of URI schemes parseLink handles directly (VMess
+// and WireGuard links have dedicated parsers).
+var linkProtocols = map[string]bool{"vless": true, "trojan": true, "ss": true, "socks": true, "socks5": true, "http": true, "https": true, "hysteria2": true, "hy2": true, "tuic": true}
+
+// linkProtocolNames maps link schemes to engine protocol names when they
+// differ.
+var linkProtocolNames = map[string]string{"ss": "shadowsocks", "socks": "socks5", "hy2": "hysteria2", "https": "http"}
+
+// linkExtraOptions are link query parameters copied verbatim into Options.
+var linkExtraOptions = []string{"mport", "pinSHA256", "pin_sha256", "obfs", "obfs-password", "obfs_password", "congestion_control", "udp_relay_mode"}
+
+// hasPrefixFold reports whether s starts with prefix, case-insensitively,
+// without copying the input the way strings.ToLower would.
+func hasPrefixFold(s, prefix string) bool {
+	return len(s) >= len(prefix) && strings.EqualFold(s[:len(prefix)], prefix)
+}
+
 func hasScheme(s string) bool {
 	for _, l := range strings.Fields(s) {
-		p := strings.ToLower(strings.TrimSpace(l))
-		for _, x := range []string{"vless://", "vmess://", "trojan://", "ss://", "socks://", "socks5://", "http://", "https://", "hysteria2://", "hy2://", "tuic://", "wireguard://", "wg://"} {
-			if strings.HasPrefix(p, x) {
+		for _, x := range linkSchemes {
+			if hasPrefixFold(l, x) {
 				return true
 			}
 		}
@@ -122,7 +149,7 @@ func hasScheme(s string) bool {
 func looksList(s string) bool {
 	n := 0
 	for _, l := range strings.Split(s, "\n") {
-		if hasScheme(strings.TrimSpace(l)) {
+		if hasScheme(l) {
 			n++
 		}
 	}
@@ -153,6 +180,12 @@ func classifyJSON(v any) Detection {
 	return Detection{}
 }
 func decodeBase64(s string) ([]byte, bool) {
+	// ':' appears in no base64 alphabet, so any input containing one (plain
+	// share links always do) can never decode; skip the cleanup copy and
+	// the four decoder attempts entirely.
+	if strings.IndexByte(s, ':') >= 0 {
+		return nil, false
+	}
 	clean := strings.Map(func(r rune) rune {
 		if r == '\r' || r == '\n' || r == ' ' || r == '\t' {
 			return -1
@@ -199,15 +232,25 @@ type WireGuardPeer struct {
 // StableKey hashes protocol, endpoint, ID, and user to identify a server across
 // imports without exposing IDs.
 func (o OutboundSpec) StableKey() string {
+	port := strconv.Itoa(int(o.Port))
 	// Exclude passwords from identity to avoid storing password hashes.
-	material := o.Protocol + "\x00" + o.Host + "\x00" + strconv.Itoa(int(o.Port)) + "\x00" + o.UUID + "\x00" + o.User
+	material := o.Protocol + "\x00" + o.Host + "\x00" + port + "\x00" + o.UUID + "\x00" + o.User
 	// Names distinguish profiles sharing an endpoint. Exclude mutable
 	// provider rules so updates preserve saved selections.
 	if o.Protocol == "xray-profile" {
 		material += "\x00" + o.DisplayName
 	}
 	h := sha256.Sum256([]byte(material))
-	return o.Protocol + ":" + o.Host + ":" + strconv.Itoa(int(o.Port)) + ":" + hex.EncodeToString(h[:8])
+	var b strings.Builder
+	b.Grow(len(o.Protocol) + len(o.Host) + len(port) + 3 + 16)
+	b.WriteString(o.Protocol)
+	b.WriteByte(':')
+	b.WriteString(o.Host)
+	b.WriteByte(':')
+	b.WriteString(port)
+	b.WriteByte(':')
+	b.WriteString(hex.EncodeToString(h[:8]))
+	return b.String()
 }
 func (o *OutboundSpec) validate() error {
 	// uint16 permits only zero as an invalid port here; larger values are
@@ -284,7 +327,7 @@ func (p LinkParser) Parse(src []byte) (ImportResult, error) {
 	if len(src) > MaxInputSize {
 		return ImportResult{}, ErrInputTooLarge
 	}
-	d, e := (ImportDetector{p.limit()}).Detect(src)
+	d, decoded, e := detect(src)
 	if e != nil && d.Format != FormatHTTPSubscription && d.Format != FormatUnknown {
 		return ImportResult{Format: d.Format}, e
 	}
@@ -294,8 +337,7 @@ func (p LinkParser) Parse(src []byte) (ImportResult, error) {
 	s := strings.TrimSpace(string(src))
 	switch d.Format {
 	case FormatBase64:
-		b, _ := decodeBase64(s)
-		s = string(b)
+		s = string(decoded)
 		d.Format = FormatPlainList
 	case FormatSIP008, FormatSingBox, FormatXray:
 		return p.parseJSON([]byte(s), d.Format)
@@ -308,7 +350,14 @@ func (p LinkParser) Parse(src []byte) (ImportResult, error) {
 }
 func (p LinkParser) parseList(s string, f Format) (ImportResult, error) {
 	r := ImportResult{Format: f}
-	seen := map[string]struct{}{}
+	// Pre-size the result and the dedup set from the line count so a large
+	// subscription does not pay repeated growth reallocation.
+	capItems := strings.Count(s, "\n") + 1
+	if capItems > p.limit() {
+		capItems = p.limit()
+	}
+	r.Servers = make([]OutboundSpec, 0, capItems)
+	seen := make(map[string]struct{}, capItems)
 	for i, l := range strings.Split(s, "\n") {
 		if len(r.Servers) >= p.limit() {
 			r.Report.Unsupported++
@@ -357,19 +406,20 @@ func parseLink(raw string) (OutboundSpec, error) {
 	if proto == "wireguard" || proto == "wg" {
 		return parseWireURL(u)
 	}
-	if !map[string]bool{"vless": true, "trojan": true, "ss": true, "socks": true, "socks5": true, "http": true, "https": true, "hysteria2": true, "hy2": true, "tuic": true}[proto] {
+	if !linkProtocols[proto] {
 		return OutboundSpec{}, ErrUnsupported
 	}
 	p, e := parsePort(u.Port())
 	if e != nil {
 		return OutboundSpec{}, e
 	}
+	q := u.Query()
 	o := OutboundSpec{Protocol: proto, Host: u.Hostname(), Port: p, Transport: "tcp", Security: "none", Options: map[string]string{}}
 	if u.User != nil {
 		o.User = u.User.Username()
 		o.Password, _ = u.User.Password()
 	}
-	for k, v := range u.Query() {
+	for k, v := range q {
 		if len(v) > 0 {
 			o.Options[k] = v[0]
 		}
@@ -384,35 +434,35 @@ func parseLink(raw string) (OutboundSpec, error) {
 			}
 		}
 		if o.Password == "" {
-			o.Password = getq(u, "password")
+			o.Password = getq(q, "password")
 		}
 	case "tuic":
 		o.UUID = o.User
 		o.Security = "tls"
 	default:
 		o.UUID = o.User
-		o.Transport = getq(u, "type", "transport")
-		o.Security = getq(u, "security")
+		o.Transport = getq(q, "type", "transport")
+		o.Security = getq(q, "security")
 		if o.Security == "" && proto == "vless" {
 			o.Security = "none"
 		}
 	}
-	o.Path = getq(u, "path")
-	o.HostHeader = getq(u, "host")
-	o.ServiceName = getq(u, "serviceName", "service_name")
-	o.Mode = getq(u, "mode")
-	o.PublicKey = getq(u, "pbk", "public-key")
-	o.ShortID = getq(u, "sid", "short-id")
-	o.SpiderX = getq(u, "spx")
-	o.ServerName = getq(u, "sni")
-	o.Fingerprint = getq(u, "fp")
-	o.Flow = getq(u, "flow")
-	o.AllowInsecure = parseBool(getq(u, "allowInsecure", "insecure", "skip-cert-verify"))
-	if a := getq(u, "alpn"); a != "" {
+	o.Path = getq(q, "path")
+	o.HostHeader = getq(q, "host")
+	o.ServiceName = getq(q, "serviceName", "service_name")
+	o.Mode = getq(q, "mode")
+	o.PublicKey = getq(q, "pbk", "public-key")
+	o.ShortID = getq(q, "sid", "short-id")
+	o.SpiderX = getq(q, "spx")
+	o.ServerName = getq(q, "sni")
+	o.Fingerprint = getq(q, "fp")
+	o.Flow = getq(q, "flow")
+	o.AllowInsecure = parseBool(getq(q, "allowInsecure", "insecure", "skip-cert-verify"))
+	if a := getq(q, "alpn"); a != "" {
 		o.ALPN = strings.Split(a, ",")
 	}
-	for _, k := range []string{"mport", "pinSHA256", "pin_sha256", "obfs", "obfs-password", "obfs_password", "congestion_control", "udp_relay_mode"} {
-		if v := getq(u, k); v != "" {
+	for _, k := range linkExtraOptions {
+		if v := getq(q, k); v != "" {
 			o.Options[k] = v
 		}
 	}
@@ -428,7 +478,7 @@ func parseLink(raw string) (OutboundSpec, error) {
 		}
 	}
 	// Normalize link schemes to engine protocol names.
-	o.Protocol = map[string]string{"ss": "shadowsocks", "socks": "socks5", "hy2": "hysteria2", "https": "http"}[proto]
+	o.Protocol = linkProtocolNames[proto]
 	if o.Protocol == "" {
 		o.Protocol = proto
 	}
@@ -444,9 +494,12 @@ func parsePort(s string) (uint16, error) {
 	}
 	return uint16(n), nil
 }
-func getq(u *url.URL, ks ...string) string {
+// getq returns the first non-empty value for the given query keys. The
+// query values are parsed once per link by the caller and passed in,
+// because re-parsing them per key dominated import CPU profiles.
+func getq(q url.Values, ks ...string) string {
 	for _, k := range ks {
-		if v := u.Query().Get(k); v != "" {
+		if v := q.Get(k); v != "" {
 			return v
 		}
 	}
@@ -486,16 +539,17 @@ func parseVMess(u *url.URL) (OutboundSpec, error) {
 		o.UUID = u.User.Username()
 		o.Password, _ = u.User.Password()
 	}
-	for k, v := range u.Query() {
+	q := u.Query()
+	for k, v := range q {
 		if len(v) > 0 {
 			o.Options[k] = v[0]
 		}
 	}
-	o.Transport = getq(u, "type", "transport")
+	o.Transport = getq(q, "type", "transport")
 	if o.Transport == "" {
 		o.Transport = "tcp"
 	}
-	o.Security = getq(u, "security")
+	o.Security = getq(q, "security")
 	if o.Security == "" {
 		o.Security = "auto"
 	}
