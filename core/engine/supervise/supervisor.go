@@ -110,6 +110,13 @@ type Config struct {
 	// able to influence the core's environment substitute an arbitrary
 	// engine executable.
 	AllowEnvBin bool
+	// AllowUnverifiedEngines skips engine digest verification when the
+	// engines directory has no readable digest manifest. Keep it false
+	// unless the operator explicitly passes --allow-unverified-engines for
+	// a manual or development layout: discovery otherwise fails closed,
+	// because a deleted or corrupted manifest must not be enough to run
+	// an arbitrary engine binary.
+	AllowUnverifiedEngines bool
 	// LocalPort is reserved before system proxy configuration. Zero selects
 	// a port per start and is suitable only when no proxy points to a fixed
 	// port.

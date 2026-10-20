@@ -83,6 +83,11 @@ type Options struct {
 	// otherwise let any process able to influence the core's environment
 	// substitute an arbitrary engine executable.
 	AllowEnvBin bool
+	// AllowUnverifiedEngines skips engine digest verification when the
+	// engines directory has no readable digest manifest. Disabled by
+	// default: discovery fails closed instead, because a deleted or
+	// corrupted manifest must not be enough to run an arbitrary engine.
+	AllowUnverifiedEngines bool
 }
 
 // App holds an initialized core. Construction opens the store, token, and
@@ -196,6 +201,7 @@ func New(ctx context.Context, opts Options) (*App, error) {
 		app.engines = registry.Discover(ctx, opts.EnginesDir, supervise.Config{
 			HomeDir: filepath.Join(opts.DataDir, "engine"), LocalPort: int(tunnelPort), Logs: center,
 			AllowEnvBin: opts.AllowEnvBin,
+			AllowUnverifiedEngines: opts.AllowUnverifiedEngines,
 		})
 		if err := app.engines.Pin(opts.Engine); err != nil {
 			return nil, err

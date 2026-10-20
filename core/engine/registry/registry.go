@@ -79,6 +79,7 @@ func Discover(ctx context.Context, enginesDir string, base supervise.Config) *Re
 		// applies to this discovery only.
 		prober := drivers[kind].prober
 		prober.AllowEnv = base.AllowEnvBin
+		prober.AllowUnverified = base.AllowUnverifiedEngines
 		b, err := prober.Discover(ctx, enginesDir)
 		if err != nil {
 			// Probe errors contain local paths; expose them only

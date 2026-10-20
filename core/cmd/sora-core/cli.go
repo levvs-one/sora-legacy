@@ -32,6 +32,7 @@ type flags struct {
 	showToken     bool
 	legacyControl bool
 	allowEnvBin   bool
+	allowUnverifiedEngines bool
 }
 
 func main() {
@@ -76,6 +77,7 @@ func run(ctx context.Context, arguments []string) error {
 	set.BoolVar(&f.showToken, "print-token", false, "print the control plane token and exit")
 	set.BoolVar(&f.legacyControl, "legacy-control", true, "serve JSON-RPC for the .NET Framework legacy client")
 	set.BoolVar(&f.allowEnvBin, "allow-env-bin", false, "honor $SORA_SINGBOX_BIN/$SORA_XRAY_BIN/$SORA_MIHOMO_BIN overrides when discovering engines; off by default because an inherited variable could substitute an arbitrary executable")
+	set.BoolVar(&f.allowUnverifiedEngines, "allow-unverified-engines", false, "run engines without digest verification when the engines directory has no readable SHA256SUMS manifest; off by default because a deleted or corrupted manifest must not be enough to run an arbitrary engine binary")
 	if err := set.Parse(arguments); err != nil {
 		return errs.Wrap(err, errs.CodeInvalidArgument, errs.KeyInvalidRequest)
 	}
@@ -94,6 +96,9 @@ func run(ctx context.Context, arguments []string) error {
 		}
 		if f.allowEnvBin {
 			arguments = append(arguments, "-allow-env-bin")
+		}
+		if f.allowUnverifiedEngines {
+			arguments = append(arguments, "-allow-unverified-engines")
 		}
 		return installService(arguments)
 	}
@@ -147,6 +152,7 @@ func run(ctx context.Context, arguments []string) error {
 		Log:           logger,
 		AllowFileKeys: f.fileKeys,
 		AllowEnvBin:   f.allowEnvBin,
+		AllowUnverifiedEngines: f.allowUnverifiedEngines,
 	}
 	app, err := New(ctx, options)
 	if err != nil {
