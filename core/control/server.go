@@ -158,6 +158,7 @@ type Fetcher interface {
 type Server struct {
 	corev1.UnimplementedCoreControlServer
 
+	dataDir     string
 	version     Version
 	auth        *Authenticator
 	sessions    *session.Manager
@@ -226,6 +227,10 @@ type Config struct {
 	// Fetcher retrieves subscriptions; nil answers that fetching is
 	// unavailable.
 	Fetcher Fetcher
+	// DataDir is the core data directory. It hosts the per-subscription
+	// override files (subscription.OverrideStore); empty disables
+	// overrides, exactly like a nil store in sora.
+	DataDir string
 }
 
 // New creates a control plane, supplying the default version when unset.
@@ -242,6 +247,7 @@ func New(cfg Config) (*Server, error) {
 		cfg.Version = Version{Major: 1, Minor: 0, MinSupportedMinor: 0}
 	}
 	server := &Server{
+		dataDir:     cfg.DataDir,
 		version:     cfg.Version,
 		auth:        cfg.Authenticator,
 		sessions:    cfg.Sessions,

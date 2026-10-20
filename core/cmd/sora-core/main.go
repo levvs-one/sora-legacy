@@ -200,7 +200,7 @@ func New(ctx context.Context, opts Options) (*App, error) {
 		}
 		app.engines = registry.Discover(ctx, opts.EnginesDir, supervise.Config{
 			HomeDir: filepath.Join(opts.DataDir, "engine"), LocalPort: int(tunnelPort), Logs: center,
-			AllowEnvBin: opts.AllowEnvBin,
+			AllowEnvBin:            opts.AllowEnvBin,
 			AllowUnverifiedEngines: opts.AllowUnverifiedEngines,
 		})
 		if err := app.engines.Pin(opts.Engine); err != nil {
@@ -273,6 +273,7 @@ func New(ctx context.Context, opts Options) (*App, error) {
 		Logs:          center,
 		About:         app.about,
 		Fetcher:       subscription.New(subscription.Options{Obfs: &fetchObfs}),
+		DataDir:       opts.DataDir,
 	})
 	if err != nil {
 		_ = store.Close()

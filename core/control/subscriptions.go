@@ -110,9 +110,10 @@ func decodeRecord(raw []byte) (*subscriptionRecord, error) {
 
 // subscriptionBook holds the subscriptions and updates them on schedule.
 type subscriptionBook struct {
-	srv     *Server
-	backoff engine.Backoff
-	now     func() time.Time
+	srv       *Server
+	backoff   engine.Backoff
+	now       func() time.Time
+	overrides *subscription.OverrideStore
 
 	mu       sync.Mutex
 	records  map[string]*subscriptionRecord
@@ -124,14 +125,15 @@ type subscriptionBook struct {
 
 func newSubscriptionBook(srv *Server) *subscriptionBook {
 	b := &subscriptionBook{
-		srv:      srv,
-		backoff:  engine.Backoff{Initial: time.Minute, Max: time.Hour, Factor: 2},
-		now:      time.Now,
-		records:  map[string]*subscriptionRecord{},
-		lists:    map[string][]*corev1.OutboundSpec{},
-		updating: map[string]bool{},
-		watchers: map[chan *corev1.SubscriptionState]struct{}{},
-		wake:     make(chan struct{}, 1),
+		srv:       srv,
+		overrides: subscription.NewOverrideStore(srv.dataDir),
+		backoff:   engine.Backoff{Initial: time.Minute, Max: time.Hour, Factor: 2},
+		now:       time.Now,
+		records:   map[string]*subscriptionRecord{},
+		lists:     map[string][]*corev1.OutboundSpec{},
+		updating:  map[string]bool{},
+		watchers:  map[chan *corev1.SubscriptionState]struct{}{},
+		wake:      make(chan struct{}, 1),
 	}
 	b.load()
 	return b
@@ -311,6 +313,13 @@ func (b *subscriptionBook) delete(id string) error {
 	}
 	if err := b.srv.secrets.Apply(nil, deletes); err != nil {
 		return err
+	}
+	// User overrides die with the subscription.
+	if b.overrides != nil {
+		if err := b.overrides.Delete(id); err != nil && b.srv.logs != nil {
+			b.srv.logs.Write(b.now(), logs.LevelWarning, logs.SourceSubscription,
+				"subscription override cleanup failed id="+id)
+		}
 	}
 	delete(b.records, id)
 	delete(b.lists, id)
@@ -546,7 +555,7 @@ func (b *subscriptionBook) stateLocked(id string) *corev1.SubscriptionState {
 	state := &corev1.SubscriptionState{
 		Settings:    settings,
 		Info:        subscriptionInfoToWire(rec.Info),
-		Outbounds:   b.lists[id],
+		Outbounds:   applySubscriptionOverride(b.lists[id], b.loadOverride(id)),
 		Updating:    b.updating[id],
 		DisplayName: displayName(rec),
 	}
