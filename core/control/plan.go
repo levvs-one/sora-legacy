@@ -134,6 +134,30 @@ func credentialDocument(spec parser.OutboundSpec) ([]byte, error) {
 			break
 		}
 	}
+	// Hysteria2/TUIC tuning (W1, ported from sora): bandwidth caps,
+	// port hopping, BBR profile, TUIC congestion/relay/heartbeat and
+	// the TUIC v4 token travel inside the credential document like
+	// the XHTTP tuning below, so no contract change is needed. Hop
+	// ports arrive as mport (official hy2 links) or ports
+	// (mihomo-style links); the first spelling present wins.
+	firstOpt := func(keys ...string) string {
+		for _, key := range keys {
+			if value := spec.Options[key]; value != "" {
+				return value
+			}
+		}
+		return ""
+	}
+	values["upmbps"] = spec.Options["upmbps"]
+	values["downmbps"] = spec.Options["downmbps"]
+	values["hop_ports"] = firstOpt("mport", "ports")
+	values["hop_interval"] = firstOpt("hop-interval", "hopinterval")
+	values["hop_interval_max"] = firstOpt("hop-interval-max", "hopintervalmax")
+	values["bbr_profile"] = firstOpt("bbr-profile", "bbr_profile")
+	values["congestion_control"] = spec.Options["congestion_control"]
+	values["udp_relay_mode"] = spec.Options["udp_relay_mode"]
+	values["heartbeat"] = spec.Options["heartbeat"]
+	values["token"] = spec.Options["token"]
 	// SIP002 plugin/plugin_opts for Shadowsocks. The raw "plugin" query
 	// key stays in Options but is never stored under that name; only the
 	// parser's canonical ss_plugin keys reach the vault.
@@ -1246,6 +1270,19 @@ func applyCredential(outbound *engine.Outbound, values map[string]string) error 
 	outbound.ObfsParam = values["obfs_param"]
 	outbound.Plugin = values["ss_plugin"]
 	outbound.PluginOpts = values["ss_plugin_opts"]
+	// Hysteria2/TUIC tuning restored from the credential document;
+	// atoiNonNegative keeps a forged document from smuggling negative
+	// tuning into the plan (hard validation is Outbound.Validate).
+	outbound.UpMbps = atoiNonNegative(values["upmbps"])
+	outbound.DownMbps = atoiNonNegative(values["downmbps"])
+	outbound.HopPorts = values["hop_ports"]
+	outbound.HopInterval = atoiNonNegative(values["hop_interval"])
+	outbound.HopIntervalMax = atoiNonNegative(values["hop_interval_max"])
+	outbound.BBRProfile = values["bbr_profile"]
+	outbound.CongestionControl = values["congestion_control"]
+	outbound.UDPRelayMode = values["udp_relay_mode"]
+	outbound.TUICHeartbeat = atoiNonNegative(values["heartbeat"])
+	outbound.Token = values["token"]
 	outbound.PublicKey = values["public_key"]
 	outbound.ShortID = values["short_id"]
 	outbound.Encryption = values["encryption"]

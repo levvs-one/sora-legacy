@@ -125,6 +125,25 @@ type proxy struct {
 	ECH     *echOpts `yaml:"ech-opts,omitempty"`
 	Reality *reality `yaml:"reality-opts,omitempty"`
 
+	// Hysteria2 bandwidth caps ("100 Mbps"): positive values switch the
+	// engine from BBR to Brutal congestion control.
+	Up   string `yaml:"up,omitempty"`
+	Down string `yaml:"down,omitempty"`
+	// Hysteria2 port hopping: ranges list ("20000-30000,40000") and the
+	// hop interval in seconds (minimum 5).
+	Ports       string `yaml:"ports,omitempty"`
+	HopInterval int    `yaml:"hop-interval,omitempty"`
+	// TUIC v4 pre-shared token; v5 authenticates with uuid+password.
+	Token string `yaml:"token,omitempty"`
+	// TUIC congestion controller ("bbr", "cubic", "new_reno") and UDP
+	// relay mode ("native", "quic").
+	CongestionController string `yaml:"congestion-controller,omitempty"`
+	UDPRelayMode         string `yaml:"udp-relay-mode,omitempty"`
+	// TUIC heartbeat (keepalive) interval in milliseconds; the plan
+	// carries seconds (engine plan TUICHeartbeat), the renderer
+	// converts from the effective value in quic_defaults.go.
+	HeartbeatInterval int `yaml:"heartbeat-interval,omitempty"`
+
 	PrivateKey string          `yaml:"private-key,omitempty"`
 	IP         string          `yaml:"ip,omitempty"`
 	IPv6       string          `yaml:"ipv6,omitempty"`

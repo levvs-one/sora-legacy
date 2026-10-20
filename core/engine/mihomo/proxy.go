@@ -73,10 +73,39 @@ func buildProxy(o engine.Outbound) (proxy, error) {
 			px.Obfs = o.Obfs
 			px.ObfsPassword = o.ObfsParam
 		}
+		// Bandwidth caps switch the engine from BBR to Brutal congestion
+		// control; zero means auto.
+		if o.UpMbps > 0 {
+			px.Up = strconv.Itoa(o.UpMbps) + " Mbps"
+		}
+		if o.DownMbps > 0 {
+			px.Down = strconv.Itoa(o.DownMbps) + " Mbps"
+		}
+		if o.HopPorts != "" {
+			px.Ports = o.HopPorts
+		}
+		if o.HopInterval > 0 {
+			px.HopInterval = o.HopInterval
+		}
 	case engine.ProtocolTUIC:
 		px.Type = "tuic"
 		px.UUID = o.UUID
 		px.Password = o.Password
+		// v4 servers authenticate with a token instead of uuid+password.
+		if o.Token != "" {
+			px.Token = o.Token
+		}
+		// The effective congestion controller always renders (the
+		// plan value, or DefaultTUICCongestion): mihomo silently
+		// accepts an omitted or unknown controller and falls back
+		// to its own default, so spelling the effective value is
+		// what keeps a plan's controller identical across engines.
+		px.CongestionController = o.EffectiveTUICCongestion()
+		if o.UDPRelayMode != "" {
+			px.UDPRelayMode = o.UDPRelayMode
+		}
+		// TUIC heartbeat in mihomo's spelling: milliseconds.
+		px.HeartbeatInterval = o.EffectiveTUICHeartbeatSeconds() * 1000
 	case engine.ProtocolAnyTLS:
 		// AnyTLS mandates TLS on the wire; the plan carries the SNI and
 		// the uTLS client fingerprint in TLS. Stream transports do not

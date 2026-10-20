@@ -236,12 +236,62 @@ func (r *renderer) outbound(o engine.Outbound) (obj, error) {
 		}
 	case engine.ProtocolHysteria2:
 		out.set("type", "hysteria2").set("password", o.Password)
+		// Bandwidth caps switch the engine from BBR to Hysteria (Brutal)
+		// congestion control; zero means auto (BBR).
+		if o.UpMbps > 0 {
+			out["up_mbps"] = o.UpMbps
+		}
+		if o.DownMbps > 0 {
+			out["down_mbps"] = o.DownMbps
+		}
+		// Port hopping: server_ports overrides server_port (sing-box
+		// >= 1.11 ignores server_port when server_ports is set). The
+		// plan spec is share-link spelling ("20000-30000,40000");
+		// sing-box wants colon ranges with an explicit upper bound
+		// ("20000:30000", "40000:40000") and rejects the plan
+		// spelling at config load. SingBoxHopPorts is the single
+		// translation.
+		if o.HopPorts != "" {
+			ports, err := engine.SingBoxHopPorts(o.HopPorts)
+			if err != nil {
+				return nil, fmt.Errorf("singbox: outbound %s: %w", o.ID, err)
+			}
+			out["server_ports"] = ports
+		}
+		if o.HopInterval > 0 {
+			out["hop_interval"] = strconv.Itoa(o.HopInterval) + "s"
+		}
+		// Randomized hop interval (sing-box 1.14, Hysteria 2.8 server
+		// side): hop_interval_max >= hop_interval is enforced by plan
+		// validation; only a valid range reaches the render.
+		if o.HopIntervalMax > 0 {
+			out["hop_interval_max"] = strconv.Itoa(o.HopIntervalMax) + "s"
+		}
+		// BBR congestion profile (sing-box 1.14 bbr_profile). Emitted
+		// only when BBR is actually in charge: with bandwidth caps the
+		// client runs Brutal instead and the profile would be dead text.
+		if o.BBRProfile != "" && o.UpMbps == 0 && o.DownMbps == 0 {
+			out["bbr_profile"] = o.BBRProfile
+		}
 		if o.Obfs != "" {
+			// sing-box 1.14 Hysteria2 obfs types: salamander and gecko.
 			out["obfs"] = obj{"type": o.Obfs, "password": o.ObfsParam}
 		}
 		needsTLS = true
 	case engine.ProtocolTUIC:
-		out.set("type", "tuic").set("uuid", o.UUID).set("password", o.Password).set("congestion_control", "bbr")
+		tuic := out.set("type", "tuic").set("uuid", o.UUID).set("password", o.Password)
+		// The effective congestion controller always renders (the
+		// plan value, or DefaultTUICCongestion from quic_defaults.go):
+		// sing-box and mihomo then run the same controller for the
+		// same plan instead of each falling back to its own default.
+		tuic.set("congestion_control", o.EffectiveTUICCongestion())
+		if o.UDPRelayMode != "" {
+			tuic.set("udp_relay_mode", o.UDPRelayMode)
+		}
+		// Heartbeat (TUIC keepalive): sing-box spells it as a
+		// duration string; the effective seconds come from the plan
+		// or DefaultTUICHeartbeatSeconds (quic_defaults.go).
+		tuic.set("heartbeat", strconv.Itoa(o.EffectiveTUICHeartbeatSeconds())+"s")
 		needsTLS = true
 	case engine.ProtocolAnyTLS:
 		out.set("type", "anytls").set("password", o.Password)

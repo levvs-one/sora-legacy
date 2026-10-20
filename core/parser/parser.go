@@ -128,7 +128,7 @@ var linkProtocols = map[string]bool{"vless": true, "trojan": true, "ss": true, "
 var linkProtocolNames = map[string]string{"ss": "shadowsocks", "socks": "socks5", "hy2": "hysteria2", "https": "http"}
 
 // linkExtraOptions are link query parameters copied verbatim into Options.
-var linkExtraOptions = []string{"mport", "pinSHA256", "pin_sha256", "obfs", "obfs-password", "obfs_password", "congestion_control", "udp_relay_mode"}
+var linkExtraOptions = []string{"mport", "pinSHA256", "pin_sha256", "obfs", "obfs-password", "obfs_password", "congestion_control", "udp_relay_mode", "heartbeat", "upmbps", "downmbps", "hop-interval", "hopinterval", "hop-interval-max", "hopintervalmax", "bbr-profile", "bbr_profile", "ports", "token"}
 
 // hasPrefixFold reports whether s starts with prefix, case-insensitively,
 // without copying the input the way strings.ToLower would.

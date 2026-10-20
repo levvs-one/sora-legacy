@@ -434,7 +434,25 @@ func xhttpDownlinkFingerprint(o engine.Outbound) (string, error) {
 }
 
 func (*renderer) hysteria(o engine.Outbound, tag string) obj {
+	// Xray's "hysteria" outbound is the native Hysteria2 implementation:
+	// upstream requires settings.version == 2 and rejects anything else,
+	// so there is no legacy v1 mapping here.
+	// https://xtls.github.io/en/config/outbounds/hysteria.html
+	// Salamander obfs is refused in outbound() because Xray's hysteria
+	// transport config exposes no obfs option.
+	// Bandwidth hints switch the client from BBR to Brutal congestion
+	// control; zero means auto (BBR). The hints live in hysteriaSettings,
+	// the transport config Xray documents for brutal:
+	// https://xtls.github.io/en/config/outbounds/hysteria.html
 	hy := obj{"version": 2, "auth": o.Password}
+	if o.UpMbps > 0 {
+		hy["up_mbps"] = o.UpMbps
+	}
+	if o.DownMbps > 0 {
+		hy["down_mbps"] = o.DownMbps
+	}
+	// Port hopping has no Xray spelling: plans that hop never reach this
+	// renderer (FeatureHy2PortHop in the engine catalog).
 	tls := obj{}.set("serverName", o.TLS.ServerName).set("alpn", o.TLS.ALPN)
 	stream := obj{"network": "hysteria", "hysteriaSettings": hy, "security": "tls", "tlsSettings": tls}
 	return obj{
