@@ -585,6 +585,9 @@ func parseVMess(u *url.URL) (OutboundSpec, error) {
 	if o.Transport == "" {
 		o.Transport = "tcp"
 	}
+	if aid := getq(q, "aid", "alterId"); aid != "" && aid != "0" {
+		return OutboundSpec{}, fmt.Errorf("%w: vmess alterId %q is legacy pre-AEAD; sora renders AEAD (alterId 0) only", ErrUnsupported, aid)
+	}
 	o.Security = getq(q, "security")
 	if o.Security == "" {
 		o.Security = "auto"
@@ -639,6 +642,16 @@ func mapJSONSpec(m map[string]any, fallback string) (OutboundSpec, error) {
 		o.DisplayName = stringValue(m["remarks"])
 	}
 	o.Security = stringValue(m["security"])
+	if o.Protocol == "vmess" {
+		// sing-box-shaped VMess documents spell it alter_id; both keys
+		// are legacy pre-AEAD when non-zero (see checkVMessAlterID).
+		if err := checkVMessAlterID(m["aid"]); err != nil {
+			return OutboundSpec{}, err
+		}
+		if err := checkVMessAlterID(m["alter_id"]); err != nil {
+			return OutboundSpec{}, err
+		}
+	}
 	for k, v := range m {
 		if b, err := json.Marshal(v); err == nil {
 			o.Options[k] = string(b)
@@ -646,6 +659,26 @@ func mapJSONSpec(m map[string]any, fallback string) (OutboundSpec, error) {
 	}
 	return o, o.validate()
 }
+
+// checkVMessAlterID refuses a non-zero VMess alterId in any of its
+// loosely typed forms (JSON number, numeric string). Zero, "0" and an
+// absent value are AEAD and pass.
+func checkVMessAlterID(v any) error {
+	if v == nil {
+		return nil
+	}
+	if s, ok := v.(string); ok {
+		if s == "" || s == "0" {
+			return nil
+		}
+		return fmt.Errorf("%w: vmess alterId %q is legacy pre-AEAD; sora renders AEAD (alterId 0) only", ErrUnsupported, s)
+	}
+	if n := number(v); n != 0 {
+		return fmt.Errorf("%w: vmess alterId %d is legacy pre-AEAD; sora renders AEAD (alterId 0) only", ErrUnsupported, n)
+	}
+	return nil
+}
+
 func stringValue(v any) string {
 	if s, ok := v.(string); ok {
 		return s
