@@ -113,6 +113,260 @@ func TestShadowsocksPluginSurvivesTheVaultFromSingBoxJSON(t *testing.T) {
 }
 
 
+// importedPlan follows one parsed server through the credential vault
+// into an engine plan — the ParseImport + planFromProto path a client
+// takes — and requires the resulting plan to validate.
+func importedPlan(t *testing.T, result parser.ImportResult) (*engine.Plan, *corev1.OutboundSpec) {
+	t.Helper()
+	if len(result.Servers) != 1 {
+		t.Fatalf("Parse produced %d servers, want 1: %+v", len(result.Servers), result.Report)
+	}
+	document, err := credentialDocument(result.Servers[0])
+	if err != nil {
+		t.Fatalf("credentialDocument: %v", err)
+	}
+	wire := outboundToProto(result.Servers[0], "vault:blob")
+	in := &corev1.SessionPlan{
+		TunnelMode: corev1.TunnelMode_TUNNEL_MODE_APPLICATION,
+		Outbounds:  []*corev1.OutboundSpec{wire},
+	}
+	plan, err := planFromProto(in, "s", mapResolver{data: map[string][]byte{"vault:blob": document}})
+	if err != nil {
+		t.Fatalf("planFromProto: %v", err)
+	}
+	if err := plan.Validate(); err != nil {
+		t.Fatalf("plan.Validate: %v", err)
+	}
+	return plan, wire
+}
+
+// TestImportedBlobsSurviveToThePlan pins S5-SP6: sing-box JSON and
+// Clash YAML imports carry REALITY, TLS and stream-transport settings
+// only as raw blobs in the spec's Options, and the conversion into the
+// plan must extract them into the typed fields. Before the fix a
+// REALITY server from such a subscription reached the plan with no
+// public key and silently ran without REALITY.
+func TestImportedBlobsSurviveToThePlan(t *testing.T) {
+	const (
+		uuid = "b831381d-6324-4d53-ad4f-8cda48b30811"
+		pbk  = "Z84J2IelR9ch3k8VtlVhhs5ycBUlXA7wHBWcBrjqnAw"
+		sid  = "6ba85179e30d4fc2"
+	)
+	checkRealityWS := func(t *testing.T, wire *corev1.OutboundSpec, o engine.Outbound) {
+		t.Helper()
+		if wire.Transport != "ws" || wire.Security != "reality" {
+			t.Errorf("wire transport/security = %q/%q, want ws/reality", wire.Transport, wire.Security)
+		}
+		if !o.TLS.Reality || o.TLS.RealityPublicKey != pbk || o.TLS.RealityShortID != sid {
+			t.Errorf("REALITY lost on the way to the engine: %+v", o.TLS)
+		}
+		if o.TLS.ServerName != "www.example.com" {
+			t.Errorf("server name = %q, want www.example.com", o.TLS.ServerName)
+		}
+		if o.Transport.Type != "ws" || o.Transport.Path != "/ws-path" || o.Transport.Host != "cdn.example.com" {
+			t.Errorf("transport lost on the way to the engine: %+v", o.Transport)
+		}
+		if o.Transport.Headers["Host"] != "cdn.example.com" {
+			t.Errorf("transport headers = %v, want the ws Host header", o.Transport.Headers)
+		}
+		if o.UUID != uuid || o.Flow != "xtls-rprx-vision" {
+			t.Errorf("uuid/flow = %q/%q", o.UUID, o.Flow)
+		}
+	}
+	for _, tc := range []struct {
+		name  string
+		src   string
+		check func(t *testing.T, wire *corev1.OutboundSpec, o engine.Outbound)
+	}{
+		{
+			name: "sing-box vless reality ws",
+			src: `{"outbounds":[{"type":"vless","tag":"sb-reality","server":"edge.example.com","server_port":443,` +
+				`"uuid":"` + uuid + `","flow":"xtls-rprx-vision",` +
+				`"tls":{"enabled":true,"server_name":"www.example.com","reality":{"enabled":true,"public_key":"` + pbk + `","short_id":"` + sid + `"}},` +
+				`"transport":{"type":"ws","path":"/ws-path","headers":{"Host":"cdn.example.com"}}}]}`,
+			check: checkRealityWS,
+		},
+		{
+			name: "clash vless reality ws",
+			src: "proxies:\n" +
+				"  - name: clash-reality\n    type: vless\n    server: edge.example.com\n    port: 443\n" +
+				"    uuid: " + uuid + "\n    network: ws\n    tls: true\n    servername: www.example.com\n" +
+				"    reality-opts: {public-key: " + pbk + ", short-id: " + sid + "}\n" +
+				"    ws-opts: {path: /ws-path, headers: {Host: cdn.example.com}}\n    flow: xtls-rprx-vision\n",
+			check: checkRealityWS,
+		},
+		{
+			name: "sing-box vless grpc tls",
+			src: `{"outbounds":[{"type":"vless","tag":"sb-grpc","server":"grpc.example.com","server_port":443,` +
+				`"uuid":"` + uuid + `","tls":{"enabled":true,"server_name":"grpc.example.com"},` +
+				`"transport":{"type":"grpc","service_name":"grpc-service"}}]}`,
+			check: func(t *testing.T, wire *corev1.OutboundSpec, o engine.Outbound) {
+				t.Helper()
+				if wire.Transport != "grpc" || wire.Security != "tls" {
+					t.Errorf("wire transport/security = %q/%q, want grpc/tls", wire.Transport, wire.Security)
+				}
+				if o.Transport.Type != "grpc" || o.Transport.Service != "grpc-service" {
+					t.Errorf("grpc transport lost on the way to the engine: %+v", o.Transport)
+				}
+				if !o.TLS.Enabled || o.TLS.Reality || o.TLS.ServerName != "grpc.example.com" {
+					t.Errorf("tls = %+v, want plain TLS for grpc.example.com", o.TLS)
+				}
+			},
+		},
+		{
+			name: "clash vless grpc tls",
+			src: "proxies:\n" +
+				"  - name: clash-grpc\n    type: vless\n    server: grpc.example.com\n    port: 443\n" +
+				"    uuid: " + uuid + "\n    network: grpc\n    tls: true\n    servername: grpc.example.com\n" +
+				"    grpc-opts: {grpc-service-name: grpc-service}\n",
+			check: func(t *testing.T, wire *corev1.OutboundSpec, o engine.Outbound) {
+				t.Helper()
+				if o.Transport.Type != "grpc" || o.Transport.Service != "grpc-service" {
+					t.Errorf("grpc transport lost on the way to the engine: %+v", o.Transport)
+				}
+				if !o.TLS.Enabled || o.TLS.ServerName != "grpc.example.com" {
+					t.Errorf("tls = %+v, want TLS for grpc.example.com", o.TLS)
+				}
+			},
+		},
+		{
+			name: "clash trojan ws",
+			src: "proxies:\n" +
+				"  - name: clash-trojan\n    type: trojan\n    server: tj.example.com\n    port: 443\n" +
+				"    password: secret-pass\n    network: ws\n    sni: sni.example.com\n" +
+				"    ws-opts: {path: /tj, headers: {Host: tjcdn.example.com}}\n",
+			check: func(t *testing.T, wire *corev1.OutboundSpec, o engine.Outbound) {
+				t.Helper()
+				if o.Password != "secret-pass" {
+					t.Errorf("password = %q", o.Password)
+				}
+				if o.TLS.ServerName != "sni.example.com" {
+					t.Errorf("server name = %q, want the trojan sni", o.TLS.ServerName)
+				}
+				if o.Transport.Type != "ws" || o.Transport.Path != "/tj" || o.Transport.Host != "tjcdn.example.com" {
+					t.Errorf("transport lost on the way to the engine: %+v", o.Transport)
+				}
+			},
+		},
+		{
+			name: "sing-box trojan tls ws",
+			src: `{"outbounds":[{"type":"trojan","tag":"sb-trojan","server":"tj.example.com","server_port":443,` +
+				`"password":"secret-pass","tls":{"enabled":true,"server_name":"sni.example.com"},` +
+				`"transport":{"type":"ws","path":"/tj","headers":{"Host":"tjcdn.example.com"}}}]}`,
+			check: func(t *testing.T, wire *corev1.OutboundSpec, o engine.Outbound) {
+				t.Helper()
+				if wire.Security != "tls" || o.Password != "secret-pass" {
+					t.Errorf("wire security/password = %q/%q, want tls and the trojan password", wire.Security, o.Password)
+				}
+				if !o.TLS.Enabled || o.TLS.ServerName != "sni.example.com" {
+					t.Errorf("tls = %+v, want TLS for sni.example.com", o.TLS)
+				}
+				if o.Transport.Type != "ws" || o.Transport.Path != "/tj" || o.Transport.Host != "tjcdn.example.com" {
+					t.Errorf("transport lost on the way to the engine: %+v", o.Transport)
+				}
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := parser.LinkParser{}.Parse([]byte(tc.src))
+			if err != nil {
+				t.Fatalf("Parse: %v", err)
+			}
+			plan, wire := importedPlan(t, result)
+			tc.check(t, wire, plan.Outbounds[0])
+		})
+	}
+}
+
+// TestImportedBlobsFailClosed locks the partial-blob behaviour of
+// S5-SP6: a blob that claims REALITY without its public key, or that
+// does not parse into the shape the conversion consumes, fails the
+// credential document with invalid_argument instead of storing a
+// silently half-configured REALITY.
+func TestImportedBlobsFailClosed(t *testing.T) {
+	const uuid = "b831381d-6324-4d53-ad4f-8cda48b30811"
+	for _, tc := range []struct {
+		name string
+		src  string
+		spec parser.OutboundSpec
+	}{
+		{
+			name: "sing-box reality without a public key",
+			src: `{"outbounds":[{"type":"vless","tag":"sb-broken","server":"edge.example.com","server_port":443,` +
+				`"uuid":"` + uuid + `","tls":{"enabled":true,"reality":{"enabled":true,"short_id":"6ba85179e30d4fc2"}}}]}`,
+		},
+		{
+			name: "clash reality-opts without a public key",
+			src: "proxies:\n" +
+				"  - name: clash-broken\n    type: vless\n    server: edge.example.com\n    port: 443\n" +
+				"    uuid: " + uuid + "\n    tls: true\n    reality-opts: {short-id: 6ba85179e30d4fc2}\n",
+		},
+		{
+			name: "tls blob is not readable JSON",
+			spec: parser.OutboundSpec{Protocol: "vless", Host: "edge.example.com", Port: 443, UUID: uuid,
+				Options: map[string]string{"tls": `{"reality":`}},
+		},
+		{
+			name: "reality public key is not a string",
+			spec: parser.OutboundSpec{Protocol: "vless", Host: "edge.example.com", Port: 443, UUID: uuid,
+				Options: map[string]string{"reality-opts": `{"public-key":123}`}},
+		},
+		{
+			name: "ws-opts is not an object",
+			spec: parser.OutboundSpec{Protocol: "vless", Host: "edge.example.com", Port: 443, UUID: uuid,
+				Options: map[string]string{"ws-opts": `"just-a-string"`}},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			spec := tc.spec
+			if tc.src != "" {
+				result, err := parser.LinkParser{}.Parse([]byte(tc.src))
+				if err != nil || len(result.Servers) != 1 {
+					t.Fatalf("Parse = %+v, %v", result, err)
+				}
+				spec = result.Servers[0]
+			}
+			if _, err := credentialDocument(spec); err == nil {
+				t.Fatal("a partial or broken blob must fail the credential document")
+			} else if errs.CodeOf(err) != errs.CodeInvalidArgument {
+				t.Fatalf("credentialDocument code = %q, want invalid_argument (%v)", errs.CodeOf(err), err)
+			}
+		})
+	}
+}
+
+// TestXrayProfileRealityIsNotABlobClaim is the positive control for
+// the fail-closed check above: an Xray profile's security=reality
+// label describes the profile document, whose REALITY settings live
+// inside it — it is not a sing-box/Clash blob claim and must keep
+// importing without a flat public key.
+func TestXrayProfileRealityIsNotABlobClaim(t *testing.T) {
+	payload := `{"remarks":"Edge","outbounds":[{"protocol":"vless","settings":{"vnext":[{"address":"edge.example.com","port":443,"users":[{"id":"b831381d-6324-4d53-ad4f-8cda48b30811"}]}]},"streamSettings":{"network":"xhttp","security":"reality"}},{"protocol":"freedom"}]}`
+	result, err := parser.LinkParser{}.Parse([]byte(payload))
+	if err != nil || len(result.Servers) != 1 {
+		t.Fatalf("Parse = %+v, %v", result, err)
+	}
+	if _, err := credentialDocument(result.Servers[0]); err != nil {
+		t.Fatalf("an Xray profile must not fail blob extraction: %v", err)
+	}
+}
+
+// TestBrokenHeadersFailClosed: a stored transport headers document
+// that does not parse must fail the credential like the peers
+// document does, not silently drop the headers.
+func TestBrokenHeadersFailClosed(t *testing.T) {
+	var o engine.Outbound
+	if err := applyCredential(&o, map[string]string{"headers": "not json"}); err == nil {
+		t.Fatal("a broken headers document must fail the credential")
+	}
+	if err := applyCredential(&o, map[string]string{"headers": `{"Host":"cdn.example.com"}`}); err != nil {
+		t.Fatalf("a valid headers document must be accepted: %v", err)
+	}
+	if o.Transport.Headers["Host"] != "cdn.example.com" {
+		t.Fatalf("headers = %+v, want the stored Host header", o.Transport.Headers)
+	}
+}
+
 func TestRuleDestinationsFollowTheXrayVocabulary(t *testing.T) {
 	for destination, want := range map[string]engine.Rule{
 		"domain:example.com": {Type: engine.RuleDomainSuffix, Value: "example.com"},
