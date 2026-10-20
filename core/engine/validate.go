@@ -7,6 +7,7 @@ import (
 	"net"
 	"regexp"
 	"slices"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -47,6 +48,21 @@ func (o Outbound) Secrets() []string {
 	if o.Encryption != "none" {
 		candidates = append(candidates, o.Encryption)
 	}
+	// A WebSocket/XHTTP path and custom header values are routinely
+	// used as bearer tokens by providers ("secret path" deployments);
+	// they were registered nowhere, so a dial error echoing the
+	// request line or headers leaked them (CENSOR-LEAK in sora,
+	// REVIEW-SP45 §6 here). Header values are taken in sorted key
+	// order so the list is deterministic.
+	candidates = append(candidates, o.Transport.Path)
+	headerKeys := make([]string, 0, len(o.Transport.Headers))
+	for k := range o.Transport.Headers {
+		headerKeys = append(headerKeys, k)
+	}
+	sort.Strings(headerKeys)
+	for _, k := range headerKeys {
+		candidates = append(candidates, o.Transport.Headers[k])
+	}
 	for _, p := range o.Peers {
 		candidates = append(candidates, p.PreSharedKey)
 	}
@@ -86,6 +102,17 @@ func (o Outbound) Identifiers() []string {
 		out = append(out, o.TLS.SpiderX)
 	}
 	out = append(out, o.Name)
+	// The transport's fronting host and gRPC service name identify
+	// the provider's infrastructure in the same sense as the server
+	// and SNI above — the host is the fronting domain of exactly the
+	// class the download address below was added for — so both join
+	// the redaction set (REVIEW-SP45 §6, ported from sora).
+	if o.Transport.Host != "" {
+		out = append(out, o.Transport.Host)
+	}
+	if o.Transport.Service != "" {
+		out = append(out, o.Transport.Service)
+	}
 	// The XHTTP download split names a second server: it identifies
 	// the connection exactly like the uplink address does, so it joins
 	// the redaction set (S5-SP4, ported from sora).
@@ -95,6 +122,11 @@ func (o Outbound) Identifiers() []string {
 			out = append(out, net.JoinHostPort(o.Transport.DownloadAddress, strconv.Itoa(int(o.Transport.DownloadPort))))
 		}
 	}
+	// An Xray profile carries its own server addresses, SNI names and
+	// REALITY dest inside the profile JSON; without extracting them
+	// here they were registered with no redactor at all (CENSOR-LEAK
+	// in sora, ported with profileIdentifiers).
+	out = append(out, profileIdentifiers(o.Profile)...)
 	return out
 }
 
