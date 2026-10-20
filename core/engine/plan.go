@@ -72,11 +72,11 @@ type TLS struct {
 // Transport holds the stream transport of an outbound.
 type Transport struct {
 	// Type is tcp, ws, grpc, h2, httpupgrade or xhttp.
-	Type        string
-	Path        string
-	Host        string
-	Service     string
-	Headers     map[string]string
+	Type    string
+	Path    string
+	Host    string
+	Service string
+	Headers map[string]string
 	// Prefix is reserved: no renderer consumes it.
 	Prefix string
 	// IdleTimeout is reserved: no renderer consumes it.
@@ -137,10 +137,15 @@ type Outbound struct {
 	// carry traffic.
 	Addresses []string
 
-	// Tags come from subscriptions and drive grouping in the interface.
-	Tags         []string
-	CountryCode  string
-	ProviderID   string
+	// Tags is reserved: no renderer or grouping code consumes it.
+	Tags []string
+	// CountryCode is reserved: the parser computes it on its own spec
+	// type; nothing copies it onto the plan.
+	CountryCode string
+	// ProviderID is reserved: no renderer consumes it.
+	ProviderID string
+	// OriginalLink is reserved: it appears only in the secret-candidate
+	// list of Outbound.Secrets and is never assigned.
 	OriginalLink string
 }
 
@@ -156,8 +161,10 @@ type Group struct {
 	Hidden    bool
 	Icon      string
 	Provider  string
-	Include   []string
-	Exclude   []string
+	// Include is reserved: no renderer consumes it.
+	Include []string
+	// Exclude is reserved: no renderer consumes it.
+	Exclude []string
 }
 
 // RuleType is a rule matcher as named in the sora.core.v1 contract.
@@ -310,13 +317,16 @@ type Fragment struct {
 
 // Options configures engine-wide plan settings.
 type Options struct {
-	LogLevel       string
-	Mode           string // rule, global, direct
-	UnifiedDelay   bool
-	FindProcess    bool
-	GeoData        bool
-	AllowLAN       bool
-	IPv6           bool
+	LogLevel string
+	Mode     string // rule, global, direct
+	// UnifiedDelay is reserved: the mihomo renderer enables unified-delay
+	// unconditionally; nothing sets or reads this field.
+	UnifiedDelay bool
+	FindProcess  bool
+	GeoData      bool
+	AllowLAN     bool
+	IPv6         bool
+	// ProfileStorage is reserved: no renderer consumes it.
 	ProfileStorage bool
 	TestURL        string
 	GeoSiteURL     string
