@@ -211,6 +211,18 @@ func (r *renderer) outbound(o engine.Outbound) (obj, error) {
 		server["password"] = o.Password
 		settings = obj{"servers": []obj{server}}
 	case engine.ProtocolShadowsocks:
+		// Xray has no SIP002 plugin support at all and its config
+		// loader silently ignores unknown keys: rendering the
+		// outbound without its plugin (or its legacy simple-obfs
+		// mapping) would break the plan's promise silently, so
+		// refuse here; selection (catalog Missing, same data)
+		// refuses earlier (SP3b).
+		if o.Plugin != "" {
+			return nil, fmt.Errorf("xray: shadowsocks outbound %s uses plugin %q, which Xray does not implement: refusing to render it unobfuscated", o.ID, o.Plugin)
+		}
+		if o.Obfs != "" {
+			return nil, fmt.Errorf("xray: shadowsocks outbound %s uses obfs %q, which Xray does not implement for shadowsocks: refusing to render it unobfuscated", o.ID, o.Obfs)
+		}
 		server["method"], server["password"] = orDefault(o.Cipher, "aes-256-gcm"), o.Password
 		settings = obj{"servers": []obj{server}}
 	case engine.ProtocolSOCKS5, engine.ProtocolHTTP:

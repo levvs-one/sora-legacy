@@ -1,6 +1,7 @@
 package singbox
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/levvs-one/sora-client/core/engine"
@@ -53,5 +54,44 @@ func TestRenderShadowsocksPlugin(t *testing.T) {
 	ob = ssPluginOutbound(t, render(t, p))
 	if ob["plugin"] != "obfs-local" || ob["plugin_opts"] != "obfs=tls;obfs-host=example.com" {
 		t.Fatalf("explicit obfs-local plugin must render verbatim, got %v", ob)
+	}
+}
+
+// TestRenderShadowsocksPluginFailClosed pins SP3b/F3 for sing-box:
+// plugins that need an external binary (gost-plugin, shadow-tls) and
+// any unknown name are refused at render with the plugin named,
+// instead of rendering verbatim into a config the engine would
+// reject with a bare FATAL at start.
+func TestRenderShadowsocksPluginFailClosed(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		plugin string
+		opts   string
+	}{
+		{"gost-plugin", "gost-plugin", "host=example.com"},
+		{"shadow-tls", "shadow-tls", "host=example.com;password=pw"},
+		{"unknown", "unknown-xyz", "foo=bar"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			p := enginetest.Plan(engine.ProtocolShadowsocks)
+			p.Outbounds[0].Plugin = tc.plugin
+			p.Outbounds[0].PluginOpts = tc.opts
+			if _, err := Render(p, testRuntime); err == nil || !strings.Contains(err.Error(), "plugin binary sora does not ship") {
+				t.Fatalf("Render = %v, want fail-closed error naming the unshipped plugin binary", err)
+			}
+		})
+	}
+}
+
+// TestRenderPluginOptsCanonicalOrder pins SP3b: the same plugin
+// option set renders byte-identically however the import spelled it,
+// because sing-box renders CanonicalSSPluginOpts (schema order).
+func TestRenderPluginOptsCanonicalOrder(t *testing.T) {
+	p := enginetest.Plan(engine.ProtocolShadowsocks)
+	p.Outbounds[0].Plugin = "v2ray-plugin"
+	p.Outbounds[0].PluginOpts = "path=/ws;host=example.com;tls"
+	ob := ssPluginOutbound(t, render(t, p))
+	if ob["plugin_opts"] != "tls;host=example.com;path=/ws" {
+		t.Fatalf("plugin_opts = %v, want canonical schema order", ob["plugin_opts"])
 	}
 }

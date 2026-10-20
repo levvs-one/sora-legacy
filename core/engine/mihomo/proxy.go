@@ -32,8 +32,20 @@ func buildProxy(o engine.Outbound) (proxy, error) {
 		if o.Plugin != "" {
 			// An explicit SIP002 plugin goes through mihomo's plugin
 			// path; the legacy Obfs mapping below stays for the native
-			// simple-obfs fields.
-			px.SSPlugin = o.Plugin
+			// simple-obfs fields. The plugin NAME must be translated:
+			// mihomo's adapter matches its own spellings ("obfs", not
+			// the SIP002 binary name "obfs-local"; "restls", not
+			// "restls-plugin") and silently ignores any other name —
+			// the outbound would run unobfuscated (SP3b, read from the
+			// pinned adapter/outbound/shadowsocks.go).
+			spec := engine.SSPluginByName(o.Plugin)
+			if spec == nil || !engine.SupportsSSPlugin(engine.KindMihomo, o.Plugin) {
+				return proxy{}, fmt.Errorf("mihomo: shadowsocks outbound %s uses plugin %q, which mihomo does not implement", o.ID, o.Plugin)
+			}
+			px.SSPlugin = spec.MihomoName
+			if px.SSPlugin == "" {
+				px.SSPlugin = spec.Name
+			}
 			if opts := ssPluginOpts(o.Plugin, o.PluginOpts); len(opts) > 0 {
 				px.SSPluginOpts = opts
 			}
@@ -262,7 +274,8 @@ func applyTLS(px *proxy, o engine.Outbound) error {
 // ssPluginOpts translates a SIP002 plugin option string ("k=v;k;flag")
 // into mihomo's plugin-opts map. obfs-local and v2ray-plugin get their
 // native key names; anything else passes through generically and mihomo
-// validates it (fail-closed on unknown plugins).
+// validates it (fail-closed on unknown plugins — buildProxy refuses a
+// plugin the catalog does not carry on mihomo before this is called).
 func ssPluginOpts(plugin, opts string) map[string]any {
 	raw := map[string]string{}
 	for _, part := range strings.Split(opts, ";") {
@@ -283,7 +296,11 @@ func ssPluginOpts(plugin, opts string) map[string]any {
 			out["host"] = h
 		}
 		return out
-	case "v2ray-plugin":
+	case "v2ray-plugin", "gost-plugin":
+		// gost-plugin's mihomo option shape mirrors v2ray-plugin's
+		// (its adapter decodes the same fields and likewise requires
+		// mode "websocket"); without the shared case it fell into the
+		// generic passthrough and never got the mandatory mode.
 		out := map[string]any{"mode": "websocket"}
 		for k, v := range raw {
 			switch k {

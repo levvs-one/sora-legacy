@@ -197,6 +197,24 @@ func (c Capabilities) Missing(p *Plan) []string {
 			}
 		}
 	}
+	// Shadowsocks plugin support is per-engine measured data
+	// (ss_plugin.go), not a protocol-level claim: a plan whose plugin
+	// this engine's pinned build does not carry must not be routed
+	// here — the engine would refuse the config at load or, worse,
+	// silently run without the plugin (SP3b).
+	for _, o := range p.Outbounds {
+		if o.Protocol != ProtocolShadowsocks {
+			continue
+		}
+		if o.Plugin != "" && !SupportsSSPlugin(c.Kind, o.Plugin) {
+			missing = append(missing, "shadowsocks plugin "+o.Plugin)
+			break
+		}
+		if o.Plugin == "" && o.Obfs != "" && !SupportsSSPlugin(c.Kind, "") {
+			missing = append(missing, "shadowsocks obfs (simple-obfs)")
+			break
+		}
+	}
 	for proto := range p.Protocols() {
 		if !c.SupportsProtocol(proto) {
 			missing = append(missing, "protocol "+string(proto))

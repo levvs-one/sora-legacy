@@ -205,6 +205,15 @@ func (r *renderer) outbound(o engine.Outbound) (obj, error) {
 		out.set("type", "trojan").set("password", o.Password)
 		needsTLS = true
 	case engine.ProtocolShadowsocks:
+		// Fail closed on plugins the pinned build cannot resolve
+		// (measured in sora, CENSOR-P4): an external plugin binary
+		// that does not ship, or a name sing-box does not know, dies
+		// here with the plan context instead of as a bare engine
+		// FATAL at start. Selection refuses the same facts earlier
+		// (catalog.go).
+		if o.Plugin != "" && !engine.SupportsSSPlugin(engine.KindSingBox, o.Plugin) {
+			return nil, fmt.Errorf("singbox: shadowsocks outbound %s uses plugin %q, which needs a plugin binary sora does not ship: refusing to render", o.ID, o.Plugin)
+		}
 		out.set("type", "shadowsocks").set("method", orDefault(o.Cipher, "aes-256-gcm")).set("password", o.Password)
 		// An explicit SIP002 plugin wins over the legacy obfs-local
 		// mapping; sing-box passes plugin/plugin_opts to the plugin
@@ -213,7 +222,10 @@ func (r *renderer) outbound(o engine.Outbound) (obj, error) {
 		case o.Plugin != "":
 			out.set("plugin", o.Plugin)
 			if o.PluginOpts != "" {
-				out.set("plugin_opts", o.PluginOpts)
+				// Canonical schema order: the same option set
+				// renders byte-identically however the import
+				// link spelled it (SP3b).
+				out.set("plugin_opts", engine.CanonicalSSPluginOpts(o.Plugin, o.PluginOpts))
 			}
 		case o.Obfs != "":
 			opts := "obfs=" + o.Obfs

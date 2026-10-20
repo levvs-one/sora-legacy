@@ -31,6 +31,19 @@ func (p *Plan) Secrets() []string {
 // characters are skipped: masking them would destroy ordinary log text.
 func (o Outbound) Secrets() []string {
 	candidates := []string{o.UUID, o.Password, o.UserID, o.ObfsParam, o.PluginOpts, o.PrivateKey, o.OriginalLink}
+	// Secret-typed plugin option values (shadow-tls/restls/jls
+	// passwords, kcptun keys) live ONLY inside the PluginOpts string:
+	// masking the whole string does not mask a log line that quotes
+	// just the value, so the values are registered separately (SP3b).
+	if spec := SSPluginByName(o.Plugin); spec != nil {
+		if pairs, err := parseSSPluginOpts(o.PluginOpts); err == nil {
+			for _, pr := range pairs {
+				if kind, ok := spec.optKind(pr.key); ok && kind == ssOptSecret {
+					candidates = append(candidates, pr.val)
+				}
+			}
+		}
+	}
 	if o.Encryption != "none" {
 		candidates = append(candidates, o.Encryption)
 	}
@@ -169,17 +182,13 @@ func (o Outbound) Validate() error {
 			errs = append(errs, validateAmneziaWG(o.ID, o.Amnezia)...)
 		}
 	}
-	if o.Protocol == ProtocolShadowsocks && o.Obfs != "" {
-		// The renderer interpolates obfs into obfs-local plugin_opts, so
-		// only the plugin's own modes are allowed and the host must be a
-		// bare hostname or address without option separators.
-		if o.Obfs != "http" && o.Obfs != "tls" {
-			errs = append(errs, fmt.Errorf("outbound %s: shadowsocks obfs %q is not http or tls", o.ID, o.Obfs))
-		}
-		if o.ObfsParam != "" && net.ParseIP(o.ObfsParam) == nil && !isDomain(o.ObfsParam) {
-			errs = append(errs, fmt.Errorf("outbound %s: obfs host %q is not valid", o.ID, o.ObfsParam))
-		}
-	}
+	// Shadowsocks plugin fields (explicit SIP002 plugin and the
+	// legacy Obfs/ObfsParam simple-obfs mapping) fail closed against
+	// the plugin catalog: the renderers interpolate them into plugin
+	// configs, so an unknown plugin, an unknown option or a separator
+	// in the obfs-host would otherwise surface as a silently
+	// unobfuscated plan or as injected plugin options (SP3b).
+	errs = append(errs, validateShadowsocksPlugin(o)...)
 	for _, peer := range o.Peers {
 		if err := validatePeerEndpoint(o.ID, peer.Endpoint); err != nil {
 			errs = append(errs, err)
