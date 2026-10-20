@@ -705,7 +705,7 @@ func parseVMess(raw string, u *url.URL) (OutboundSpec, error) {
 	if o.Transport == "" {
 		o.Transport = "tcp"
 	}
-	if aid := getq(q, "aid", "alterId"); aid != "" && aid != "0" {
+	if aid := getq(q, "aid", "alterId", "alter_id"); aid != "" && aid != "0" {
 		return OutboundSpec{}, fmt.Errorf("%w: vmess alterId %q is legacy pre-AEAD; sora renders AEAD (alterId 0) only", ErrUnsupported, aid)
 	}
 	o.Security = getq(q, "security")
@@ -768,8 +768,14 @@ func mapVMessJSON(m map[string]any, frag string) (OutboundSpec, error) {
 	// while looking imported. Refuse it as unsupported, in the open —
 	// the same discipline as the hy2 pinSHA256 refusal above. This is
 	// the G2 check, now reachable on the classic-link path as well.
-	if err := checkVMessAlterID(m["aid"]); err != nil {
-		return OutboundSpec{}, err
+	// The camelCase and snake_case spellings are refused here too
+	// (REVIEW-G G2 follow-up; see mapJSONSpec for the divergence
+	// note) — a classic document carrying them is the same legacy
+	// pre-AEAD dialect under a different key name.
+	for _, k := range []string{"aid", "alterId", "alter_id"} {
+		if err := checkVMessAlterID(m[k]); err != nil {
+			return OutboundSpec{}, err
+		}
 	}
 	if net := stringValue(m["net"]); net != "" {
 		o.Transport = net
@@ -842,13 +848,17 @@ func mapJSONSpec(m map[string]any, fallback string) (OutboundSpec, error) {
 	}
 	o.Security = stringValue(m["security"])
 	if o.Protocol == "vmess" {
-		// sing-box-shaped VMess documents spell it alter_id; both keys
-		// are legacy pre-AEAD when non-zero (see checkVMessAlterID).
-		if err := checkVMessAlterID(m["aid"]); err != nil {
-			return OutboundSpec{}, err
-		}
-		if err := checkVMessAlterID(m["alter_id"]); err != nil {
-			return OutboundSpec{}, err
+		// sing-box-shaped VMess documents spell it alter_id and
+		// Clash documents spell it alterId; every spelling is legacy
+		// pre-AEAD when non-zero (see checkVMessAlterID). The
+		// alterId check is a deliberate divergence BEYOND sora
+		// (REVIEW-G G2 follow-up): the reference still accepts the
+		// camelCase key in JSON/Clash documents, legacy refuses it —
+		// stricter here on purpose, not a parity break to repair.
+		for _, k := range []string{"aid", "alter_id", "alterId"} {
+			if err := checkVMessAlterID(m[k]); err != nil {
+				return OutboundSpec{}, err
+			}
 		}
 	}
 	for k, v := range m {
@@ -1051,6 +1061,15 @@ func isXrayConfig(m map[string]any) bool {
 // outbound supplies endpoint, transport, and security for display and
 // measurement.
 func profileSpec(m map[string]any) (OutboundSpec, error) {
+	// A full Xray profile runs as written (the xray renderProfile
+	// preserves provider outbounds), so a VMess outbound inside one
+	// never passes through mapJSONSpec: a non-zero alterId nested in
+	// its users would import — and run — verbatim. Refuse it here
+	// with the same check (REVIEW-G G2 follow-up, third path; sora
+	// still accepts it there, legacy is stricter on purpose).
+	if err := checkProfileVMessAlterID(m); err != nil {
+		return OutboundSpec{}, err
+	}
 	raw, err := json.Marshal(m)
 	if err != nil {
 		return OutboundSpec{}, ErrInvalid
@@ -1085,6 +1104,55 @@ func profileSpec(m map[string]any) (OutboundSpec, error) {
 	}
 	o.CountryCode = countryCode(o.DisplayName)
 	return o, o.validate()
+}
+
+// checkProfileVMessAlterID scans a full Xray configuration for VMess
+// outbounds and refuses any non-zero alterId in their users, in every
+// key spelling checkVMessAlterID understands plus the Xray-native
+// camelCase one. Users are looked for under settings.vnext/settings.
+// servers entries and, defensively, directly under settings.
+func checkProfileVMessAlterID(m map[string]any) error {
+	outbounds, _ := m["outbounds"].([]any)
+	for _, it := range outbounds {
+		ob, ok := it.(map[string]any)
+		if !ok {
+			continue
+		}
+		if !strings.EqualFold(stringValue(ob["protocol"]), "vmess") {
+			continue
+		}
+		settings, _ := ob["settings"].(map[string]any)
+		var userLists [][]any
+		if users, ok := settings["users"].([]any); ok {
+			userLists = append(userLists, users)
+		}
+		for _, key := range []string{"vnext", "servers"} {
+			entries, _ := settings[key].([]any)
+			for _, entry := range entries {
+				e, ok := entry.(map[string]any)
+				if !ok {
+					continue
+				}
+				if users, ok := e["users"].([]any); ok {
+					userLists = append(userLists, users)
+				}
+			}
+		}
+		for _, users := range userLists {
+			for _, u := range users {
+				user, ok := u.(map[string]any)
+				if !ok {
+					continue
+				}
+				for _, k := range []string{"alterId", "alter_id", "aid"} {
+					if err := checkVMessAlterID(user[k]); err != nil {
+						return err
+					}
+				}
+			}
+		}
+	}
+	return nil
 }
 
 // xrayEndpoint reads settings.vnext, settings.servers, or newer flat
