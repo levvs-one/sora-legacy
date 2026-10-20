@@ -1,6 +1,5 @@
 using System;
 using System.Diagnostics;
-using System.Drawing;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
@@ -30,9 +29,6 @@ internal static class Program
     private static Mutex? singleInstance;
 
     [DllImport("user32.dll")]
-    private static extern bool SetProcessDPIAware();
-
-    [DllImport("user32.dll")]
     private static extern bool IsWindow(IntPtr hwnd);
 
     [DllImport("user32.dll")]
@@ -49,7 +45,6 @@ internal static class Program
         using var text = LoadText(settings);
         if (HasArg(args, ClientContract.RestoreProxyArgument)) return RestoreProxy(silent, text);
         WaitForPreviousInstance(args);
-        EnableDpiAwareness();
         InstallExceptionHandlers();
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);
@@ -121,7 +116,10 @@ internal static class Program
         // anything that still escapes is recorded by the AppDomain
         // handler on its way out. Nothing is shown to the user here:
         // there is no honest localized text for "the program broke",
-        // so the log is the record and the exit stays quiet.
+        // so the record is the Trace.WriteLine itself — and this client
+        // registers no Trace listener, so in production that trace has
+        // no listener attached (only a debugger or DebugView would see
+        // it) and the exit stays quiet.
         Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
         Application.ThreadException += (_, e) =>
             Trace.WriteLine("Legacy client thread exception: " + e.Exception.GetType().Name);
@@ -129,16 +127,12 @@ internal static class Program
             Trace.WriteLine("Legacy client unhandled exception: " + (e.ExceptionObject?.GetType().Name ?? "unknown"));
     }
 
-    private static void EnableDpiAwareness()
-    {
-        // Capability check, as in the shipped client: SetProcessDPIAware
-        // exists from Vista (6.0) on; on anything older the process
-        // simply stays DPI-unaware instead of failing to start.
-        if (Environment.OSVersion.Version.Major < 6) return;
-        try { SetProcessDPIAware(); }
-        catch (DllNotFoundException) { }
-        catch (EntryPointNotFoundException) { }
-    }
+    // DPI awareness is not set from code: the application manifest
+    // (app.manifest, PerMonitorV2 with fallbacks) is applied by the
+    // loader before any code runs and is the single source of truth —
+    // a SetProcessDPIAware call here could only fail against the
+    // manifest context or, on pre-1607 systems the docs do not cover,
+    // fight it, and it adds nothing on any supported OS.
 
     private static string MutexName => Application.ExecutablePath.Replace("\\", "/");
 
@@ -197,14 +191,16 @@ internal static class Program
         catch { return false; }
     }
 
-    // Owns the main form for the process: hidden (tray) starts, showing
-    // on demand, forwarding of links handed over by later launches, and
-    // exit when the form is closed for real.
+    // Owns the main form for the process: hidden starts (the form is
+    // simply not shown — MainForm creates the process's one tray icon
+    // in its constructor, so a hidden start still has exactly one,
+    // stateful, localized tray icon), showing on demand, forwarding of
+    // links handed over by later launches, and exit when the form is
+    // closed for real.
     private sealed class ClientContext : ApplicationContext
     {
         private readonly MainForm form;
         private readonly Strings? text;
-        private readonly NotifyIcon? tray;
         private readonly System.Windows.Forms.Timer pendingLinks = new() { Interval = 1000 };
 
         public ClientContext(MainForm form, Strings? text, bool startHidden, string? initialLink)
@@ -214,11 +210,7 @@ internal static class Program
             form.FormClosed += (_, _) => ExitThread();
             form.Shown += (_, _) => PublishWindowHandle();
             PublishWindowHandle();
-            if (startHidden)
-            {
-                tray = CreateTray();
-            }
-            else
+            if (!startHidden)
             {
                 form.Show();
             }
@@ -235,46 +227,6 @@ internal static class Program
                 if (pending != null) await ImportAsync(pending);
             };
             pendingLinks.Start();
-        }
-
-        private NotifyIcon CreateTray()
-        {
-            var menu = new ContextMenuStrip();
-            if (text != null)
-            {
-                menu.Items.Add(text["trayOpen"], null, (_, _) => ShowMainWindow());
-                menu.Items.Add(text["trayQuit"], null, (_, _) => form.Close());
-            }
-            else
-            {
-                menu.Items.Add("Sora", null, (_, _) => ShowMainWindow());
-            }
-            var icon = new NotifyIcon
-            {
-                Icon = LoadTrayIcon(),
-                Text = "Sora Legacy",
-                ContextMenuStrip = menu,
-                Visible = true
-            };
-            icon.DoubleClick += (_, _) => ShowMainWindow();
-            return icon;
-        }
-
-        private static Icon LoadTrayIcon()
-        {
-            // The exe carries the product icon (ApplicationIcon in the
-            // project); extracting it avoids a second asset. Any failure
-            // degrades to the system application icon, never to a crash.
-            try { return Icon.ExtractAssociatedIcon(Application.ExecutablePath) ?? SystemIcons.Application; }
-            catch { return SystemIcons.Application; }
-        }
-
-        private void ShowMainWindow()
-        {
-            form.Show();
-            if (form.WindowState == FormWindowState.Minimized) form.WindowState = FormWindowState.Normal;
-            form.Activate();
-            PublishWindowHandle();
         }
 
         private void PublishWindowHandle()
@@ -336,12 +288,6 @@ internal static class Program
             if (disposing)
             {
                 pendingLinks.Dispose();
-                if (tray != null)
-                {
-                    tray.Visible = false;
-                    tray.ContextMenuStrip?.Dispose();
-                    tray.Dispose();
-                }
             }
             base.Dispose(disposing);
         }
