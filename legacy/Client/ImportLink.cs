@@ -16,8 +16,6 @@ namespace Sora.Legacy.Client;
 // is saved, and its verdict is what the user sees.
 internal sealed class ImportLink
 {
-    private const string SoraRegistryPath = @"Software\Sora";
-
     private ImportLink(string url, string name)
     {
         Url = url;
@@ -32,7 +30,7 @@ internal sealed class ImportLink
     public static string? FindArgument(string[] args)
     {
         foreach (var arg in args)
-            if (arg.StartsWith("sora://", StringComparison.OrdinalIgnoreCase)) return arg;
+            if (arg.StartsWith(ClientContract.LinkSchemePrefix, StringComparison.OrdinalIgnoreCase)) return arg;
         return null;
     }
 
@@ -55,9 +53,14 @@ internal sealed class ImportLink
             if (!uri.Host.Equals("add", StringComparison.OrdinalIgnoreCase)) return null;
             var query = ParseQuery(uri.Query);
             if (!query.TryGetValue("url", out var target)) return null;
-            var name = query.TryGetValue("name", out var named) ? named
-                : uri.Fragment.TrimStart('#');
-            return Subscription(target, Uri.UnescapeDataString(name));
+            // ParseQuery has already percent-decoded the query values
+            // exactly once (as the reference parser in links.dart
+            // does); decoding a query name again would corrupt names
+            // that legitimately contain a %XX sequence. The fragment
+            // fallback is the opposite: Uri.Fragment arrives still
+            // escaped, so it is decoded here, once.
+            if (query.TryGetValue("name", out var named)) return Subscription(target, named);
+            return Subscription(target, Uri.UnescapeDataString(uri.Fragment.TrimStart('#')));
         }
         catch (UriFormatException) { return null; }
         catch (InvalidOperationException) { return null; }
@@ -97,7 +100,7 @@ internal sealed class ImportLink
     {
         try
         {
-            using var key = Registry.CurrentUser.CreateSubKey(SoraRegistryPath);
+            using var key = Registry.CurrentUser.CreateSubKey(ClientContract.RegistryPath);
             key.SetValue(PendingName, link);
         }
         catch (Exception exception)
@@ -110,7 +113,7 @@ internal sealed class ImportLink
     {
         try
         {
-            using var key = Registry.CurrentUser.OpenSubKey(SoraRegistryPath, writable: true);
+            using var key = Registry.CurrentUser.OpenSubKey(ClientContract.RegistryPath, writable: true);
             if (key?.GetValue(PendingName) is not string link) return null;
             key.DeleteValue(PendingName, throwOnMissingValue: false);
             return link;

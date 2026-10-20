@@ -25,8 +25,6 @@ namespace Sora.Legacy.Client;
 // the running instance, activates its window and exits.
 internal static class Program
 {
-    private const string SoraRegistryPath = @"Software\Sora";
-
     // Kept referenced for the process lifetime: the named mutex exists
     // while a handle to it is open.
     private static Mutex? singleInstance;
@@ -46,10 +44,10 @@ internal static class Program
     [STAThread]
     private static int Main(string[] args)
     {
-        var silent = HasArg(args, "--silent");
+        var silent = HasArg(args, ClientContract.SilentArgument);
         var settings = new ClientSettings();
         using var text = LoadText(settings);
-        if (HasArg(args, "--restore-proxy")) return RestoreProxy(silent, text);
+        if (HasArg(args, ClientContract.RestoreProxyArgument)) return RestoreProxy(silent, text);
         WaitForPreviousInstance(args);
         EnableDpiAwareness();
         Application.EnableVisualStyles();
@@ -106,7 +104,7 @@ internal static class Program
 
     private static void WaitForPreviousInstance(string[] args)
     {
-        var marker = Array.FindIndex(args, arg => string.Equals(arg, "--wait-for", StringComparison.OrdinalIgnoreCase));
+        var marker = Array.FindIndex(args, arg => string.Equals(arg, ClientContract.WaitForArgument, StringComparison.OrdinalIgnoreCase));
         if (marker < 0 || marker + 1 >= args.Length || !int.TryParse(args[marker + 1], out var processId)) return;
         try { Process.GetProcessById(processId).WaitForExit(15000); }
         catch { /* Already gone or not ours to wait for: start anyway. */ }
@@ -168,7 +166,7 @@ internal static class Program
     {
         try
         {
-            using var key = Registry.CurrentUser.OpenSubKey(SoraRegistryPath, writable: false);
+            using var key = Registry.CurrentUser.OpenSubKey(ClientContract.RegistryPath, writable: false);
             if (key?.GetValue(WindowHwndName) is not string raw) return false;
             if (!long.TryParse(raw, out var value) || value <= 0) return false;
             var hwnd = new IntPtr(value);
@@ -267,7 +265,7 @@ internal static class Program
             // (Software\Sora, WindowHwnd_<MD5 of the install directory>).
             try
             {
-                using var key = Registry.CurrentUser.CreateSubKey(SoraRegistryPath);
+                using var key = Registry.CurrentUser.CreateSubKey(ClientContract.RegistryPath);
                 key.SetValue(WindowHwndName, form.Handle.ToInt64().ToString());
             }
             catch (Exception exception)

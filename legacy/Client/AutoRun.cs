@@ -36,7 +36,7 @@ internal static class AutoRun
     public static string ValueName => "SoraAutoRun_" + DirectoryHash;
 
     // The command line every writer registers: the exe, quoted, hidden start.
-    public static string Command => "\"" + Application.ExecutablePath + "\" --silent";
+    public static string Command => "\"" + Application.ExecutablePath + "\" " + ClientContract.SilentArgument;
 
     public static string? ReadCommand()
     {
