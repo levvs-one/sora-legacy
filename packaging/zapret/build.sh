@@ -21,5 +21,18 @@ mkdir -p "$dest/zapret/fake"
 install -m 0755 "$work/zapret/tpws/tpws" "$dest/tpws"
 install -m 0755 "$work/zapret/nfq/nfqws" "$dest/nfqws"
 install -m 0644 "$work/zapret/files/fake/"*.bin "$dest/zapret/fake/"
-install -m 0644 "$root/third_party/zapret/docs/LICENSE.txt" "$dest/zapret/LICENSE.txt"
+# No LICENSE copy here: nfpm ships third_party/zapret/docs/LICENSE.txt
+# directly to /usr/share/licenses/sora-core/ (packaging/linux/nfpm.yaml),
+# and no other consumer reads $dest/zapret/LICENSE.txt.
+# Record digests of the helpers next to the engines, in the same sha256sum
+# format that packaging/engines/fetch.sh uses for SHA256SUMS. This runs
+# after fetch.sh in the release pipeline, so it appends. The core's
+# verifyTpws checks a listed tpws digest strictly (a mismatch disqualifies
+# the binary); before this, SHA256SUMS never listed tpws, so the shipped
+# tpws ran with no digest check at all. nfqws's digest is recorded for
+# parity with the manifest format even though this core is tpws-only.
+{
+  sha256sum "$dest/tpws" | sed "s|$dest/tpws|tpws|"
+  sha256sum "$dest/nfqws" | sed "s|$dest/nfqws|nfqws|"
+} >>"$dest/SHA256SUMS"
 echo "zapret: tpws and nfqws built"
