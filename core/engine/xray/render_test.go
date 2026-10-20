@@ -265,3 +265,29 @@ func TestRenderTunOmitsUnsetMTU(t *testing.T) {
 		t.Errorf("explicit MTU must render, got %v (present=%v)", v, ok)
 	}
 }
+
+// TestRenderRealityDefaultsToAutoFingerprint: Xray's pinned "chrome"
+// alias sends the TSPU-flagged Chrome 133 ClientHello (sora D05), so a
+// REALITY outbound without a plan fingerprint must render Xray's auto
+// parrot instead; an explicit fingerprint is never overridden.
+func TestRenderRealityDefaultsToAutoFingerprint(t *testing.T) {
+	render := func(fp string) string {
+		p := &engine.Plan{Outbounds: []engine.Outbound{{
+			ID: "srv-1", Name: "Reality 01", Protocol: engine.ProtocolVLESS,
+			Server: "re.example.com", Port: 443, UUID: "11111111-2222-3333-4444-555555555555",
+			TLS: engine.TLS{Enabled: true, ServerName: "www.example.com", Fingerprint: fp,
+				Reality: true, RealityPublicKey: "Z84J2IelR9ch3k8VtlVhhs5ycBUlXA7wHBWcBrjqnAw"},
+		}}}
+		raw, err := Render(p, testRuntime, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(raw)
+	}
+	if out := render(""); !strings.Contains(out, `"fingerprint":"hellochrome_auto"`) {
+		t.Errorf("REALITY without a fingerprint must default to hellochrome_auto:\n%s", out)
+	}
+	if out := render("firefox"); !strings.Contains(out, `"fingerprint":"firefox"`) {
+		t.Errorf("an explicit REALITY fingerprint must be kept:\n%s", out)
+	}
+}

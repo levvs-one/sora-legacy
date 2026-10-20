@@ -265,9 +265,14 @@ func (r *renderer) stream(o engine.Outbound) (obj, error) {
 	switch {
 	case o.TLS.Reality:
 		s["security"] = "reality"
+		// Xray's pinned "chrome" alias sends Chrome 133, which TSPU
+		// fingerprints and blocks (sora D05): when the plan carries no
+		// fingerprint, default to "hellochrome_auto" — the newest
+		// verified Chrome parrot of the engine's vendored uTLS. An
+		// explicit choice is never overridden.
 		s["realitySettings"] = obj{
 			"serverName": o.TLS.ServerName, "publicKey": o.TLS.RealityPublicKey,
-			"fingerprint": orDefault(o.TLS.Fingerprint, "chrome"),
+			"fingerprint": orDefault(o.TLS.Fingerprint, "hellochrome_auto"),
 		}.set("shortId", o.TLS.RealityShortID).set("spiderX", o.TLS.SpiderX)
 	case o.TLS.Enabled || needsTLS:
 		s["security"] = "tls"
