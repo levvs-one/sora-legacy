@@ -86,6 +86,15 @@ func (o Outbound) Identifiers() []string {
 		out = append(out, o.TLS.SpiderX)
 	}
 	out = append(out, o.Name)
+	// The XHTTP download split names a second server: it identifies
+	// the connection exactly like the uplink address does, so it joins
+	// the redaction set (S5-SP4, ported from sora).
+	if o.Transport.DownloadAddress != "" {
+		out = append(out, o.Transport.DownloadAddress)
+		if o.Transport.DownloadPort != 0 {
+			out = append(out, net.JoinHostPort(o.Transport.DownloadAddress, strconv.Itoa(int(o.Transport.DownloadPort))))
+		}
+	}
 	return out
 }
 
@@ -121,6 +130,11 @@ func (o Outbound) Warnings() []string {
 		// version, so every XHTTP outbound carries the reminder
 		// (mirrors sora's Warnings).
 		out = append(out, "xhttp-version-sync")
+		// Reverse proxies (nginx default 128) cap concurrent streams;
+		// above it the connection breaks instead of degrading.
+		if o.Transport.XmuxMaxConcurrency > 128 {
+			out = append(out, "xhttp-xmux-proxy-limit")
+		}
 	}
 	// REALITY hardening (T002): vision/TLS-in-TLS and dest-shape warnings.
 	out = append(out, o.RealityWarnings()...)
@@ -229,16 +243,35 @@ var validXHTTPModes = map[string]bool{
 	"": true, "auto": true, "packet-up": true, "stream-up": true, "stream-one": true,
 }
 
-// validateXHTTP checks the XHTTP-only transport options that legacy's
-// Transport can represent (mode, vision flow, ALPN h3 gating),
-// mirroring sora's validateXHTTP. Sora's downloadSettings/xmux/
-// xPaddingBytes checks have no legacy counterpart: legacy's Transport
-// has no such fields, so there is nothing to misapply — the fields
-// themselves are the remaining structural gap (see S5 report).
+// xhttpPaddingRange parses an XHTTP padding range: "min-max" or a single
+// number. Engines read it as a string, so the check is syntactic plus a
+// sanity bound (larger than any plausible MTU is a typo, not a setting).
+var xhttpPaddingRange = regexp.MustCompile(`^([0-9]{1,5})(-([0-9]{1,5}))?$`)
+
+// validateXHTTP checks the XHTTP-only transport options engine-independently,
+// so a broken combination fails at plan validation instead of surfacing as
+// a runtime failure in whichever engine renders it. Full port of sora's
+// validateXHTTP (S5-SP4): mode whitelist, vision flow, downloadSettings
+// pairing and stream-one exclusion, xmux negativity and exclusivity,
+// xPaddingBytes format, ALPN h3 gating — plus the stray-field rejection
+// that keeps the split/tuning from being silently dropped by renderers
+// of other transports.
 func validateXHTTP(o Outbound) []error {
 	t := o.Transport
 	if t.Type != "xhttp" {
-		return nil
+		// The split/tuning fields belong to XHTTP; on another transport
+		// they would be silently dropped by every renderer.
+		var errs []error
+		if t.DownloadAddress != "" || t.DownloadPort != 0 {
+			errs = append(errs, fmt.Errorf("outbound %s: downloadSettings needs the xhttp transport, not %q", o.ID, t.Type))
+		}
+		if t.XmuxMaxConcurrency != 0 || t.XmuxMaxConnections != 0 || t.XmuxMaxReuseTimes != 0 || t.XmuxMaxRequestTimes != 0 {
+			errs = append(errs, fmt.Errorf("outbound %s: xmux tuning needs the xhttp transport, not %q", o.ID, t.Type))
+		}
+		if t.XPaddingBytes != "" {
+			errs = append(errs, fmt.Errorf("outbound %s: xPaddingBytes needs the xhttp transport, not %q", o.ID, t.Type))
+		}
+		return errs
 	}
 	var errs []error
 	bad := func(format string, args ...any) {
@@ -250,13 +283,54 @@ func validateXHTTP(o Outbound) []error {
 	}
 	if strings.HasPrefix(o.Flow, "xtls-rprx-vision") && !o.HasVLESSEncryption() {
 		// XTLS is available only under TCP+TLS/REALITY — or under
-		// VLESS Encryption, which carries the flow on any transport.
-		// Without Encryption, vision on XHTTP cannot work.
+		// VLESS Encryption, which carries the flow on any transport
+		// (https://xtls.github.io/en/config/outbounds/vless.html).
+		// Without Encryption, vision on XHTTP cannot work; XHTTP's
+		// protection against TLS-in-TLS comes from xmux and the
+		// up/down split instead.
 		bad("flow %q cannot be combined with the xhttp transport (Vision needs TCP or VLESS Encryption)", o.Flow)
 	}
+	if t.DownloadAddress != "" || t.DownloadPort != 0 {
+		if t.DownloadAddress == "" || t.DownloadPort == 0 {
+			bad("downloadSettings needs both a download address and a download port")
+		} else if err := validateServer("outbound "+o.ID+" download", t.DownloadAddress, true); err != nil {
+			errs = append(errs, err)
+		}
+		if t.Mode == "stream-one" {
+			// stream-one carries both directions on one connection; a
+			// separate downlink contradicts it. stream-up is the
+			// two-leg mode (auto+reality degrades to stream-one only
+			// without downloadSettings).
+			bad("downloadSettings is incompatible with mode stream-one (use stream-up)")
+		}
+	}
+	if t.XmuxMaxConcurrency < 0 || t.XmuxMaxConnections < 0 || t.XmuxMaxReuseTimes < 0 || t.XmuxMaxRequestTimes < 0 {
+		bad("xmux values must not be negative")
+	}
+	if t.XmuxMaxConcurrency > 0 && t.XmuxMaxConnections > 0 {
+		bad("xmux maxConcurrency and maxConnections are mutually exclusive")
+	}
+	if t.XPaddingBytes != "" {
+		m := xhttpPaddingRange.FindStringSubmatch(t.XPaddingBytes)
+		if m == nil {
+			bad("xPaddingBytes %q is not a \"min-max\" range or a single number", t.XPaddingBytes)
+		} else {
+			lo, _ := strconv.Atoi(m[1])
+			hi := lo
+			if m[3] != "" {
+				hi, _ = strconv.Atoi(m[3])
+			}
+			if lo > hi {
+				bad("xPaddingBytes %q has its lower bound above the upper bound", t.XPaddingBytes)
+			}
+			if hi > 65535 {
+				bad("xPaddingBytes %q exceeds 65535 bytes", t.XPaddingBytes)
+			}
+		}
+	}
 	if slices.Contains(o.TLS.ALPN, "h3") && !o.TLS.Enabled && !o.TLS.Reality {
-		// Xray dials QUIC for XHTTP only when ALPN is exactly ["h3"]
-		// on a TLS stream; without TLS the option does nothing.
+		// Xray dials QUIC for XHTTP only when ALPN is exactly ["h3"] on
+		// a TLS stream; without TLS the option does nothing.
 		bad("ALPN h3 needs TLS (or REALITY) on the xhttp transport")
 	}
 	return errs

@@ -57,6 +57,19 @@ func (p *Plan) RequiredFeatures() map[Feature]bool {
 	for _, o := range p.Outbounds {
 		if o.Transport.Type == "xhttp" {
 			out[FeatureXHTTP] = true
+			if o.Transport.DownloadAddress != "" {
+				out[FeatureXHTTPDownloadSplit] = true
+			}
+			if o.Transport.XmuxMaxConcurrency > 0 || o.Transport.XmuxMaxConnections > 0 ||
+				o.Transport.XmuxMaxReuseTimes > 0 || o.Transport.XmuxMaxRequestTimes > 0 {
+				out[FeatureXHTTPXmux] = true
+			}
+			if o.Transport.XPaddingBytes != "" {
+				// Padding has its own gate: it is independent plan
+				// data, so a padding-only plan must not demand xmux
+				// support and vice versa (S5-SP4, ported from sora).
+				out[FeatureXHTTPPadding] = true
+			}
 		}
 		if o.Encryption != "" && o.Encryption != "none" {
 			out[FeatureVLESSEncrypt] = true

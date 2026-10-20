@@ -37,6 +37,7 @@ var Catalog = map[Kind]Capabilities{
 			FeatureProxyProviders: true, FeatureURLTest: true, FeatureLatencyTest: true,
 			FeatureHotApply: true, FeatureGeoData: true, FeatureFallbackGroup: true,
 			FeatureLoadBalance: true, FeatureXHTTP: true, FeatureVLESSEncrypt: true,
+			FeatureXHTTPDownloadSplit: true, FeatureXHTTPXmux: true, FeatureXHTTPPadding: true,
 			FeatureAmneziaWG: true, FeaturePrivateControl: true,
 		},
 	},
@@ -55,6 +56,12 @@ var Catalog = map[Kind]Capabilities{
 			FeatureTun: true, FeatureFakeIP: true, FeatureRuleSets: true,
 			FeatureURLTest: true, FeatureLatencyTest: true, FeatureGeoData: true,
 			FeaturePerAppRouting: true, FeatureTLSFragment: true,
+			// Deliberately no FeatureXHTTPDownloadSplit: the lx
+			// fork's xhttp transport has no download_settings field
+			// at all. Its xmux and x_padding_bytes claims ride the
+			// lx build in BuildCapabilities, exactly like
+			// FeatureXHTTP itself — upstream sing-box spells
+			// neither, so the static entry claims neither (S5-SP4).
 		},
 	},
 	KindXray: {
@@ -74,6 +81,7 @@ var Catalog = map[Kind]Capabilities{
 			FeatureURLTest: true, FeatureLoadBalance: true, FeatureLatencyTest: true,
 			FeatureGeoData: true, FeatureTLSFragment: true,
 			FeatureXHTTP: true, FeatureVLESSEncrypt: true, FeaturePrivateControl: true,
+			FeatureXHTTPDownloadSplit: true, FeatureXHTTPXmux: true, FeatureXHTTPPadding: true,
 		},
 	},
 }
@@ -86,6 +94,13 @@ func BuildCapabilities(kind Kind, version Version, tags []string) Capabilities {
 		!version.Less(Version{Major: 1, Minor: 14, Patch: 3}) {
 		caps.Features = maps.Clone(caps.Features)
 		caps.Features[FeatureXHTTP] = slices.Contains(tags, "with_xhttp")
+		// The lx XHTTP transport also spells xmux and
+		// x_padding_bytes; they exist exactly when the with_xhttp
+		// build does, so they share its claim. There is no
+		// download_settings spelling on any sing-box build, so
+		// FeatureXHTTPDownloadSplit is never claimed here (S5-SP4).
+		caps.Features[FeatureXHTTPXmux] = caps.Features[FeatureXHTTP]
+		caps.Features[FeatureXHTTPPadding] = caps.Features[FeatureXHTTP]
 		caps.Features[FeatureVLESSEncrypt] = true
 		caps.Features[FeatureAmneziaWG] = slices.Contains(tags, "with_awg")
 	}

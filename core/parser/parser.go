@@ -217,8 +217,26 @@ type OutboundSpec struct {
 	ALPN                                                                                            []string
 	CountryCode                                                                                     string
 	AllowInsecure                                                                                   bool
-	Options                                                                                         map[string]string
-	Peers                                                                                           []WireGuardPeer
+	// DownloadAddress/DownloadPort carry the XHTTP up/down split from the
+	// link's extra= JSON (see applyExtra). They travel
+	// through the credential document into engine.Transport, where plan
+	// validation and the Xray/mihomo renderers honour them.
+	DownloadAddress string
+	DownloadPort    uint16
+	// Xmux*/XPaddingBytes carry the XHTTP reuse tuning and padding
+	// range from the same extra= JSON (the xmux object and the
+	// xPaddingBytes string), travelling the same path into
+	// engine.Transport. Range values in the link ("16-32") import as
+	// their lower bound: the plan models xmux fields as single ints,
+	// so the reduction is deliberate and documented here, never a
+	// silent parse accident (S5-SP4, ported from sora).
+	XmuxMaxConcurrency  int
+	XmuxMaxConnections  int
+	XmuxMaxReuseTimes   int
+	XmuxMaxRequestTimes int
+	XPaddingBytes       string
+	Options             map[string]string
+	Peers               []WireGuardPeer
 }
 
 // WireGuardPeer is one WireGuard peer as described by a wg-conf file or a
@@ -502,6 +520,11 @@ func parseLink(raw string) (OutboundSpec, error) {
 			o.Options[k] = v
 		}
 	}
+	// The XHTTP split, xmux tuning and padding ride in the
+	// extra=<url-encoded JSON> parameter (de-facto link standard).
+	// Garbage there is provider decoration, never an import error:
+	// it is ignored, not fatal.
+	o.applyExtra(getq(q, "extra"))
 	if o.Security == "" {
 		// Default security follows protocol semantics: trojan,
 		// hysteria2, and HTTPS use TLS; others do not. Empty security
@@ -521,6 +544,92 @@ func parseLink(raw string) (OutboundSpec, error) {
 	o.DisplayName = fragmentName(u.Fragment)
 	o.CountryCode = countryCode(o.DisplayName)
 	return o, o.validate()
+}
+
+// extraDownloadSettings is the Xray camelCase shape of the
+// downloadSettings object inside a share link's extra=<url-encoded JSON>
+// parameter — the de-facto link standard (mihomo's common/convert/v.go).
+// Only the recognized fields are read; every other key inside extra
+// (session placement, ...) is ignored by the parser.
+type extraDownloadSettings struct {
+	Address string `json:"address"`
+	Port    int    `json:"port"`
+}
+
+// extraXmux is the xmux object of the same extra= document. Its
+// values are Xray xmux range fields: a JSON number, a numeric
+// string, or a "min-max" range string, so each is kept raw and
+// reduced by xmuxRangeValue.
+type extraXmux struct {
+	MaxConcurrency  json.RawMessage `json:"maxConcurrency"`
+	MaxConnections  json.RawMessage `json:"maxConnections"`
+	MaxReuseTimes   json.RawMessage `json:"cMaxReuseTimes"`
+	MaxRequestTimes json.RawMessage `json:"hMaxRequestTimes"`
+}
+
+// xmuxRangeValue reduces one xmux range value to the single int the
+// plan models: the lower bound of a range, the value itself for a
+// scalar. Unusable values reduce to 0 (engine default).
+func xmuxRangeValue(raw json.RawMessage) int {
+	if len(raw) == 0 {
+		return 0
+	}
+	var n float64
+	if err := json.Unmarshal(raw, &n); err == nil {
+		if n < 0 {
+			return 0
+		}
+		return int(n)
+	}
+	var s string
+	if err := json.Unmarshal(raw, &s); err != nil {
+		return 0
+	}
+	if lo, _, found := strings.Cut(s, "-"); found {
+		s = lo
+	}
+	v, err := strconv.Atoi(strings.TrimSpace(s))
+	if err != nil || v < 0 {
+		return 0
+	}
+	return v
+}
+
+// extraParams is the top level of a share link's extra= JSON document.
+type extraParams struct {
+	DownloadSettings *extraDownloadSettings `json:"downloadSettings"`
+	Xmux             *extraXmux             `json:"xmux"`
+	XPaddingBytes    string                 `json:"xPaddingBytes"`
+}
+
+// applyExtra parses the XHTTP data carried by a link's
+// extra=<url-encoded JSON> query parameter into the spec: the
+// up/down split, the xmux reuse tuning and the padding range. Each
+// section applies independently — a missing, malformed, or unusable
+// section is ignored without taking the others down: extra is
+// provider decoration, and losing it must never fail the import.
+// Surviving values are validated again at plan level
+// (engine.validateXHTTP); on non-XHTTP transports the split is a
+// hard plan error, not a silent drop.
+func (o *OutboundSpec) applyExtra(raw string) {
+	if raw == "" {
+		return
+	}
+	var x extraParams
+	if err := json.Unmarshal([]byte(raw), &x); err != nil {
+		return
+	}
+	if ds := x.DownloadSettings; ds != nil && ds.Address != "" && ds.Port >= 1 && ds.Port <= 65535 {
+		o.DownloadAddress = ds.Address
+		o.DownloadPort = uint16(ds.Port)
+	}
+	if xm := x.Xmux; xm != nil {
+		o.XmuxMaxConcurrency = xmuxRangeValue(xm.MaxConcurrency)
+		o.XmuxMaxConnections = xmuxRangeValue(xm.MaxConnections)
+		o.XmuxMaxReuseTimes = xmuxRangeValue(xm.MaxReuseTimes)
+		o.XmuxMaxRequestTimes = xmuxRangeValue(xm.MaxRequestTimes)
+	}
+	o.XPaddingBytes = x.XPaddingBytes
 }
 func parseBool(s string) bool { v, _ := strconv.ParseBool(s); return v }
 func parsePort(s string) (uint16, error) {

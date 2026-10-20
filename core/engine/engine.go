@@ -39,6 +39,25 @@ const (
 	FeatureLoadBalance    Feature = "load-balance"
 	FeatureTLSFragment    Feature = "tls-fragment"
 	FeatureXHTTP          Feature = "xhttp"
+	// FeatureXHTTPDownloadSplit marks engines that can split the XHTTP
+	// downlink onto a separate server. Xray (downloadSettings) and
+	// mihomo (download-settings) claim it; sing-box (including the lx
+	// fork) has no such option: routing a split plan to it would
+	// silently send downloads over the uplink server (S5-SP4, ported
+	// from sora).
+	FeatureXHTTPDownloadSplit Feature = "xhttp-download-split"
+	// FeatureXHTTPXmux marks engines that honour XHTTP connection-reuse
+	// tuning. All three engines claim it: mihomo renders
+	// reuse-settings, Xray renders xmux, sing-box-lx renders xmux. A
+	// claim belongs in a catalog entry only together with a renderer
+	// that emits the tuning (S5-SP4, ported from sora).
+	FeatureXHTTPXmux Feature = "xhttp-xmux"
+	// FeatureXHTTPPadding marks engines that honour the XHTTP padding
+	// range (Transport.XPaddingBytes). It is a separate feature from
+	// FeatureXHTTPXmux because the fields are independent plan data: a
+	// padding-only plan must not demand xmux support, and an xmux-only
+	// plan must not demand padding (S5-SP4, ported from sora).
+	FeatureXHTTPPadding   Feature = "xhttp-padding"
 	FeatureVLESSEncrypt   Feature = "vless-encryption"
 	FeatureAmneziaWG      Feature = "amneziawg"
 	FeaturePrivateControl Feature = "private-control"

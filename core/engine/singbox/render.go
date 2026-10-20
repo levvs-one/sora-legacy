@@ -312,9 +312,33 @@ func transport(t engine.Transport) (obj, error) {
 		if len(t.Headers) > 0 {
 			out["headers"] = t.Headers
 		}
+		// XHTTP padding and reuse tuning (S5-SP4, ported from sora):
+		// the lx fork spells both (x_padding_bytes, xmux with
+		// snake_case range fields, whose values accept the plan's
+		// plain ints as single-value ranges), but this renderer
+		// emitted neither and the values dropped at render time
+		// while validation accepted them. The download split has no
+		// sing-box spelling at all; FeatureXHTTPDownloadSplit keeps
+		// such plans off this engine.
+		out.set("x_padding_bytes", t.XPaddingBytes)
+		if xmux := xhttpXmux(t); len(xmux) > 0 {
+			out["xmux"] = xmux
+		}
 		return out, nil
 	}
 	return nil, fmt.Errorf("transport %q is not supported by sing-box", t.Type)
+}
+
+// xhttpXmux renders the plan's XHTTP reuse tuning in the lx fork's
+// xmux spelling: snake_case fields whose values are ranges — a plain
+// int is the single-value range. An untuned plan renders no block at
+// all.
+func xhttpXmux(t engine.Transport) obj {
+	return obj{}.
+		set("max_concurrency", t.XmuxMaxConcurrency).
+		set("max_connections", t.XmuxMaxConnections).
+		set("c_max_reuse_times", t.XmuxMaxReuseTimes).
+		set("h_max_request_times", t.XmuxMaxRequestTimes)
 }
 
 // wireguard renders an endpoint: sing-box 1.13 removed the WireGuard outbound.

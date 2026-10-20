@@ -83,6 +83,29 @@ type Transport struct {
 	IdleTimeout int
 	// Mode is the XHTTP mode: auto, packet-up, stream-up or stream-one.
 	Mode string
+	// DownloadAddress and DownloadPort split the XHTTP downlink onto a
+	// separate server, so uplink and downlink can ride different domains.
+	// Both must be set together; the fields are ignored by other
+	// transports and rejected there by the engines.
+	DownloadAddress string
+	DownloadPort    uint16
+	// Xmux tunes XHTTP connection reuse. MaxConcurrency (streams per
+	// connection) and MaxConnections are mutually exclusive. Zero keeps
+	// the engine default. Every renderer emits the tuning: mihomo as
+	// reuse-settings, Xray as xmux, sing-box-lx as xmux — gated by
+	// FeatureXHTTPXmux so a plan carrying it never routes to an engine
+	// that would drop it silently (S5-SP4, ported from sora).
+	XmuxMaxConcurrency  int
+	XmuxMaxConnections  int
+	XmuxMaxReuseTimes   int
+	XmuxMaxRequestTimes int
+	// XPaddingBytes is the random XHTTP padding range, "min-max" or a
+	// single number, e.g. "100-1000". Every renderer emits it —
+	// mihomo as x-padding-bytes, Xray as xPaddingBytes, sing-box-lx as
+	// x_padding_bytes — under its own capability (FeatureXHTTPPadding),
+	// split from the xmux gate: padding and reuse tuning are
+	// independent plan data (S5-SP4, ported from sora).
+	XPaddingBytes string
 }
 
 // WireGuardPeer is one WireGuard peer of an outbound.

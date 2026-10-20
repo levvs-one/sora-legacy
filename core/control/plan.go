@@ -87,6 +87,9 @@ var credentialKeys = map[string]struct{}{
 	"obfs": {}, "obfs_param": {}, "private_key": {}, "addresses": {},
 	"peers": {}, "insecure": {}, "xray_profile": {}, "amneziawg": {},
 	"ss_plugin": {}, "ss_plugin_opts": {},
+	"download_address": {}, "download_port": {},
+	"x_padding_bytes": {}, "xmux_max_concurrency": {}, "xmux_max_connections": {},
+	"xmux_max_request_times": {}, "xmux_max_reuse_times": {},
 }
 
 // credentialDocument serializes only supported credential fields for storage.
@@ -135,6 +138,28 @@ func credentialDocument(spec parser.OutboundSpec) ([]byte, error) {
 	// parser's canonical ss_plugin keys reach the vault.
 	values["ss_plugin"] = spec.Options["ss_plugin"]
 	values["ss_plugin_opts"] = spec.Options["ss_plugin_opts"]
+	// XHTTP up/down split, padding range and xmux reuse tuning from
+	// the link's extra= JSON (S5-SP4): they travel inside the
+	// credential document, not the proto contract, so no contract
+	// change is needed. Zero tuning is the engine default and is not
+	// stored.
+	values["download_address"] = spec.DownloadAddress
+	if spec.DownloadPort != 0 {
+		values["download_port"] = strconv.Itoa(int(spec.DownloadPort))
+	}
+	values["x_padding_bytes"] = spec.XPaddingBytes
+	if spec.XmuxMaxConcurrency != 0 {
+		values["xmux_max_concurrency"] = strconv.Itoa(spec.XmuxMaxConcurrency)
+	}
+	if spec.XmuxMaxConnections != 0 {
+		values["xmux_max_connections"] = strconv.Itoa(spec.XmuxMaxConnections)
+	}
+	if spec.XmuxMaxRequestTimes != 0 {
+		values["xmux_max_request_times"] = strconv.Itoa(spec.XmuxMaxRequestTimes)
+	}
+	if spec.XmuxMaxReuseTimes != 0 {
+		values["xmux_max_reuse_times"] = strconv.Itoa(spec.XmuxMaxReuseTimes)
+	}
 	// Transport headers from a sing-box transport blob or a Clash
 	// *-opts blob (S5-SP6) have no flat spec field: they travel as one
 	// JSON document, restored by applyCredential like the peers block.
@@ -1072,6 +1097,17 @@ func outboundFromProto(index int, spec *corev1.OutboundSpec, secrets resolver) (
 	return outbound, nil
 }
 
+// atoiNonNegative parses a non-negative integer from a credential
+// document value; anything else (missing, malformed, negative) is 0,
+// the engine default for the tuning fields it restores.
+func atoiNonNegative(s string) int {
+	n, err := strconv.Atoi(strings.TrimSpace(s))
+	if err != nil || n < 0 {
+		return 0
+	}
+	return n
+}
+
 // applyCredential restores only fields written by credentialDocument from
 // stored material.
 func applyCredential(outbound *engine.Outbound, values map[string]string) error {
@@ -1108,6 +1144,21 @@ func applyCredential(outbound *engine.Outbound, values map[string]string) error 
 	outbound.Transport.Host = values["host_header"]
 	outbound.Transport.Service = values["service_name"]
 	outbound.Transport.Mode = values["mode"]
+	// XHTTP up/down split from the link's extra= JSON (S5-SP4): the
+	// address rides the credential document; the port is bounded again
+	// here so a forged document cannot smuggle an invalid one.
+	outbound.Transport.DownloadAddress = values["download_address"]
+	if port := atoiNonNegative(values["download_port"]); port <= 65535 {
+		outbound.Transport.DownloadPort = uint16(port)
+	}
+	// XHTTP padding and xmux tuning from the same extra= data;
+	// atoiNonNegative keeps a forged document from smuggling negative
+	// tuning into the plan.
+	outbound.Transport.XPaddingBytes = values["x_padding_bytes"]
+	outbound.Transport.XmuxMaxConcurrency = atoiNonNegative(values["xmux_max_concurrency"])
+	outbound.Transport.XmuxMaxConnections = atoiNonNegative(values["xmux_max_connections"])
+	outbound.Transport.XmuxMaxRequestTimes = atoiNonNegative(values["xmux_max_request_times"])
+	outbound.Transport.XmuxMaxReuseTimes = atoiNonNegative(values["xmux_max_reuse_times"])
 	if raw := values["headers"]; raw != "" {
 		// A broken headers document fails closed like the peers
 		// document below: silently dropping headers would change

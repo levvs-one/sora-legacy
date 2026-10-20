@@ -255,6 +255,11 @@ func (r *renderer) outbound(o engine.Outbound) (obj, error) {
 func (r *renderer) stream(o engine.Outbound) (obj, error) {
 	s := obj{}
 	t := o.Transport
+	if (t.DownloadAddress != "" || t.DownloadPort != 0) && t.Type != "xhttp" {
+		// Plan validation rejects this too; the render backstop keeps
+		// a hand-built plan from losing the split silently (S5-SP4).
+		return nil, fmt.Errorf("xray: outbound %s: downloadSettings is an XHTTP-only option, not %q", o.ID, t.Type)
+	}
 	switch t.Type {
 	case "", "tcp":
 	case "ws":
@@ -268,7 +273,23 @@ func (r *renderer) stream(o engine.Outbound) (obj, error) {
 		s["httpupgradeSettings"] = obj{}.set("path", t.Path).set("host", t.Host)
 	case "xhttp":
 		s["network"] = "xhttp"
-		s["xhttpSettings"] = obj{"mode": orDefault(t.Mode, "auto")}.set("path", t.Path).set("host", t.Host)
+		xs := obj{"mode": orDefault(t.Mode, "auto")}.set("path", t.Path).set("host", t.Host)
+		// XHTTP reuse tuning and padding (S5-SP4, ported from sora):
+		// Xray spells both natively (xmux, xPaddingBytes), but this
+		// renderer emitted neither, so the tuning silently dropped
+		// on the engine that invented the transport.
+		if xmux := xhttpXmux(t); len(xmux) > 0 {
+			xs["xmux"] = xmux
+		}
+		xs.set("xPaddingBytes", t.XPaddingBytes)
+		if t.DownloadAddress != "" || t.DownloadPort != 0 {
+			ds, err := xhttpDownloadSettings(o)
+			if err != nil {
+				return nil, err
+			}
+			xs["downloadSettings"] = ds
+		}
+		s["xhttpSettings"] = xs
 	default:
 		// Xray removed the h2 transport in favour of XHTTP.
 		return nil, fmt.Errorf("transport %q is not supported by Xray", t.Type)
@@ -297,6 +318,77 @@ func (r *renderer) stream(o engine.Outbound) (obj, error) {
 		s["sockopt"] = obj{"dialerProxy": tagFragment}
 	}
 	return s, nil
+}
+
+// xhttpXmux renders the plan's XHTTP reuse tuning in Xray's xmux
+// spelling. Zero fields omit the key entirely (set drops them), so
+// an untuned plan renders no xmux block and keeps the engine
+// default. The download leg reuses the same block: the plan carries
+// one tuning set for the outbound. Padding is NOT mirrored: the
+// plan's single range describes the padding of the uplink requests
+// the server checks (S5-SP4, ported from sora).
+func xhttpXmux(t engine.Transport) obj {
+	return obj{}.
+		set("maxConcurrency", t.XmuxMaxConcurrency).
+		set("maxConnections", t.XmuxMaxConnections).
+		set("cMaxReuseTimes", t.XmuxMaxReuseTimes).
+		set("hMaxRequestTimes", t.XmuxMaxRequestTimes)
+}
+
+// xhttpDownloadSettings renders the XHTTP downlink detour: the downlink
+// rides a separate server, so uplink and downlink can use different
+// domains. Xray dials it as an independent stream, so it carries its own
+// address, port and security; the security mirrors the main stream with
+// the SNI pointed at the downlink host.
+func xhttpDownloadSettings(o engine.Outbound) (obj, error) {
+	t := o.Transport
+	if t.DownloadAddress == "" || t.DownloadPort == 0 {
+		return nil, fmt.Errorf("xray: outbound %s: XHTTP downloadSettings needs both a download address and a download port", o.ID)
+	}
+	if t.Mode == "stream-one" {
+		// stream-one carries both directions on one connection, so a
+		// separate downlink is contradictory; stream-up is the two-leg mode.
+		return nil, fmt.Errorf("xray: outbound %s: XHTTP downloadSettings is incompatible with mode stream-one (use stream-up)", o.ID)
+	}
+	fp, err := xhttpDownlinkFingerprint(o)
+	if err != nil {
+		return nil, err
+	}
+	dxs := obj{}.set("path", t.Path)
+	if xmux := xhttpXmux(t); len(xmux) > 0 {
+		dxs["xmux"] = xmux
+	}
+	ds := obj{"address": t.DownloadAddress, "port": int(t.DownloadPort), "network": "xhttp"}.
+		set("xhttpSettings", dxs)
+	switch {
+	case o.TLS.Reality:
+		ds["security"] = "reality"
+		ds["realitySettings"] = obj{
+			"serverName": t.DownloadAddress, "publicKey": o.TLS.RealityPublicKey,
+			"fingerprint": fp,
+		}.set("shortId", o.TLS.RealityShortID).set("spiderX", o.TLS.SpiderX)
+	case o.TLS.Enabled || o.Protocol == engine.ProtocolTrojan:
+		ds["security"] = "tls"
+		ds["tlsSettings"] = obj{"serverName": t.DownloadAddress}.
+			set("alpn", o.TLS.ALPN).set("fingerprint", fp)
+	}
+	return ds, nil
+}
+
+// xhttpDownlinkFingerprint resolves the uTLS fingerprint for the XHTTP
+// downlink detour so it can never silently diverge from the uplink: the
+// plan's explicit fingerprint wins. Unlike the main stream — which falls
+// back to the canonical "hellochrome_auto" default — the downlink
+// refuses an empty fingerprint with an honest render error: the downlink
+// dials a different server than the uplink, so a silent default would
+// put a different ClientHello on the wire (S5-SP4, ported from sora;
+// legacy has no fingerprint-name catalog, so an explicit name is
+// passed through unchecked, exactly like the main stream's).
+func xhttpDownlinkFingerprint(o engine.Outbound) (string, error) {
+	if o.TLS.Fingerprint == "" {
+		return "", fmt.Errorf("xray: outbound %s: XHTTP downloadSettings needs an explicit uTLS fingerprint (plan TLS.Fingerprint): refusing to silently default the downlink parrot", o.ID)
+	}
+	return o.TLS.Fingerprint, nil
 }
 
 func (*renderer) hysteria(o engine.Outbound, tag string) obj {
