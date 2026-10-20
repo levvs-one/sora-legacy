@@ -120,7 +120,7 @@ func New(opts Options) *Fetcher {
 			ResponseHeaderTimeout: 20 * time.Second,
 		}
 		if p := opts.Obfs; p != nil {
-			if frag := p.Clamp(); frag.Validate() == nil && frag.Fragmentation() {
+			if frag := p.Clamp(); frag.Validate() == nil && (frag.Fragmentation() || frag.FakeSNI != "" || frag.Jitter > 0) {
 				// Fragment the ClientHello at the TCP layer underneath
 				// the transport's own TLS handshake: proxies, HTTP/2
 				// and certificate verification keep working untouched.

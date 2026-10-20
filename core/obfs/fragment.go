@@ -1,14 +1,65 @@
 package obfs
 
 import (
+	"encoding/binary"
+	"errors"
 	"net"
 	"sync/atomic"
 	"time"
 )
 
+// TLS record layer constants used by the SNI rewriter and the record
+// parser (ported from sora's frag.go).
+const (
+	recordTypeHandshake  = 22
+	handshakeClientHello = 1
+	recordHeaderLen      = 5
+)
+
+// parseTLSRecords splits buf into individual TLS records. It returns an
+// error if buf does not consist of complete, well-formed records.
+func parseTLSRecords(buf []byte) ([][]byte, error) {
+	var out [][]byte
+	for len(buf) > 0 {
+		if len(buf) < recordHeaderLen {
+			return nil, errors.New("obfs: truncated TLS record header")
+		}
+		n := int(binary.BigEndian.Uint16(buf[3:5]))
+		if recordHeaderLen+n > len(buf) {
+			return nil, errors.New("obfs: truncated TLS record payload")
+		}
+		out = append(out, buf[:recordHeaderLen+n])
+		buf = buf[recordHeaderLen+n:]
+	}
+	return out, nil
+}
+
+// isClientHelloRecord reports whether rec is a single TLS record whose
+// first handshake message is a ClientHello.
+func isClientHelloRecord(rec []byte) bool {
+	return len(rec) > recordHeaderLen &&
+		rec[0] == recordTypeHandshake &&
+		rec[recordHeaderLen] == handshakeClientHello
+}
+
+func hasClientHello(recs [][]byte) bool {
+	for _, r := range recs {
+		if isClientHelloRecord(r) {
+			return true
+		}
+	}
+	return false
+}
+
 // WrapConn applies the profile's connection-level obfuscation to conn:
-// ClientHello fragmentation. It returns conn unchanged when conn is nil
-// or the profile disables fragmentation.
+// ClientHello fragmentation, FakeSNI rewriting and inter-write jitter.
+// It returns conn unchanged when conn is nil or the profile enables none
+// of the three.
+//
+// The layers stack in write order: jitter sleeps first, the SNI
+// rewriter transforms a complete ClientHello record, and the
+// fragmenter splits the (possibly rewritten) record — so a rewritten
+// hello is fragmented exactly like an original one.
 //
 // Only the first write that looks like a TLS handshake record (content
 // type 0x16, major version 0x03) is ever fragmented. Earlier plaintext
@@ -18,15 +69,64 @@ import (
 // only a 5-byte sniff per write, so wrapping a non-TLS connection is
 // harmless.
 func (p Profile) WrapConn(conn net.Conn) net.Conn {
-	if conn == nil || !p.Fragmentation() {
+	if conn == nil || (!p.Fragmentation() && p.FakeSNI == "" && p.Jitter <= 0) {
 		return conn
 	}
 	p = p.Clamp()
-	return &fragmentConn{
-		Conn:  conn,
-		sizes: append([]int(nil), p.FragSizes...),
-		delay: p.FragDelay,
+	out := conn
+	if p.Fragmentation() {
+		out = &fragmentConn{
+			Conn:  out,
+			sizes: append([]int(nil), p.FragSizes...),
+			delay: p.FragDelay,
+		}
 	}
+	if p.FakeSNI != "" {
+		out = &sniConn{Conn: out, fake: p.FakeSNI}
+	}
+	if p.Jitter > 0 {
+		out = &jitterConn{Conn: out, max: p.Jitter, rng: newJitterRand()}
+	}
+	return out
+}
+
+// sniConn rewrites the SNI of ClientHello records on the write path
+// with the profile's FakeSNI (see RewriteClientHelloSNI). A write that
+// does not parse as complete TLS records, or carries no ClientHello,
+// passes through untouched — the same rule sora's wrapper applies. A
+// ClientHello that parses but cannot be rewritten fails closed: the
+// profile asked for a fake SNI, and sending the original would put the
+// real SNI on the wire in plaintext, the exact leak the wrapper exists
+// to prevent. A well-formed hello with no SNI at all passes as-is:
+// there is nothing to leak and nothing to replace.
+type sniConn struct {
+	net.Conn
+	fake string
+}
+
+func (c *sniConn) Write(p []byte) (int, error) {
+	recs, err := parseTLSRecords(p)
+	if err != nil || !hasClientHello(recs) {
+		return c.Conn.Write(p)
+	}
+	out := make([]byte, 0, len(p))
+	for _, rec := range recs {
+		if isClientHelloRecord(rec) {
+			rewritten, err := RewriteClientHelloSNI(rec, c.fake)
+			if errors.Is(err, errNoServerName) {
+				rewritten, err = rec, nil
+			}
+			if err != nil {
+				return 0, errors.New("obfs: ClientHello could not be rewritten with the fake SNI; refusing to send the real SNI")
+			}
+			rec = rewritten
+		}
+		out = append(out, rec...)
+	}
+	if err := writeFull(c.Conn, out); err != nil {
+		return 0, err
+	}
+	return len(p), nil
 }
 
 // fragmentConn splits the first TLS handshake record written on the

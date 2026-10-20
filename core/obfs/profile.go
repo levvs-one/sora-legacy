@@ -3,6 +3,7 @@ package obfs
 import (
 	"errors"
 	"fmt"
+	"net"
 	"strings"
 	"time"
 )
@@ -21,6 +22,8 @@ const (
 const (
 	// MaxFragDelay caps the pause between ClientHello fragments.
 	MaxFragDelay = 2 * time.Second
+	// MaxJitter caps the random inter-packet delay.
+	MaxJitter = 5 * time.Second
 	// MaxFragmentSize caps a single ClientHello fragment payload: a TLS
 	// record payload never exceeds 2^14 bytes.
 	MaxFragmentSize = 16 * 1024
@@ -48,6 +51,24 @@ type Profile struct {
 	// FragDelay is the pause between ClientHello fragments. Clamped to
 	// MaxFragDelay.
 	FragDelay time.Duration
+
+	// Jitter is the maximum random delay inserted between handshake
+	// packets. The actual delay per packet is uniform in [0, Jitter].
+	// Clamped to MaxJitter.
+	//
+	// The jitter wrapper cannot tell handshake bytes from application
+	// data, so the delay applies to every Write on the wrapped connection
+	// for its whole lifetime, not just the handshake. For the short-lived
+	// core-initiated connections this package targets that is the
+	// handshake in practice.
+	Jitter time.Duration
+
+	// FakeSNI, when set, replaces the SNI in the initial ClientHello with
+	// a decoy hostname. Only applied to handshakes the core initiates
+	// itself, never to user traffic. The server must serve a certificate
+	// valid for the fake name (or verification must be disabled for that
+	// connection), otherwise the handshake will fail closed.
+	FakeSNI string
 }
 
 // PresetFast is the lightest touch: a common browser fingerprint, no
@@ -60,6 +81,7 @@ var PresetBalanced = Profile{
 	UTLS:      UTLSChrome,
 	FragSizes: []int{64, 128},
 	FragDelay: 10 * time.Millisecond,
+	Jitter:    25 * time.Millisecond,
 }.Clamp()
 
 // PresetMax is the most aggressive masking: randomized fingerprint and
@@ -68,6 +90,7 @@ var PresetMax = Profile{
 	UTLS:      UTLSRandomized,
 	FragSizes: []int{32, 64, 96},
 	FragDelay: 50 * time.Millisecond,
+	Jitter:    150 * time.Millisecond,
 }.Clamp()
 
 // Validate reports whether the profile is well-formed. Extreme but
@@ -92,6 +115,12 @@ func (p Profile) Validate() error {
 	if p.FragDelay < 0 {
 		return fmt.Errorf("obfs: FragDelay = %s: must not be negative", p.FragDelay)
 	}
+	if p.Jitter < 0 {
+		return fmt.Errorf("obfs: Jitter = %s: must not be negative", p.Jitter)
+	}
+	if p.FakeSNI != "" && !validHostname(p.FakeSNI) {
+		return fmt.Errorf("obfs: FakeSNI %q is not a valid hostname", p.FakeSNI)
+	}
 	return nil
 }
 
@@ -99,6 +128,9 @@ func (p Profile) Validate() error {
 func (p Profile) Clamp() Profile {
 	if p.FragDelay > MaxFragDelay {
 		p.FragDelay = MaxFragDelay
+	}
+	if p.Jitter > MaxJitter {
+		p.Jitter = MaxJitter
 	}
 	return p
 }
@@ -117,4 +149,32 @@ func (p Profile) UTLSEnabled() bool {
 
 func normalizeUTLS(s string) string {
 	return strings.ToLower(strings.TrimSpace(s))
+}
+
+// validHostname reports whether s is a syntactically valid DNS hostname
+// (LDH labels, no leading/trailing hyphen, total length within limits).
+// IP literals are rejected: RFC 6066 forbids sending them in the
+// server_name extension, so they are useless as a (fake) SNI.
+func validHostname(s string) bool {
+	if len(s) == 0 || len(s) > 253 {
+		return false
+	}
+	if net.ParseIP(s) != nil {
+		return false
+	}
+	for _, label := range strings.Split(s, ".") {
+		if len(label) == 0 || len(label) > 63 {
+			return false
+		}
+		if label[0] == '-' || label[len(label)-1] == '-' {
+			return false
+		}
+		for i := 0; i < len(label); i++ {
+			c := label[i]
+			if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '-') {
+				return false
+			}
+		}
+	}
+	return true
 }

@@ -1,12 +1,15 @@
 // Package obfs is the obfuscation suite for TLS handshakes the core
 // initiates itself (subscription fetches and direct TLS dials).
 //
-// It provides two independent techniques:
+// It provides four independent techniques:
 //
 //   - uTLS ClientHello fingerprint selection (see utls.go and dial.go)
 //     for direct TLS connections dialed through Dialer.
 //   - Pure-Go ClientHello fragmentation (see fragment.go), which works
 //     at the TCP layer underneath any TLS stack.
+//   - Fake-SNI rewriting of the initial ClientHello (see sni.go), and
+//     inter-write timing jitter (see jitter.go), both applied by
+//     WrapConn on the same write path (ported from sora, W4).
 //
 // The package deliberately does not try to bend net/http.Transport into
 // using uTLS: the transport owns the TLS handshake (it type-asserts the
