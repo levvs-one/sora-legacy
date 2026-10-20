@@ -320,8 +320,39 @@ func (r *renderer) stream(o engine.Outbound) (obj, error) {
 		}.set("shortId", o.TLS.RealityShortID).set("spiderX", o.TLS.SpiderX)
 	case o.TLS.Enabled || needsTLS:
 		s["security"] = "tls"
-		s["tlsSettings"] = obj{}.set("serverName", o.TLS.ServerName).set("alpn", o.TLS.ALPN).
+		tlsSettings := obj{}.set("serverName", o.TLS.ServerName).set("alpn", o.TLS.ALPN).
 			set("fingerprint", o.TLS.Fingerprint)
+		if o.TLS.ECH.Enabled {
+			// ECH on Xray (transport/internet/tls/ech.go), probed on
+			// the pinned 26.10.17 binary (CENSOR-FP in sora; ported
+			// SP5-render from sora snapshot
+			// 63faf1d3480d5429b6bcec3483c19c8e03defb85): the pinned
+			// list renders as ONE base64 string in echConfigList and
+			// a wire capture shows the outer SNI becoming the list's
+			// public_name — real ECH. Without a pinned list Xray
+			// fetches the ECHConfigList itself when echForceQuery is
+			// "full". (The loader does not parse echConfigList at
+			// config-test time, so only the capture proves this —
+			// the runtime probe re-measures it per binary.)
+			if len(o.TLS.ECH.Config) > 0 {
+				b64, err := engine.ECHConfigListBase64(o.TLS.ECH.Config)
+				if err != nil {
+					return nil, fmt.Errorf("xray: outbound %s: %w", o.ID, err)
+				}
+				tlsSettings["echConfigList"] = b64
+			} else {
+				tlsSettings["echForceQuery"] = "full"
+			}
+			if o.TLS.ECH.QueryServerName != "" {
+				// Xray has no query_server_name spelling for ECH:
+				// the pinned list carries its own public_name and
+				// the DNS query uses the server name. Refuse rather
+				// than silently drop the override (sing-box and
+				// mihomo render it).
+				return nil, fmt.Errorf("xray: outbound %s sets ECH query_server_name %q, which Xray does not spell; use the sing-box or mihomo engine", o.ID, o.TLS.ECH.QueryServerName)
+			}
+		}
+		s["tlsSettings"] = tlsSettings
 	}
 	if r.plan.Options.Fragment.Enabled && s["security"] != nil {
 		// Dial proxy connections through the fragment outbound to split
