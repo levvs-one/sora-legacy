@@ -15,11 +15,10 @@ import (
 // before they leave the core. It matches plan values exactly and uses patterns
 // for unknown values such as engine-generated tokens.
 type Redactor struct {
-	mu      sync.Mutex
-	values  []string
-	build   *strings.Replacer
-	derived *strings.Replacer
-	encoded []string
+	mu       sync.Mutex
+	values   []string
+	build    *strings.Replacer
+	patterns []string
 }
 
 // NewRedactor returns a redactor seeded with the plan secrets.
@@ -67,10 +66,10 @@ func (r *Redactor) String(s string) string {
 	r.mu.Lock()
 	if r.build == nil {
 		pairs := make([]string, 0, len(r.values)*2)
-		var derivedPairs []string
-		r.encoded = r.encoded[:0]
+		r.patterns = r.patterns[:0]
 		for _, v := range r.values {
 			pairs = append(pairs, v, "[masked]")
+			r.patterns = append(r.patterns, v)
 			// A seed that reaches a log rarely arrives raw: engines
 			// and HTTP stacks re-encode it (percent-encoding in URLs
 			// and error strings, base64 in vmess-style blobs and
@@ -82,33 +81,44 @@ func (r *Redactor) String(s string) string {
 			// class, not the latest spelling).
 			for _, form := range derivedForms(v) {
 				if form != v && len(form) >= 4 {
-					derivedPairs = append(derivedPairs, form, "[masked]")
-					r.encoded = append(r.encoded, form)
+					pairs = append(pairs, form, "[masked]")
+					r.patterns = append(r.patterns, form)
 				}
 			}
 		}
+		// One combined replacer over raw seeds and derived forms,
+		// in exactly sora's pair order — the layout is load-bearing,
+		// not a style choice. The previous legacy layout kept the
+		// forms in a second replacer applied to the OUTPUT of the
+		// raw pass, and REVIEW-G proved it diverges: when a raw
+		// seed B is a substring of another seed A's derived form,
+		// the raw pass masks B inside the form, mangles the form so
+		// the second replacer no longer recognises it, and leaks
+		// the rest of A's encoding. A single replacer scans the
+		// original string once, so a form that starts earlier in
+		// the string is consumed whole before the scanner reaches
+		// the raw seed inside it.
 		r.build = strings.NewReplacer(pairs...)
-		// Legacy layout deviation from sora, kept for the
-		// BenchmarkRedactCleanLine gate: sora folds the derived
-		// forms into the one replacer, which demotes a single-seed
-		// redactor from the allocation-free single-pattern replacer
-		// to the generic trie replacer (measured +70% ns/op and
-		// +3 allocs on a clean line). The forms live in their own
-		// replacer here, applied only when a Contains scan finds
-		// one actually present — a replacer whose patterns are all
-		// absent is the identity, so the output is unchanged.
-		r.derived = nil
-		if len(derivedPairs) > 0 {
-			r.derived = strings.NewReplacer(derivedPairs...)
-		}
 	}
-	out := r.build.Replace(s)
-	if r.derived != nil {
-		for _, form := range r.encoded {
-			if strings.Contains(out, form) {
-				out = r.derived.Replace(out)
-				break
-			}
+	// The combined replacer is a generic-trie replacer and
+	// allocates when it rewrites, so it is gated: strings.Contains
+	// over the original string for every registered pattern (raw
+	// and derived) allocates nothing, and the replacer runs only
+	// when some pattern is actually present. Skipping it otherwise
+	// is byte-identical to running it — with ONE replacer over the
+	// ORIGINAL string, an input containing none of its patterns is
+	// the identity by definition. (That identity claim was false
+	// for the old two-replacer layout: its first pass rewrote the
+	// very string the second pass scanned.) A clean log line
+	// therefore keeps the allocation-free fast path
+	// BenchmarkRedactCleanLine pins (0 B/op, 0 allocs/op), and any
+	// line the gate lets through is masked by the single combined
+	// pass, byte-identical to sora's Redactor.String seed stage.
+	out := s
+	for _, p := range r.patterns {
+		if strings.Contains(s, p) {
+			out = r.build.Replace(s)
+			break
 		}
 	}
 	r.mu.Unlock()
