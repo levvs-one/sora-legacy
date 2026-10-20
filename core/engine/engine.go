@@ -57,10 +57,23 @@ const (
 	// FeatureXHTTPXmux because the fields are independent plan data: a
 	// padding-only plan must not demand xmux support, and an xmux-only
 	// plan must not demand padding (S5-SP4, ported from sora).
-	FeatureXHTTPPadding   Feature = "xhttp-padding"
-	FeatureVLESSEncrypt   Feature = "vless-encryption"
-	FeatureAmneziaWG      Feature = "amneziawg"
-	FeaturePrivateControl Feature = "private-control"
+	FeatureXHTTPPadding Feature = "xhttp-padding"
+	// FeatureECH marks engines whose renderer actually emits Encrypted
+	// Client Hello. No legacy engine claims it — no legacy renderer
+	// spells ECH yet — so the constant exists for RequiredFeatures: an
+	// ECH plan demands it, every engine reports it missing, and the
+	// plan fails selection instead of sending the SNI in the clear
+	// while promising it hidden (S5-SP5, ported from sora).
+	FeatureECH Feature = "ech"
+	// FeatureRealityKeyShare marks engines whose renderer can spell
+	// the plan's REALITY key-share choice (TLS.KeyShare). Like
+	// FeatureECH it is claimed by no legacy engine yet; it exists so a
+	// plan setting KeyShare fails selection instead of silently
+	// losing the choice (S5-SP5, ported from sora).
+	FeatureRealityKeyShare Feature = "reality-key-share"
+	FeatureVLESSEncrypt    Feature = "vless-encryption"
+	FeatureAmneziaWG       Feature = "amneziawg"
+	FeaturePrivateControl  Feature = "private-control"
 )
 
 // Capabilities describes the protocols and features supported by an engine

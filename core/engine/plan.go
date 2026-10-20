@@ -54,19 +54,52 @@ const (
 	GroupLoadBalance GroupType = "load-balance"
 )
 
+// ECHConfig holds Encrypted Client Hello (RFC 9849) parameters of an
+// outbound. The zero value disables ECH. No legacy renderer spells ECH
+// yet: the type exists so a plan can carry it and validation can judge
+// it (TLS.validate and the plan-level bootstrap rule in validate.go),
+// while RequiredFeatures demands FeatureECH — which no engine claims —
+// so an ECH plan fails engine selection instead of silently sending
+// the SNI in the clear (S5-SP5, ported from sora).
+type ECHConfig struct {
+	// Enabled turns ECH on. Without a pinned Config the engine fetches
+	// the ECHConfigList from the server's HTTPS DNS record, so a working
+	// (ideally encrypted) DNS path is required for the bootstrap.
+	Enabled bool
+	// Config pins PEM-encoded ECHConfigList lines, skipping the DNS
+	// lookup. Useful where encrypted DNS itself is blocked.
+	Config []string
+	// QueryServerName overrides the domain used for the ECH DNS query.
+	QueryServerName string
+}
+
 // TLS holds transport security parameters of an outbound.
 type TLS struct {
 	Enabled     bool
 	ServerName  string
 	ALPN        []string
 	Fingerprint string
-	Insecure    bool
-	Reality     bool
+	// ECH enables Encrypted Client Hello. Opt-in only: some censors drop
+	// ClientHellos carrying the ECH extension, so it must never default on.
+	ECH      ECHConfig
+	Insecure bool
+	Reality  bool
 	// RealityPublicKey and other REALITY parameters are public but masked
 	// because they identify a server.
 	RealityPublicKey string
 	RealityShortID   string
 	SpiderX          string
+	// KeyShare selects the key share the REALITY ClientHello offers:
+	// "" leaves the engine default, "classical" offers X25519 only,
+	// "hybrid" offers the X25519MLKEM768 hybrid. REALITY servers on
+	// Xray >= 26.9.8 accept only the hybrid share, so against them
+	// "classical" (or a default that omits the hybrid) fails the
+	// handshake with an opaque verification error. No legacy renderer
+	// spells it yet; RequiredFeatures demands FeatureRealityKeyShare,
+	// which no engine claims, so a plan setting it fails engine
+	// selection instead of silently losing the choice (S5-SP5,
+	// ported from sora).
+	KeyShare string
 }
 
 // Transport holds the stream transport of an outbound.

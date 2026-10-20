@@ -181,6 +181,7 @@ func (o Outbound) Validate() error {
 	if len(o.TLS.ALPN) > 8 {
 		errs = append(errs, fmt.Errorf("outbound %s: too many ALPN entries", o.ID))
 	}
+	errs = append(errs, o.TLS.validate("outbound "+o.ID)...)
 	if len(o.Transport.Headers) > MaxHeaderCount {
 		errs = append(errs, fmt.Errorf("outbound %s: more than %d headers", o.ID, MaxHeaderCount))
 	}
@@ -336,6 +337,68 @@ func validateXHTTP(o Outbound) []error {
 	return errs
 }
 
+// validate enforces the ECH honesty rules (ported from sora, S5-SP5):
+//   - ECH without TLS is meaningless;
+//   - ECH and REALITY are incompatible: REALITY owns the ClientHello, an
+//     ECH extension on top of it is misconfiguration, not stealth.
+//
+// QueryServerName is NOT rejected here: it is plan data a future ECH
+// renderer will spell, and rejecting it would make the field unusable
+// the moment one lands. The "no legacy renderer spells ECH yet" side
+// is closed by the FeatureECH capability gate, not by validation.
+func (t TLS) validate(what string) []error {
+	var errs []error
+	// KeyShare is the REALITY key-share knob: only the two documented
+	// values, and only with REALITY — anywhere else it would be a
+	// setting no renderer can honour.
+	switch t.KeyShare {
+	case "", "classical", "hybrid":
+	default:
+		errs = append(errs, fmt.Errorf("%s: reality key_share %q is not \"classical\" or \"hybrid\"", what, t.KeyShare))
+	}
+	if t.KeyShare != "" && !t.Reality {
+		errs = append(errs, fmt.Errorf("%s: reality key_share needs REALITY", what))
+	}
+	ech := t.ECH
+	if !ech.Enabled {
+		return errs
+	}
+	if !t.Enabled {
+		errs = append(errs, fmt.Errorf("%s: ECH is enabled but TLS is not", what))
+	}
+	if t.Reality {
+		errs = append(errs, fmt.Errorf("%s: ECH and REALITY are incompatible", what))
+	}
+	if len(ech.Config) > 0 {
+		// A pinned list every renderer must decode: garbage here
+		// would otherwise surface as an engine startup refusal or a
+		// silently unparseable echConfigList.
+		if _, err := ECHConfigListBytes(ech.Config); err != nil {
+			errs = append(errs, fmt.Errorf("%s: %w", what, err))
+		}
+	}
+	return errs
+}
+
+// hasEncryptedServer reports whether the plan carries a DNS transport a
+// passive censor cannot read. ECH without a pinned config fetches the
+// ECHConfigList from the DNS HTTPS record; over plaintext or system DNS
+// that bootstrap query leaks the target domain before TLS even starts.
+// Legacy's DNS transports have no h3 constant (sora's set checks it
+// too); the encrypted set here is DoH, DoT and DoQ.
+func (d DNS) hasEncryptedServer() bool {
+	if !d.Enabled {
+		return false
+	}
+	for _, s := range d.Servers {
+		switch s.Transport {
+		case DNSHTTPS, DNSTLS, DNSQUIC:
+			return true
+		}
+	}
+	return false
+}
+
 // validatePeerEndpoint checks the host:port of a WireGuard peer. Renderers
 // split it without further checks, so an invalid port must fail here.
 func validatePeerEndpoint(id, endpoint string) error {
@@ -442,6 +505,17 @@ func (p *Plan) Validate() error {
 	}
 
 	errs = append(errs, p.DNS.validate(), p.Tun.validate(), p.Options.validate())
+
+	// ECH without a pinned config fetches the ECHConfigList from the DNS
+	// HTTPS record: over a plaintext or system DNS path that
+	// bootstrap query leaks the target domain before TLS even starts,
+	// which defeats the purpose of hiding the SNI. Fail closed with a
+	// message that names the fix (S5-SP5, ported from sora).
+	for _, o := range p.Outbounds {
+		if o.TLS.ECH.Enabled && len(o.TLS.ECH.Config) == 0 && !p.DNS.hasEncryptedServer() {
+			errs = append(errs, fmt.Errorf("plan: outbound %s enables ECH without a pinned config, but the plan has no encrypted DNS transport; pin the ECH config or enable encrypted DNS", o.ID))
+		}
+	}
 	return errors.Join(errs...)
 }
 

@@ -77,6 +77,16 @@ func (p *Plan) RequiredFeatures() map[Feature]bool {
 		if o.Amnezia != nil {
 			out[FeatureAmneziaWG] = true
 		}
+		if o.TLS.ECH.Enabled {
+			// An engine that does not render ECH would send the SNI
+			// in the clear while the plan promises it hidden: route
+			// ECH plans only to engines that emit it. None do yet,
+			// so such a plan fails selection (S5-SP5, from sora).
+			out[FeatureECH] = true
+		}
+		if o.TLS.KeyShare != "" {
+			out[FeatureRealityKeyShare] = true
+		}
 	}
 	if p.Options.Fragment.Enabled {
 		out[FeatureTLSFragment] = true
