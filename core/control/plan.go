@@ -259,10 +259,13 @@ func blobError(format string, args ...any) error {
 // unreachable for real parser output, exist where the blob is the
 // primary source: the transport (the parser defaults the flat field
 // to "tcp" for a document whose transport object names the real type,
-// so the blob always replaces it), and a REALITY claim (a blob that
-// claims REALITY outranks a typed "tls" label — Clash spells the pair
-// as tls:true plus reality-opts — while any other typed security,
-// including an explicit "none", keeps winning over the blob's label).
+// so the blob always replaces it), and security (a REALITY claim
+// outranks any typed label; any other blob label loses to any typed
+// security, including "none" — Clash spells the tls:true plus
+// reality-opts pair that the first half of that rule governs).
+// Insecure is monotonic in the blob's favour in the same limited
+// sense: a blob may only turn it on over a typed false, never turn a
+// typed true off.
 func resolveImportedSpec(spec parser.OutboundSpec) (parser.OutboundSpec, map[string]string, error) {
 	f, err := extractBlobFields(spec)
 	if err != nil {
@@ -540,7 +543,10 @@ func (f *blobFields) applyTLSBlob(v any) error {
 				return err
 			}
 			enabled := true
-			if rawEnabled, present := realityObj["enabled"]; present {
+			if rawEnabled, present := realityObj["enabled"]; present && rawEnabled != nil {
+				// A null enabled is an absent value: the block's
+				// presence keeps its default (true) instead of
+				// blobBool's generic false.
 				enabled, err = blobBool(rawEnabled, "tls.reality.enabled")
 				if err != nil {
 					return err
@@ -819,12 +825,26 @@ func blobString(v any, what string) (string, error) {
 // mihomo — whose field is a string — reads the same document back as
 // exactly those digits, so converting is the dialect's own reading,
 // not a guess. A fractional or negative number is a short-id in no
-// dialect and fails closed like any other wrong shape. The public
-// key deliberately gets no such treatment (it stays blobString): a
-// valid key is never numeric, so a number there is a broken blob.
+// dialect and fails closed like any other wrong shape. A number at
+// or above 2^53 fails closed the same way: optionBlob decodes every
+// JSON number to float64, which cannot represent every integer in
+// [2^53, 10^16) exactly — 9007199254740993 silently became
+// 9007199254740992, a different 16-digit short-id that plan
+// validation (a hex and length check) would have accepted. Below
+// 2^53 every integer is exact, so the conversion there is faithful;
+// at or above it the raw digits cannot be trusted to survive the
+// decode, so the import refuses them instead of storing a rounded
+// short-id. (Decoding optionBlob with json.Number would preserve
+// the digits, but it would change the type of every number in
+// every blob — blobBool's 0/1 and blobString's strictness and
+// diagnostics for a numeric public key included — for short-ids
+// no provider writes that large; the bound closes the window with
+// no change to the other consumers.) The public key deliberately
+// gets no such treatment (it stays blobString): a valid key is
+// never numeric, so a number there is a broken blob.
 func blobShortID(v any, what string) (string, error) {
 	if n, ok := v.(float64); ok {
-		if n < 0 || n != math.Trunc(n) {
+		if n < 0 || n >= 9007199254740992 || n != math.Trunc(n) {
 			return "", blobError("the %s option of an imported outbound is %v, not a short-id", what, n)
 		}
 		return strconv.FormatFloat(n, 'f', 0, 64), nil
@@ -833,9 +853,14 @@ func blobShortID(v any, what string) (string, error) {
 }
 
 // blobBool reads a loosely typed boolean: a JSON boolean, a "true"/
-// "false" string, or 0/1.
+// "false" string, or 0/1. A JSON null is an absent value (the F1
+// null semantics), read as false; a caller whose field defaults to
+// true when present (tls.reality.enabled) guards the null itself so
+// the default survives.
 func blobBool(v any, what string) (bool, error) {
 	switch value := v.(type) {
+	case nil:
+		return false, nil
 	case bool:
 		return value, nil
 	case string:
@@ -856,9 +881,11 @@ func blobBool(v any, what string) (bool, error) {
 }
 
 // blobStringList reads a string or a list of strings (an ALPN list in
-// either spelling).
+// either spelling). A JSON null is an absent value, read as no list.
 func blobStringList(v any, what string) ([]string, error) {
 	switch value := v.(type) {
+	case nil:
+		return nil, nil
 	case string:
 		if strings.TrimSpace(value) == "" {
 			return nil, nil
@@ -903,7 +930,11 @@ func blobHost(v any, what string) (string, error) {
 // blobHeaders reads a headers object into a flat string map. Header
 // values are strings in both dialects; anything else is a shape the
 // engines would misapply, so it fails closed like the other blobs.
+// A JSON null is an absent value, read as no headers.
 func blobHeaders(v any, what string) (map[string]string, error) {
+	if v == nil {
+		return nil, nil
+	}
 	obj, err := blobObject(v, what)
 	if err != nil {
 		return nil, err

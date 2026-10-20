@@ -241,3 +241,271 @@ func TestImportedMalformedRealityFailsAtValidate(t *testing.T) {
 		})
 	}
 }
+
+// REVIEW-SP6B §9.1 / §7.1: the float64 precision window in blobShortID.
+// optionBlob decodes every JSON number to float64, which cannot
+// represent every integer in [2^53, 10^16) exactly: 9007199254740993
+// (2^53+1) silently became "9007199254740992", a different 16-digit
+// short-id that plan validation accepts (its check is hex and
+// length only, and decimal digits are hex digits). blobShortID now
+// fails closed at or above 2^53, where the conversion stops being
+// faithful; below it every integer is exact and converts as before.
+func TestImportedShortIDPrecisionWindowFailsClosed(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		spec parser.OutboundSpec
+	}{
+		{
+			name: "clash reality-opts 2^53+1",
+			spec: parser.OutboundSpec{Protocol: "vless", Host: "edge.example.com", Port: 443, UUID: sp6bUUID,
+				Options: map[string]string{"reality-opts": `{"public-key":"` + sp6bPbk + `","short-id":9007199254740993}`}},
+		},
+		{
+			name: "sing-box tls reality 2^53+1",
+			spec: parser.OutboundSpec{Protocol: "vless", Host: "edge.example.com", Port: 443, UUID: sp6bUUID,
+				Options: map[string]string{"tls": `{"enabled":true,"reality":{"enabled":true,"public_key":"` + sp6bPbk + `","short_id":9007199254740993}}`}},
+		},
+		{
+			name: "clash reality-opts 9999999999999999",
+			spec: parser.OutboundSpec{Protocol: "vless", Host: "edge.example.com", Port: 443, UUID: sp6bUUID,
+				Options: map[string]string{"reality-opts": `{"public-key":"` + sp6bPbk + `","short-id":9999999999999999}`}},
+		},
+		{
+			name: "clash reality-opts 12345678901234567890",
+			spec: parser.OutboundSpec{Protocol: "vless", Host: "edge.example.com", Port: 443, UUID: sp6bUUID,
+				Options: map[string]string{"reality-opts": `{"public-key":"` + sp6bPbk + `","short-id":12345678901234567890}`}},
+		},
+		{
+			name: "clash document 2^53+1 through the parser",
+			spec: parser.OutboundSpec{},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			spec := tc.spec
+			if spec.Options == nil {
+				src := "proxies:\n  - name: p\n    type: vless\n    server: edge.example.com\n    port: 443\n" +
+					"    uuid: " + sp6bUUID + "\n    tls: true\n    reality-opts: {public-key: " + sp6bPbk + ", short-id: 9007199254740993}\n"
+				result, err := parser.LinkParser{}.Parse([]byte(src))
+				if err != nil || len(result.Servers) != 1 {
+					t.Fatalf("Parse = %+v, %v", result, err)
+				}
+				spec = result.Servers[0]
+			}
+			if _, err := credentialDocument(spec); err == nil {
+				t.Fatal("a numeric short-id at or above 2^53 must fail the import instead of being stored rounded to a different short-id")
+			} else if errs.CodeOf(err) != errs.CodeInvalidArgument {
+				t.Fatalf("code = %q, want invalid_argument (%v)", errs.CodeOf(err), err)
+			} else if !strings.Contains(err.Error(), "not a short-id") {
+				t.Errorf("the refusal must name the short-id: %v", err)
+			}
+		})
+	}
+}
+
+// The green side of the same bound: ordinary numeric short-ids and
+// the largest exactly representable integer (2^53-1, still 16
+// digits) convert digit-for-digit as before.
+func TestImportedShortIDBelowPrecisionBoundStillConverts(t *testing.T) {
+	for _, tc := range []struct{ raw, want string }{
+		{"12345678", "12345678"},
+		{"1234567890123456", "1234567890123456"},
+		{"9007199254740991", "9007199254740991"},
+	} {
+		t.Run(tc.want, func(t *testing.T) {
+			spec := parser.OutboundSpec{Protocol: "vless", Host: "edge.example.com", Port: 443, UUID: sp6bUUID,
+				Options: map[string]string{"reality-opts": `{"public-key":"` + sp6bPbk + `","short-id":` + tc.raw + `}`}}
+			resolved, _, err := resolveImportedSpec(spec)
+			if err != nil {
+				t.Fatalf("resolveImportedSpec: %v", err)
+			}
+			if resolved.ShortID != tc.want || resolved.Security != "reality" || resolved.PublicKey != sp6bPbk {
+				t.Errorf("resolved = %+v, want short-id %q with the REALITY claim and key", resolved, tc.want)
+			}
+		})
+	}
+}
+
+// REVIEW-SP6B §1 / §7.2: the residual nested nulls, one level deeper
+// than the option-level nulls F1 already handled. A JSON null inside
+// a blob is an absent value in the same semantics: "alpn": null and
+// "insecure": null inside a tls blob, and "headers": null inside a
+// transport or *-opts blob, used to fail the whole import with a
+// shape error. Each imports now, alone and combined, and invents
+// no claim; neighbouring real values survive.
+func TestImportedNestedNullsAreAbsent(t *testing.T) {
+	direct := []struct {
+		name  string
+		spec  parser.OutboundSpec
+		check func(t *testing.T, resolved parser.OutboundSpec, headers map[string]string)
+	}{
+		{
+			name: "tls alpn null",
+			spec: parser.OutboundSpec{Protocol: "vless", Host: "edge.example.com", Port: 443, UUID: sp6bUUID,
+				Options: map[string]string{"tls": `{"enabled":true,"server_name":"s.example.com","alpn":null}`}},
+			check: func(t *testing.T, resolved parser.OutboundSpec, _ map[string]string) {
+				if len(resolved.ALPN) != 0 || resolved.ServerName != "s.example.com" || resolved.Security != "tls" {
+					t.Errorf("resolved = %+v, want no ALPN, the server name and tls", resolved)
+				}
+			},
+		},
+		{
+			name: "tls insecure null",
+			spec: parser.OutboundSpec{Protocol: "vless", Host: "edge.example.com", Port: 443, UUID: sp6bUUID,
+				Options: map[string]string{"tls": `{"enabled":true,"insecure":null}`}},
+			check: func(t *testing.T, resolved parser.OutboundSpec, _ map[string]string) {
+				if resolved.AllowInsecure {
+					t.Errorf("a null insecure must not invent an insecure claim: %+v", resolved)
+				}
+			},
+		},
+		{
+			name: "transport headers null",
+			spec: parser.OutboundSpec{Protocol: "vless", Host: "edge.example.com", Port: 443, UUID: sp6bUUID,
+				Options: map[string]string{"transport": `{"type":"ws","path":"/ws","headers":null}`}},
+			check: func(t *testing.T, resolved parser.OutboundSpec, headers map[string]string) {
+				if len(headers) != 0 || resolved.Transport != "ws" || resolved.Path != "/ws" {
+					t.Errorf("resolved = %+v headers = %v, want no headers with the ws path intact", resolved, headers)
+				}
+			},
+		},
+		{
+			name: "h2-opts headers null",
+			spec: parser.OutboundSpec{Protocol: "vless", Host: "edge.example.com", Port: 443, UUID: sp6bUUID,
+				Options: map[string]string{"h2-opts": `{"path":"/h2-path","headers":null}`}},
+			check: func(t *testing.T, resolved parser.OutboundSpec, headers map[string]string) {
+				if len(headers) != 0 || resolved.Path != "/h2-path" {
+					t.Errorf("resolved = %+v headers = %v, want no headers with the h2 path intact", resolved, headers)
+				}
+			},
+		},
+		{
+			name: "ws-opts headers null",
+			spec: parser.OutboundSpec{Protocol: "vless", Host: "edge.example.com", Port: 443, UUID: sp6bUUID,
+				Options: map[string]string{"ws-opts": `{"path":"/ws-path","headers":null}`}},
+			check: func(t *testing.T, resolved parser.OutboundSpec, headers map[string]string) {
+				if len(headers) != 0 || resolved.Path != "/ws-path" {
+					t.Errorf("resolved = %+v headers = %v, want no headers with the ws path intact", resolved, headers)
+				}
+			},
+		},
+		{
+			name: "all nested nulls at once",
+			spec: parser.OutboundSpec{Protocol: "vless", Host: "edge.example.com", Port: 443, UUID: sp6bUUID,
+				Options: map[string]string{
+					"tls":       `{"enabled":true,"server_name":"s.example.com","alpn":null,"insecure":null}`,
+					"transport": `{"type":"ws","path":"/ws","headers":null}`,
+					"h2-opts":   `{"headers":null}`,
+				}},
+			check: func(t *testing.T, resolved parser.OutboundSpec, headers map[string]string) {
+				if len(resolved.ALPN) != 0 || resolved.AllowInsecure || len(headers) != 0 ||
+					resolved.ServerName != "s.example.com" || resolved.Path != "/ws" {
+					t.Errorf("resolved = %+v headers = %v, want every null absent and every real value intact", resolved, headers)
+				}
+			},
+		},
+		{
+			name: "reality enabled null keeps the block's default",
+			spec: parser.OutboundSpec{Protocol: "vless", Host: "edge.example.com", Port: 443, UUID: sp6bUUID,
+				Options: map[string]string{"tls": `{"enabled":true,"reality":{"enabled":null,"public_key":"` + sp6bPbk + `","short_id":"6ba85179e30d4fc2"}}`}},
+			check: func(t *testing.T, resolved parser.OutboundSpec, _ map[string]string) {
+				if resolved.Security != "reality" || resolved.PublicKey != sp6bPbk || resolved.ShortID != "6ba85179e30d4fc2" {
+					t.Errorf("resolved = %+v, want the REALITY claim a null enabled leaves at its default", resolved)
+				}
+			},
+		},
+	}
+	for _, tc := range direct {
+		t.Run(tc.name, func(t *testing.T) {
+			resolved, headers, err := resolveImportedSpec(tc.spec)
+			if err != nil {
+				t.Fatalf("a nested null is an absent value and must not fail the import: %v", err)
+			}
+			tc.check(t, resolved, headers)
+		})
+	}
+	// The same documents through the full parser and vault path.
+	for _, tc := range []struct{ name, src string }{
+		{
+			name: "sing-box document with alpn insecure and headers null",
+			src: `{"outbounds":[{"type":"vless","tag":"p","server":"edge.example.com","server_port":443,` +
+				`"uuid":"` + sp6bUUID + `","tls":{"enabled":true,"server_name":"s.example.com","alpn":null,"insecure":null},` +
+				`"transport":{"type":"ws","path":"/ws","headers":null}}]}`,
+		},
+		{
+			name: "clash document with h2 headers null",
+			src: "proxies:\n  - name: p\n    type: vless\n    server: edge.example.com\n    port: 443\n" +
+				"    uuid: " + sp6bUUID + "\n    network: h2\n    tls: true\n" +
+				"    h2-opts:\n      path: /h2-path\n      headers:\n",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := parser.LinkParser{}.Parse([]byte(tc.src))
+			if err != nil {
+				t.Fatalf("Parse: %v", err)
+			}
+			plan, _ := importedPlan(t, result)
+			o := plan.Outbounds[0]
+			if len(o.TLS.ALPN) != 0 || o.TLS.Insecure || len(o.Transport.Headers) != 0 {
+				t.Errorf("nested nulls invented a claim on the way to the engine: %+v / %+v", o.TLS, o.Transport)
+			}
+			if o.Transport.Path == "" {
+				t.Errorf("the transport path next to the null headers was lost: %+v", o.Transport)
+			}
+		})
+	}
+}
+
+// REVIEW-SP6B §4 / §7.3: the resolveImportedSpec header, pinned
+// behaviourally. A REALITY claim outranks ANY typed label, including
+// an explicit "none" (the switch keys on the blob's reality
+// unconditionally); any other blob label loses to any typed
+// security, including "none". Insecure is monotonic: a blob may
+// only turn it on over a typed false.
+func TestImportedSpecHeaderSemantics(t *testing.T) {
+	realityOpts := map[string]string{"reality-opts": `{"public-key":"` + sp6bPbk + `","short-id":"6ba85179e30d4fc2"}`}
+	noneReality := parser.OutboundSpec{Protocol: "vless", Host: "edge.example.com", Port: 443, UUID: sp6bUUID,
+		Security: "none", Options: realityOpts}
+	resolved, _, err := resolveImportedSpec(noneReality)
+	if err != nil {
+		t.Fatalf("resolveImportedSpec: %v", err)
+	}
+	if resolved.Security != "reality" || resolved.PublicKey != sp6bPbk {
+		t.Errorf("typed none + reality-opts = %+v, want the REALITY claim to outrank the typed label", resolved)
+	}
+
+	tlsBlob := parser.OutboundSpec{Protocol: "vless", Host: "edge.example.com", Port: 443, UUID: sp6bUUID,
+		Security: "none", Options: map[string]string{"tls": `{"enabled":true,"server_name":"s.example.com"}`}}
+	resolved, _, err = resolveImportedSpec(tlsBlob)
+	if err != nil {
+		t.Fatalf("resolveImportedSpec: %v", err)
+	}
+	if resolved.Security != "none" {
+		t.Errorf("typed none + a tls blob label = %q, want the typed label to win over any non-REALITY blob label", resolved.Security)
+	}
+
+	for _, tc := range []struct {
+		name    string
+		typed   bool
+		options map[string]string
+		want    bool
+	}{
+		{"blob turns insecure on over a typed false", false,
+			map[string]string{"tls": `{"enabled":true,"insecure":true}`}, true},
+		{"blob false never turns a typed true off", true,
+			map[string]string{"tls": `{"enabled":true,"insecure":false}`}, true},
+		{"no blob leaves a typed true on", true, nil, true},
+		{"no blob leaves a typed false off", false, nil, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			spec := parser.OutboundSpec{Protocol: "vless", Host: "edge.example.com", Port: 443, UUID: sp6bUUID,
+				AllowInsecure: tc.typed, Options: tc.options}
+			resolved, _, err := resolveImportedSpec(spec)
+			if err != nil {
+				t.Fatalf("resolveImportedSpec: %v", err)
+			}
+			if resolved.AllowInsecure != tc.want {
+				t.Errorf("AllowInsecure = %v, want %v (insecure is monotonic)", resolved.AllowInsecure, tc.want)
+			}
+		})
+	}
+}
