@@ -1,6 +1,10 @@
 package engine
 
 import (
+	"encoding/base64"
+	"encoding/hex"
+	"encoding/json"
+	"net/url"
 	"regexp"
 	"sort"
 	"strings"
@@ -11,9 +15,11 @@ import (
 // before they leave the core. It matches plan values exactly and uses patterns
 // for unknown values such as engine-generated tokens.
 type Redactor struct {
-	mu     sync.Mutex
-	values []string
-	build  *strings.Replacer
+	mu      sync.Mutex
+	values  []string
+	build   *strings.Replacer
+	derived *strings.Replacer
+	encoded []string
 }
 
 // NewRedactor returns a redactor seeded with the plan secrets.
@@ -61,12 +67,50 @@ func (r *Redactor) String(s string) string {
 	r.mu.Lock()
 	if r.build == nil {
 		pairs := make([]string, 0, len(r.values)*2)
+		var derivedPairs []string
+		r.encoded = r.encoded[:0]
 		for _, v := range r.values {
 			pairs = append(pairs, v, "[masked]")
+			// A seed that reaches a log rarely arrives raw: engines
+			// and HTTP stacks re-encode it (percent-encoding in URLs
+			// and error strings, base64 in vmess-style blobs and
+			// subscription bodies, hex in WireGuard tooling, JSON
+			// \uXXXX escapes in rendered configs). Masking only the
+			// raw form left every one of those encodings readable —
+			// the encoded forms are part of the seed, so they are
+			// registered alongside it (AUDIT-PARITY G3: close the
+			// class, not the latest spelling).
+			for _, form := range derivedForms(v) {
+				if form != v && len(form) >= 4 {
+					derivedPairs = append(derivedPairs, form, "[masked]")
+					r.encoded = append(r.encoded, form)
+				}
+			}
 		}
 		r.build = strings.NewReplacer(pairs...)
+		// Legacy layout deviation from sora, kept for the
+		// BenchmarkRedactCleanLine gate: sora folds the derived
+		// forms into the one replacer, which demotes a single-seed
+		// redactor from the allocation-free single-pattern replacer
+		// to the generic trie replacer (measured +70% ns/op and
+		// +3 allocs on a clean line). The forms live in their own
+		// replacer here, applied only when a Contains scan finds
+		// one actually present — a replacer whose patterns are all
+		// absent is the identity, so the output is unchanged.
+		r.derived = nil
+		if len(derivedPairs) > 0 {
+			r.derived = strings.NewReplacer(derivedPairs...)
+		}
 	}
 	out := r.build.Replace(s)
+	if r.derived != nil {
+		for _, form := range r.encoded {
+			if strings.Contains(out, form) {
+				out = r.derived.Replace(out)
+				break
+			}
+		}
+	}
 	r.mu.Unlock()
 	return maskPatterns(out)
 }
@@ -77,6 +121,59 @@ func (r *Redactor) Err(err error) error {
 		return nil
 	}
 	return &maskedError{Redactor: r, cause: err}
+}
+
+// derivedForms returns the re-encodings of a seed value that log
+// pipelines commonly produce: URL percent-encoding (query and path
+// flavours, upper- and lowercase hex digits), base64 (standard and
+// URL-safe, padded and raw), hex, and the JSON string escaping of the
+// value (\" \\ and \uXXXX forms). The list is computed once per
+// redactor rebuild, alongside the seeds themselves.
+func derivedForms(v string) []string {
+	forms := make([]string, 0, 10)
+	add := func(s string) {
+		for _, have := range forms {
+			if have == s {
+				return
+			}
+		}
+		forms = append(forms, s)
+	}
+	for _, esc := range []string{url.QueryEscape(v), url.PathEscape(v)} {
+		add(esc)
+		add(lowerPercentHex(esc))
+	}
+	raw := []byte(v)
+	for _, enc := range []*base64.Encoding{
+		base64.StdEncoding, base64.RawStdEncoding,
+		base64.URLEncoding, base64.RawURLEncoding,
+	} {
+		add(enc.EncodeToString(raw))
+	}
+	add(hex.EncodeToString(raw))
+	if marshalled, err := json.Marshal(v); err == nil && len(marshalled) >= 2 {
+		add(string(marshalled[1 : len(marshalled)-1]))
+	}
+	return forms
+}
+
+// lowerPercentHex lowercases the hex digits of %XX escapes: encoders
+// disagree on the case, and a seed masked as %2F must also be masked
+// as %2f.
+func lowerPercentHex(s string) string {
+	b := []byte(s)
+	for i := 0; i+2 < len(b); i++ {
+		if b[i] != '%' {
+			continue
+		}
+		for j := i + 1; j <= i+2; j++ {
+			if 'A' <= b[j] && b[j] <= 'F' {
+				b[j] += 'a' - 'A'
+			}
+		}
+		i += 2
+	}
+	return string(b)
 }
 
 type maskedError struct {
