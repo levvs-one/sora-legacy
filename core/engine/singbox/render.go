@@ -257,7 +257,11 @@ func (r *renderer) outbound(o engine.Outbound) (obj, error) {
 		return nil, fmt.Errorf("singbox: protocol %q is not supported", o.Protocol)
 	}
 	if o.TLS.Enabled || needsTLS {
-		out["tls"] = r.tls(o)
+		tlsObj, err := r.tls(o)
+		if err != nil {
+			return nil, err
+		}
+		out["tls"] = tlsObj
 	}
 	transport, err := transport(o.Transport)
 	if err != nil {
@@ -266,23 +270,55 @@ func (r *renderer) outbound(o engine.Outbound) (obj, error) {
 	return out.set("transport", transport), nil
 }
 
-func (r *renderer) tls(o engine.Outbound) obj {
+func (r *renderer) tls(o engine.Outbound) (obj, error) {
 	t := obj{"enabled": true}
 	t.set("server_name", o.TLS.ServerName).set("insecure", o.TLS.Insecure).set("alpn", o.TLS.ALPN)
 	fingerprint := o.TLS.Fingerprint
 	if o.TLS.Reality {
 		// REALITY only works behind a uTLS fingerprint.
 		fingerprint = orDefault(fingerprint, "chrome")
-		t["reality"] = obj{"enabled": true, "public_key": o.TLS.RealityPublicKey}.set("short_id", o.TLS.RealityShortID)
+		reality := obj{"enabled": true, "public_key": o.TLS.RealityPublicKey}.set("short_id", o.TLS.RealityShortID)
+		if o.TLS.KeyShare != "" {
+			// tls.reality.key_share of the lx fork (PASS2 S3 in
+			// sora), probed on the pinned lx.22 binary: "hybrid"/
+			// "classical" are accepted, anything else is refused
+			// at load, and a wire capture shows classical dropping
+			// the X25519MLKEM768 group from the ClientHello
+			// (CENSOR-FP; ported SP5-render from sora snapshot
+			// 63faf1d3480d5429b6bcec3483c19c8e03defb85).
+			reality["key_share"] = o.TLS.KeyShare
+		}
+		t["reality"] = reality
 	}
 	if fingerprint != "" {
 		t["utls"] = obj{"enabled": true, "fingerprint": fingerprint}
+	}
+	if o.TLS.ECH.Enabled {
+		// Without a pinned config the engine fetches the ECHConfigList
+		// from the server's HTTPS DNS record. query_server_name exists
+		// since sing-box 1.13, below the 1.14.3/1.15 floor, so it is
+		// always safe to emit.
+		ech := obj{"enabled": true}
+		if len(o.TLS.ECH.Config) > 0 {
+			// The pinned list is canonicalized to the PEM label the
+			// binary actually accepts — "ECH CONFIGS", probed on
+			// lx.22: the historical "ECHCONFIG" label makes the
+			// binary refuse the whole config at startup ("invalid
+			// ECH configs pem", CENSOR-FP).
+			pem, err := engine.ECHConfigPEM(o.TLS.ECH.Config)
+			if err != nil {
+				return nil, fmt.Errorf("singbox: outbound %s: %w", o.ID, err)
+			}
+			ech["config"] = pem
+		}
+		ech.set("query_server_name", o.TLS.ECH.QueryServerName)
+		t["ech"] = ech
 	}
 	if r.plan.Options.Fragment.Enabled && o.Protocol != engine.ProtocolHysteria2 && o.Protocol != engine.ProtocolTUIC {
 		// QUIC protocols have no TCP ClientHello to split.
 		t["fragment"] = true
 	}
-	return t
+	return t, nil
 }
 
 func transport(t engine.Transport) (obj, error) {
