@@ -58,7 +58,7 @@ var infoKeys = []string{
 // parseInfo reads metadata, preferring response headers over matching body
 // keys.
 func parseInfo(header http.Header, body []byte) Info {
-	values := bodyHeaders(body)
+	values, bodyText := bodyHeaders(body)
 	for _, key := range infoKeys {
 		if v := strings.TrimSpace(header.Get(key)); v != "" {
 			values[key] = v
@@ -79,6 +79,11 @@ func parseInfo(header http.Header, body []byte) Info {
 	info.WebPageURL = cleanURL(values["profile-web-page-url"])
 	info.SupportURL = cleanURL(values["support-url"])
 	info.Announce = cleanText(decodeMarked(values["announce"]), maxAnnounceRunes, true)
+	// OpenLibre sub.md globals fill what the panel metadata left out,
+	// under the exact same precedence (headers won above).
+	if isOLCRTCBody(bodyText) {
+		info.applyOLCRTCGlobals(values)
+	}
 	return info
 }
 
@@ -109,8 +114,12 @@ func parseUsage(raw string) (ok bool, upload, download, total uint64, expire tim
 }
 
 // bodyHeaders reads "#key: value" and "//key: value" lines from the top of the
-// body, which may itself be base64.
-func bodyHeaders(body []byte) map[string]string {
+// body, which may itself be base64. It also returns the decoded body text so
+// callers can classify the format without decoding a second time. Note the
+// local "##key: value" lines of an olcrtc subscription land under a "#key"
+// name here (their first '#' is the comment marker), never under "key", so
+// they cannot be mistaken for globals.
+func bodyHeaders(body []byte) (map[string]string, string) {
 	text := body
 	if decoded, ok := decodeBody(body); ok {
 		text = decoded
@@ -136,7 +145,7 @@ func bodyHeaders(body []byte) map[string]string {
 		}
 		out[strings.ToLower(strings.TrimSpace(key))] = strings.TrimSpace(value)
 	}
-	return out
+	return out, string(text)
 }
 
 // decodeBody decodes base64 subscription bodies.
