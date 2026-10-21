@@ -154,10 +154,13 @@ final class MainWindowController: NSObject, NSTableViewDataSource {
         let id = servers[table.clickedRow].id
         run { [weak self] in
             guard let self = self else { return }
-            if case .success = self.helper.select(id: id) {
-                self.selectedId = id
+            let selected = self.helper.select(id: id)
+            DispatchQueue.main.async {
+                if case .success = selected {
+                    self.selectedId = id
+                }
+                self.reloadServers()
             }
-            self.reloadServers()
         }
     }
 
@@ -169,14 +172,16 @@ final class MainWindowController: NSObject, NSTableViewDataSource {
             let result = text.hasPrefix("https://")
                 ? self.helper.importSubscription(url: text)
                 : self.helper.importLinks(text)
-            switch result {
-            case .success(let doc):
-                self.servers = doc.servers
-                self.selectedId = doc.selected ?? self.selectedId
-                self.table.reloadData()
-                self.detailLabel.stringValue = "Imported \(doc.servers.count) server(s)."
-            case .failure(let f):
-                self.detailLabel.stringValue = "Import failed: \(f)"
+            DispatchQueue.main.async {
+                switch result {
+                case .success(let doc):
+                    self.servers = doc.servers
+                    self.selectedId = doc.selected ?? self.selectedId
+                    self.table.reloadData()
+                    self.detailLabel.stringValue = "Imported \(doc.servers.count) server(s)."
+                case .failure(let f):
+                    self.detailLabel.stringValue = "Import failed: \(f)"
+                }
             }
         }
     }
@@ -197,7 +202,9 @@ final class MainWindowController: NSObject, NSTableViewDataSource {
                 }
                 self.refreshStatus()
             case .failure(let f):
-                self.detailLabel.stringValue = "Connect failed: \(f)"
+                DispatchQueue.main.async {
+                    self.detailLabel.stringValue = "Connect failed: \(f)"
+                }
             }
         }
     }
@@ -213,7 +220,9 @@ final class MainWindowController: NSObject, NSTableViewDataSource {
             if case .success(let fresh) = helper.status(), let lp = fresh.localProxy {
                 applySystemProxyPort(lp.port)
             } else {
-                detailLabel.stringValue = "Connected, but the core reported no local proxy port; system proxy not changed."
+                DispatchQueue.main.async { [weak self] in
+                    self?.detailLabel.stringValue = "Connected, but the core reported no local proxy port; system proxy not changed."
+                }
             }
             return
         }
@@ -223,12 +232,18 @@ final class MainWindowController: NSObject, NSTableViewDataSource {
     private func applySystemProxyPort(_ port: Int) {
         switch proxy.apply(port: port) {
         case .success:
-            detailLabel.stringValue = "System proxy now points at 127.0.0.1:\(port)."
+            DispatchQueue.main.async { [weak self] in
+                self?.detailLabel.stringValue = "System proxy now points at 127.0.0.1:\(port)."
+            }
         case .failure(.authorizationDenied):
-            detailLabel.stringValue = "System proxy NOT changed: administrator authorization was denied. Disconnecting."
+            DispatchQueue.main.async { [weak self] in
+                self?.detailLabel.stringValue = "System proxy NOT changed: administrator authorization was denied. Disconnecting."
+            }
             _ = helper.disconnect()
         case .failure(let e):
-            detailLabel.stringValue = "System proxy NOT changed: \(e). Disconnecting."
+            DispatchQueue.main.async { [weak self] in
+                self?.detailLabel.stringValue = "System proxy NOT changed: \(e). Disconnecting."
+            }
             _ = helper.disconnect()
         }
     }
@@ -241,13 +256,16 @@ final class MainWindowController: NSObject, NSTableViewDataSource {
             if self.proxy.hasLeftoverFlag {
                 _ = self.proxy.restore()
             }
-            switch self.helper.disconnect() {
-            case .success:
-                self.detailLabel.stringValue = "Disconnected."
-            case .failure(let f):
-                self.detailLabel.stringValue = "Disconnect failed: \(f)"
+            let result = self.helper.disconnect()
+            DispatchQueue.main.async {
+                switch result {
+                case .success:
+                    self.detailLabel.stringValue = "Disconnected."
+                case .failure(let f):
+                    self.detailLabel.stringValue = "Disconnect failed: \(f)"
+                }
+                self.refreshStatus()
             }
-            self.refreshStatus()
         }
     }
 
@@ -257,9 +275,11 @@ final class MainWindowController: NSObject, NSTableViewDataSource {
         run { [weak self] in
             guard let self = self else { return }
             if case .success(let doc) = self.helper.servers() {
-                self.servers = doc.servers
-                self.selectedId = doc.selected ?? self.selectedId
-                self.table.reloadData()
+                DispatchQueue.main.async {
+                    self.servers = doc.servers
+                    self.selectedId = doc.selected ?? self.selectedId
+                    self.table.reloadData()
+                }
             }
         }
     }
@@ -267,12 +287,16 @@ final class MainWindowController: NSObject, NSTableViewDataSource {
     private func reloadCatalog() {
         run { [weak self] in
             guard let self = self else { return }
-            if case .success(let catalog) = self.helper.engineInfo() {
-                self.catalogView.string = catalog.engines.map { e in
-                    "\(e.kind) (min \(e.minVersion))\n  protocols: \(e.protocols.joined(separator: ", "))\n  features: \(e.features.joined(separator: ", "))"
-                }.joined(separator: "\n")
-            } else {
-                self.catalogView.string = "Engine catalog unavailable (helper not found)."
+            let result = self.helper.engineInfo()
+            DispatchQueue.main.async {
+                switch result {
+                case .success(let catalog):
+                    self.catalogView.string = catalog.engines.map { e in
+                        "\(e.kind) (min \(e.minVersion))\n  protocols: \(e.protocols.joined(separator: ", "))\n  features: \(e.features.joined(separator: ", "))"
+                    }.joined(separator: "\n")
+                case .failure:
+                    self.catalogView.string = "Engine catalog unavailable (helper not found)."
+                }
             }
         }
     }
@@ -280,27 +304,33 @@ final class MainWindowController: NSObject, NSTableViewDataSource {
     private func refreshStatus() {
         run { [weak self] in
             guard let self = self else { return }
-            switch self.helper.status() {
-            case .success(let status):
-                self.statusLabel.stringValue = "Status: \(status.state.lowercased())"
-                var parts: [String] = []
-                if let v = status.coreVersion { parts.append("core \(v)") }
-                if let p = status.platform { parts.append(p) }
-                if let lp = status.localProxy { parts.append("proxy 127.0.0.1:\(lp.port)") }
-                if status.killSwitchRequested == true {
-                    parts.append(status.killSwitchEnforced == true
-                        ? "kill switch enforced"
-                        : "kill switch requested, NOT enforced on macOS")
+            let result = self.helper.status()
+            DispatchQueue.main.async {
+                switch result {
+                case .success(let status):
+                    self.statusLabel.stringValue = "Status: \(status.state.lowercased())"
+                    var parts: [String] = []
+                    if let v = status.coreVersion { parts.append("core \(v)") }
+                    if let p = status.platform { parts.append(p) }
+                    if let lp = status.localProxy { parts.append("proxy 127.0.0.1:\(lp.port)") }
+                    if status.killSwitchRequested == true {
+                        parts.append(status.killSwitchEnforced == true
+                            ? "kill switch enforced"
+                            : "kill switch requested, NOT enforced on macOS")
+                    }
+                    self.detailLabel.stringValue = parts.joined(separator: " · ")
+                case .failure:
+                    self.statusLabel.stringValue = "Status: service unreachable"
+                    self.detailLabel.stringValue = "Is the core service installed? See service/darwin."
                 }
-                self.detailLabel.stringValue = parts.joined(separator: " · ")
-            case .failure:
-                self.statusLabel.stringValue = "Status: service unreachable"
-                self.detailLabel.stringValue = "Is the core service installed? See service/darwin."
             }
         }
     }
 
     /// Helper calls are blocking subprocess runs; always off-main.
+    /// Everything they produce for the screen hops back with
+    /// DispatchQueue.main.async before touching AppKit (the pattern
+    /// MenuBarController.refresh uses): AppKit is main-thread-only.
     private func run(_ work: @escaping () -> Void) {
         DispatchQueue.global(qos: .userInitiated).async {
             work()
