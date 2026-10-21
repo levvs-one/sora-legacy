@@ -84,6 +84,14 @@ func (p *Plan) RequiredFeatures() map[Feature]bool {
 			// in sora; all three legacy renderers emit it since
 			// SP5-render).
 			out[FeatureECH] = true
+			if o.TLS.ECH.QueryServerName != "" {
+				// The override is independent plan data with its
+				// own spelling per engine (see
+				// FeatureECHQueryServerName): a plan pinning one
+				// must not route to an engine build that would
+				// refuse the rendered field at load.
+				out[FeatureECHQueryServerName] = true
+			}
 		}
 		if o.TLS.KeyShare != "" {
 			out[FeatureRealityKeyShare] = true

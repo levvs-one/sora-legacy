@@ -39,6 +39,7 @@ var Catalog = map[Kind]Capabilities{
 			FeatureLoadBalance: true, FeatureXHTTP: true, FeatureVLESSEncrypt: true,
 			FeatureXHTTPDownloadSplit: true, FeatureXHTTPXmux: true, FeatureXHTTPPadding: true, FeatureRealityKeyShare: true,
 			FeatureAmneziaWG: true, FeaturePrivateControl: true, FeatureECH: true,
+			FeatureECHQueryServerName: true,
 			FeatureHy2PortHop: true, FeatureHy2Obfs: true,
 		},
 	},
@@ -57,6 +58,12 @@ var Catalog = map[Kind]Capabilities{
 			FeatureTun: true, FeatureFakeIP: true, FeatureRuleSets: true,
 			FeatureURLTest: true, FeatureLatencyTest: true, FeatureGeoData: true,
 			FeaturePerAppRouting: true, FeatureTLSFragment: true, FeatureECH: true,
+			// Deliberately no static FeatureECHQueryServerName:
+			// ech.query_server_name exists only since sing-box
+			// 1.13, above this entry's 1.12.0 floor — the shipped
+			// payload build 1.12.12 refuses the rendered field at
+			// load (probed, LEGACY-PLAT-OBFS). The claim is
+			// version-gated in BuildCapabilities.
 			FeatureHy2PortHop: true, FeatureHy2Obfs: true,
 			// Deliberately no static FeatureRealityKeyShare: the
 			// key_share spelling is the lx fork's (probed on lx.22
@@ -117,6 +124,14 @@ var Catalog = map[Kind]Capabilities{
 // suffix alone cannot prove that an optional transport was compiled in.
 func BuildCapabilities(kind Kind, version Version, tags []string) Capabilities {
 	caps := Catalog[kind]
+	if kind == KindSingBox && !version.Less(Version{Major: 1, Minor: 13}) {
+		// ech.query_server_name was added in sing-box 1.13; the
+		// static entry's floor (1.12.0, the shipped payload build
+		// 1.12.12) refuses the field at load, so the claim exists
+		// only here, on a build new enough to spell it.
+		caps.Features = maps.Clone(caps.Features)
+		caps.Features[FeatureECHQueryServerName] = true
+	}
 	if kind == KindSingBox && strings.HasPrefix(version.PreRelease, "lx.") &&
 		!version.Less(Version{Major: 1, Minor: 14, Patch: 3}) {
 		caps.Features = maps.Clone(caps.Features)

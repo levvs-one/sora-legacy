@@ -69,6 +69,18 @@ const (
 	// plan failed selection instead of sending the SNI in the clear
 	// while promising it hidden (S5-SP5).
 	FeatureECH Feature = "ech"
+	// FeatureECHQueryServerName marks engines whose ECH spelling
+	// carries a query_server_name override (TLS.ECH.QueryServerName):
+	// sing-box since 1.13 (tls.ech.query_server_name — probed absent
+	// on the shipped payload sing-box 1.12.12: the rendered config
+	// fails its check with `unknown field "query_server_name"`,
+	// LEGACY-PLAT-OBFS) and mihomo (ech-opts.query-server-name).
+	// The sing-box claim is version-gated in BuildCapabilities, not
+	// static: the static floor is 1.12.0, which loads no such field.
+	// Xray claims it nowhere: it has no query-name spelling, so a
+	// plan setting one fails selection there instead of reaching the
+	// renderer, whose refusal stays as a backstop.
+	FeatureECHQueryServerName Feature = "ech-query-server-name"
 	// FeatureRealityKeyShare marks engines whose renderer can spell
 	// the plan's REALITY key-share choice (TLS.KeyShare): mihomo
 	// (support-x25519mlkem768) and the sing-box lx fork

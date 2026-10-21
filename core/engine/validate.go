@@ -385,10 +385,13 @@ func validateXHTTP(o Outbound) []error {
 //     ECH extension on top of it is misconfiguration, not stealth.
 //
 // QueryServerName is NOT rejected here: sing-box renders it
-// (ech.query_server_name, available since 1.13 — below the shipped
-// 1.14.3 pin) and mihomo renders it (ech-opts.query-server-name).
-// The Xray path, which renders ECH without a query-name spelling, is
-// closed by the renderer's own refusal, not by validation
+// (ech.query_server_name, available since 1.13) and mihomo renders
+// it (ech-opts.query-server-name). Selection gates the plan per
+// engine build instead (FeatureECHQueryServerName: sing-box builds
+// at the 1.12.0 floor, e.g. the shipped payload 1.12.12, refuse the
+// rendered field at load — probed, LEGACY-PLAT-OBFS). The Xray
+// path, which renders ECH without a query-name spelling, is closed
+// by the gate and by the renderer's own refusal, not by validation
 // (SP5-render, from sora snapshot 63faf1d).
 func (t TLS) validate(what string) []error {
 	var errs []error

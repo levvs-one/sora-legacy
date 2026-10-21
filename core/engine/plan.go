@@ -66,7 +66,9 @@ type ECHConfig struct {
 	Config []string
 	// QueryServerName overrides the domain used for the ECH DNS query.
 	// Rendered by sing-box (ech.query_server_name, available since
-	// 1.13 — below the shipped 1.14.3 pin) and by mihomo
+	// 1.13 — above the shipped payload build 1.12.12, which refuses
+	// the field at load; selection gates it via
+	// FeatureECHQueryServerName) and by mihomo
 	// (ech-opts.query-server-name). The Xray renderer spells ECH
 	// itself but has no query-name spelling and refuses the override
 	// at render; see FeatureECH. (SP5-render, from sora snapshot
