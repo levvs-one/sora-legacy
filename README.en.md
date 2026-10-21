@@ -2,7 +2,7 @@
 
 [Русский](README.md)
 
-A separate Sora client for older Windows (7 SP1, 8.1, 10, 11; x86, running on x64 via WoW64). The current Windows and Linux client is in [sora](https://github.com/levvs-one/sora).
+A separate Sora client for older Windows. Target systems: 7 SP1, 8.1, 10, 11 (x86, running on x64 via WoW64). Support for 7 SP1 and 8.1 is by construction (.NET Framework 4.8 client, Windows 7 engine builds, core built with the Windows 7 Go SDK) and has not been verified by running on those systems yet — the plain state is below. The current Windows and Linux client is in [sora](https://github.com/levvs-one/sora).
 
 There is no finished release yet, and the state is stated plainly:
 
