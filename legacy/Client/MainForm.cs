@@ -331,7 +331,14 @@ internal sealed class MainForm : Form
         RenderStatus();
     }
 
-    private string StateKey() => connectionPending
+    // While the core is lost, every surface must say so: the tray icon
+    // already renders Error from coreLost (CurrentTrayState), so the
+    // label — form heading, tray tooltip and balloon alike — returns
+    // errCore instead of a stale connection state. (stateFailed and
+    // stateOff carry the same localized text in every locale today;
+    // the keys are routed distinctly on purpose.)
+    private string StateKey() => coreLost ? "errCore"
+        : connectionPending
         ? desiredConnected ? "stateConnecting" : "stateDisconnecting"
         : status?.Connection.Value switch
         {
@@ -370,7 +377,12 @@ internal sealed class MainForm : Form
         // where the cut is at least deterministic.
         tray.Text = tip.Length > 63 ? tip.Substring(0, 63) : tip;
         var used = new HashSet<char>();
-        trayOpenItem.Text = Mnemonic.Mark(text["trayOpen"], used, 'O', 'О');
+        // Candidate order decides which word carries the marker:
+        // trayOpen puts the localized word before the product name
+        // ("Открыть Sora"), so the Cyrillic candidate is tried first —
+        // Latin-first marked the 'o' of "Sora" instead. English has no
+        // Cyrillic О and still lands on its Latin 'O'.
+        trayOpenItem.Text = Mnemonic.Mark(text["trayOpen"], used, 'О', 'O');
         trayToggleItem.Text = Mnemonic.Mark(text[desiredConnected ? "trayDisconnect" : "trayConnect"], used, 'C', 'П', 'О');
         trayQuitItem.Text = Mnemonic.Mark(text["trayQuit"], used, 'Q', 'В');
         trayToggleItem.Enabled = core != null && !connectionPending;
@@ -559,7 +571,10 @@ internal sealed class MainForm : Form
         dialog.Controls.Add(layout);
         dialog.AcceptButton = save;
         dialog.CancelButton = cancel;
-        dialog.ActiveControl = tun;
+        // Initial focus follows the active mode: focusing the tun radio
+        // while proxy is the selected mode would put focus (and Space)
+        // on a mode the user is not in.
+        dialog.ActiveControl = tun.Checked ? tun : proxy;
         RenderStack();
         dialog.ShowDialog(this);
     }

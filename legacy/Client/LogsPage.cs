@@ -91,15 +91,23 @@ internal sealed class LogsPage : UserControl
         Controls.Add(levelBar);
         Controls.Add(header);
         // Designed tab order: header actions, level filter, category
-        // filter, search, then the list itself.
+        // filter, search, then the list itself. The sibling panels
+        // carry explicit indexes too, so the panels' mutual order is
+        // pinned by value instead of resting on equal zero indexes
+        // and z-order (a reordered Controls.Add would silently break
+        // it); the buttons inside each panel keep their own indexes
+        // within that panel.
+        header.TabIndex = 0;
+        levelBar.TabIndex = 1;
+        categoryBar.TabIndex = 2;
+        search.TabIndex = 3;
+        list.TabIndex = 4;
         export.TabIndex = 0;
         clear.TabIndex = 1;
         refresh.TabIndex = 2;
         var tab = 3;
         foreach (var choice in new[] { LogLevel.Debug, LogLevel.Warning, LogLevel.Error }) levels[choice].TabIndex = tab++;
         foreach (var name in new[] { "all", "engine", "tun", "dns", "subscriptions", "core" }) categories[name].TabIndex = tab++;
-        search.TabIndex = tab++;
-        list.TabIndex = tab;
         search.TextChanged += (_, _) => { debounce.Stop(); debounce.Start(); };
         debounce.Tick += async (_, _) => { debounce.Stop(); await ReloadAsync(); };
         refresh.Click += async (_, _) => await ReloadAsync();

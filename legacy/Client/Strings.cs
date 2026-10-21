@@ -61,17 +61,36 @@ internal sealed class Strings : IDisposable
 }
 
 // Alt-key mnemonics for standard WinForms controls and menus. The ARB
-// texts are shared with the sora app and carry no '&', so the marker is
-// inserted at display time: the first candidate letter actually present
-// in the localized text is marked, and a letter already taken on the
-// same surface (one shared `used` set per form or menu) is skipped, so
-// mnemonics on a surface are unique by construction. A locale whose
-// text contains none of the candidates simply gets no mnemonic for
-// that control — the control stays reachable by tab, never mislabeled.
+// texts are shared with the sora app and today carry no '&' (true of
+// every value in all locales, checked), so the marker is inserted at
+// display time: the first candidate letter actually present in the
+// localized text is marked, and a letter already taken on the same
+// surface (one shared `used` set per form or menu) is skipped, so
+// mnemonics on a surface are unique by construction. That no-'&'
+// property is guaranteed by Mark itself, not by the data: a text that
+// arrives already carrying '&' — its own marker, or a literal
+// ampersand escaped as '&&' — is returned exactly as written, never
+// given a second marker (WinForms would swallow a second '&' as a
+// marker before whatever follows it), and its own mnemonic, if it
+// has one, is registered in `used` so no other control on the surface
+// duplicates it. A locale whose text contains none of the candidates
+// simply gets no mnemonic for that control — the control stays
+// reachable by tab, never mislabeled.
 internal static class Mnemonic
 {
     public static string Mark(string text, HashSet<char> used, params char[] candidates)
     {
+        if (text.Contains("&"))
+        {
+            for (var index = 0; index + 1 < text.Length; index++)
+            {
+                if (text[index] != '&') continue;
+                if (text[index + 1] == '&') { index++; continue; }
+                if (char.IsLetterOrDigit(text[index + 1])) used.Add(char.ToUpperInvariant(text[index + 1]));
+                break;
+            }
+            return text;
+        }
         foreach (var candidate in candidates)
         {
             var key = char.ToUpperInvariant(candidate);

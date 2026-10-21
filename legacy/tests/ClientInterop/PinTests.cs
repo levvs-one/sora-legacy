@@ -1,13 +1,16 @@
 using System;
+using System.Collections.Generic;
 using System.Reflection;
 
 // Pin tests for the pure logic of the new client (REVIEW-CS1 §4):
 // SystemProxy.ParseFlags and the WinINet flag values behind it (F1),
-// and ImportLink.Parse in both link forms (F4). The client's types
-// are internal, so — like the GUI checks in Program.cs — these go
-// through reflection on the loaded Sora.Legacy assembly. Run with
-// the single argument --logic: no GUI, service or administrator
-// rights are needed. Exit code 0 means every vector holds.
+// ImportLink.Parse in both link forms (F4), and Mnemonic.Mark —
+// including text that already carries '&' and the RU trayOpen word
+// order (REVIEW-CS2 §2). The client's types are internal, so — like
+// the GUI checks in Program.cs — these go through reflection on the
+// loaded Sora.Legacy assembly. Run with the single argument --logic:
+// no GUI, service or administrator rights are needed. Exit code 0
+// means every vector holds.
 internal static class PinTests
 {
     private static int failures;
@@ -17,9 +20,44 @@ internal static class PinTests
         var assembly = Assembly.Load("Sora.Legacy");
         CheckFlags(assembly);
         CheckLinks(assembly);
+        CheckMnemonics(assembly);
         if (failures == 0)
-            Console.WriteLine("PASS pin tests: flag values, numeric vectors, PAC bit and both link forms hold");
+            Console.WriteLine("PASS pin tests: flag values, numeric vectors, PAC bit, both link forms and mnemonic marking hold");
         return failures == 0 ? 0 : 1;
+    }
+
+    private static void CheckMnemonics(Assembly assembly)
+    {
+        var type = assembly.GetType("Sora.Legacy.Client.Mnemonic", true)!;
+        var mark = type.GetMethod("Mark", BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public)!;
+        string Mark(string text, HashSet<char> used, params char[] candidates) =>
+            (string)mark.Invoke(null, new object?[] { text, used, candidates })!;
+
+        // Text already carrying a marker is returned exactly as
+        // written — no second '&' is inserted — and its mnemonic
+        // joins the surface set, so a later control cannot take it.
+        var used = new HashSet<char>();
+        Expect(Mark("&Save", used, 'S') == "&Save", "pre-marked text is returned as-is");
+        Expect(used.Contains('S'), "pre-marked mnemonic is registered in used");
+        Expect(Mark("Start", used, 'S', 'T') == "S&tart", "a registered mnemonic is skipped for a later control");
+        // A bare '&' (here before a space) is left untouched: not
+        // doubled, no second marker planted, nothing registered.
+        used = new HashSet<char>();
+        Expect(Mark("Save & Exit", used, 'S') == "Save & Exit", "bare & is left untouched");
+        Expect(used.Count == 0, "bare & before a space registers no mnemonic");
+        // The escaped literal form '&&' stays escaped and unmarked.
+        Expect(Mark("Fish && Chips", new HashSet<char>(), 'F') == "Fish && Chips", "escaped && is left untouched");
+        // Tray Open, with the candidate order MainForm passes: the
+        // localized word is preferred over the product-name tail, and
+        // English is unaffected (no Cyrillic О in "Open Sora").
+        Expect(Mark("Открыть Sora", new HashSet<char>(), 'О', 'O') == "&Открыть Sora", "RU trayOpen marks the localized word");
+        Expect(Mark("Open Sora", new HashSet<char>(), 'О', 'O') == "&Open Sora", "EN trayOpen still marks the Latin O");
+        // No candidate present: text and used both stay untouched.
+        used = new HashSet<char>();
+        Expect(Mark("Open", used, 'X') == "Open" && used.Count == 0, "no candidate leaves the text unchanged");
+        // Uniqueness on a surface: a taken candidate falls through to
+        // the next candidate letter.
+        Expect(Mark("Options", new HashSet<char> { 'O' }, 'O', 'P') == "O&ptions", "taken candidate falls through to the next");
     }
 
     private static void CheckFlags(Assembly assembly)
