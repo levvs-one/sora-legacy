@@ -6,6 +6,7 @@ import io.nekohasekai.libbox.RoutePrefix
 import io.nekohasekai.libbox.RoutePrefixIterator
 import io.nekohasekai.libbox.StringIterator
 import io.nekohasekai.libbox.TunOptions
+import java.net.InetAddress
 
 /** StringIterator over a snapshot list (libbox iterator.go contract:
  *  destructive Next(), HasNext(), Len()). */
@@ -23,6 +24,21 @@ class ListNetworkInterfaceIterator(items: List<NetworkInterface>) : NetworkInter
     override fun hasNext(): Boolean = index < items.size
     override fun next(): NetworkInterface? = if (hasNext()) items[index++] else null
 }
+
+/**
+ * Zone-free textual form of this address, for handing to the Go side.
+ *
+ * [InetAddress.getHostAddress] appends "%<scope>" to an IPv6 address
+ * that carries a scope id — and scoped addresses are the norm, not
+ * the exception: every link-local fe80::/64 address from
+ * NetworkInterface / LinkProperties has one. libbox parses the
+ * addresses it receives with Go's netip (MustParsePrefix for
+ * interface addresses, service.go in the pin), and netip rejects
+ * zones — with a panic the wrapper does not recover. Every address
+ * string that crosses into libbox or into the rendered config must
+ * therefore go through here (substringBefore('%')).
+ */
+fun InetAddress.zoneFreeHostAddress(): String? = hostAddress?.substringBefore('%')
 
 /** Drain helpers for the Go-side iterator interfaces. */
 fun StringIterator?.drainStrings(): List<String> {

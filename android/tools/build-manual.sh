@@ -40,12 +40,17 @@ KOTLIN_ZIP_SHA256="0352c0a45bd22f80f6b26e485cd04da8047baa5de54865281fb9f89a4a7bc
 KOTLINC_HOME="$LEGPLAT/kotlin/kotlinc"
 
 # --- 0. toolchain ----------------------------------------------------
+# The pinned kotlinc zip is re-verified on EVERY run, not only when it
+# is first downloaded: the zip is kept in $LEGPLAT/downloads for
+# exactly this purpose, and a failed check aborts the build (set -e)
+# before any compiler from it is used.
+if [ ! -f "$KOTLIN_ZIP" ]; then
+    mkdir -p "$(dirname "$KOTLIN_ZIP")"
+    curl -fL --retry 3 -o "$KOTLIN_ZIP" \
+        "https://github.com/JetBrains/kotlin/releases/download/v$KOTLIN_VERSION/kotlin-compiler-$KOTLIN_VERSION.zip"
+fi
+echo "$KOTLIN_ZIP_SHA256  $KOTLIN_ZIP" | sha256sum -c -
 if [ ! -x "$KOTLINC_HOME/bin/kotlinc" ]; then
-    if [ ! -f "$KOTLIN_ZIP" ]; then
-        curl -fL --retry 3 -o "$KOTLIN_ZIP" \
-            "https://github.com/JetBrains/kotlin/releases/download/v$KOTLIN_VERSION/kotlin-compiler-$KOTLIN_VERSION.zip"
-    fi
-    echo "$KOTLIN_ZIP_SHA256  $KOTLIN_ZIP" | sha256sum -c -
     mkdir -p "$LEGPLAT/kotlin"
     unzip -qo "$KOTLIN_ZIP" -d "$LEGPLAT/kotlin"
 fi

@@ -388,7 +388,10 @@ class SoraVpnService : VpnService(), PlatformInterface {
                 caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) -> Libbox.InterfaceTypeEthernet
                 else -> Libbox.InterfaceTypeOther
             }
-            val dns = props.dnsServers.mapNotNull { it.hostAddress }
+            // DNS servers cross into libbox as strings: strip any IPv6
+            // zone (a link-local DNS server arrives scoped) — see
+            // zoneFreeHostAddress in LibboxHelpers.kt.
+            val dns = props.dnsServers.mapNotNull { it.zoneFreeHostAddress() }
             val metered = caps?.let { !it.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED) } ?: false
             byName[name] = Triple(dns, type, metered)
         }
@@ -397,8 +400,12 @@ class SoraVpnService : VpnService(), PlatformInterface {
         val interfaces = java.net.NetworkInterface.getNetworkInterfaces() ?: return ListNetworkInterfaceIterator(result)
         for (netIf in interfaces) {
             if (!netIf.isUp) continue
+            // CIDR strings for libbox, which parses each with
+            // netip.MustParsePrefix: the zone must be stripped or any
+            // scoped IPv6 (link-local, loopback) panics the engine —
+            // see zoneFreeHostAddress in LibboxHelpers.kt.
             val addresses = netIf.interfaceAddresses.map { address ->
-                "${address.address.hostAddress}/${address.networkPrefixLength}"
+                "${address.address.zoneFreeHostAddress()}/${address.networkPrefixLength}"
             }
             var flags = 0
             if (netIf.isUp) flags = flags or IFF_UP or IFF_RUNNING

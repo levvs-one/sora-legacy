@@ -14,7 +14,8 @@ A full Android client for the sora-legacy core, in one tree:
   (`experimental/libbox/service.go`) define.
 - **The platform side is ours**: `SoraVpnService` (an Android
   `VpnService`) implements libbox's `PlatformInterface`
-  (`experimental/libbox/platform.go`) against real Android APIs.
+  (`experimental/libbox/platform.go`, 18 methods) against real
+  Android APIs.
 
 ## Architecture and data flow
 
@@ -63,7 +64,7 @@ address of the first IPv4 prefix and refuses a /32), `auto_route`,
 and the user's `mtu` / `strict_route` settings. If a future render
 ships its own tun inbound, it is left untouched.
 
-### PlatformInterface implementation notes
+### PlatformInterface implementation notes (18 methods)
 
 | Method (platform.go) | Implementation |
 |---|---|
@@ -75,7 +76,7 @@ ships its own tun inbound, it is left untouched.
 | `FindConnectionOwner` | `ConnectivityManager.getConnectionOwnerUid` (API 29+); below 29 throws `UnsupportedOperationException` — no honest answer exists there with procfs off |
 | `PackageNameByUid` / `UIDByPackageName` | `PackageManager` |
 | `Start/CloseDefaultInterfaceMonitor` | `ConnectivityManager` default-network callback (API 28+; `registerNetworkCallback` fallback below), reports name/index/metered |
-| `GetInterfaces` | `java.net.NetworkInterface` (up interfaces, CIDR addresses, IFF flags as `link_flags_unix.go` maps them) merged with `ConnectivityManager` type/DNS/metered per interface name |
+| `GetInterfaces` | `java.net.NetworkInterface` (up interfaces, CIDR addresses, IFF flags as `link_flags_unix.go` maps them) merged with `ConnectivityManager` type/DNS/metered per interface name; IPv6 zones (`%scope`) are stripped from every address and DNS server handed to libbox — its Go side parses them with `netip.MustParsePrefix`, which rejects zones with a panic |
 | `ReadWIFIState` | `WifiManager`; returns null when the SSID is unknown/redacted instead of inventing one |
 | `SystemCertificates` | PEM encodings of the platform trust store's accepted issuers |
 | `ClearDNSCache` | No-op — Android has no per-app DNS-cache flush API; the contract is void and upstream clients no-op too |
@@ -164,8 +165,8 @@ bash tools/build-manual.sh
 ```
 
 Repeatable, documented in the script: standalone `kotlinc` 2.0.21
-(curl-fetched, sha256 pinned in the script and verified against the
-official release checksum) compiles the Kotlin sources against
+(curl-fetched, sha256 pinned in the script and re-verified on every
+run, not only at download time) compiles the Kotlin sources against
 `android.jar` + both AAR jars; `aapt2` compiles/links resources and
 the manifest; `d8` dexes our classes + AAR classes (de-duplicated,
 above) + kotlin-stdlib; the APK is assembled with `classes.dex`,
@@ -215,6 +216,10 @@ installed or run. Before trusting a build, verify on real hardware:
    refused path below 29.
 10. Notification permission denial on API 33+ (app must still work,
     only notifications are lost).
+11. Start on a network with scoped IPv6 (link-local fe80::/64 on
+    Wi-Fi/cellular, `::1` loopback): the engine must come up — the
+    interface/DNS addresses handed to libbox are zone-stripped
+    (libbox's `netip.MustParsePrefix` panics on a `%scope` suffix).
 
 ## Layout
 

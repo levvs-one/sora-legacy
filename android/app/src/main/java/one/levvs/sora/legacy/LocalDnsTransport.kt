@@ -32,7 +32,11 @@ class LocalDnsTransport : LocalDNSTransport {
                 else -> true
             }
         }
-        context.success(filtered.joinToString("\n") { it.hostAddress ?: "" })
+        // Resolved addresses go straight to the Go side, which parses
+        // them as plain IPs: strip any IPv6 zone (a link-local result
+        // can arrive scoped) — see zoneFreeHostAddress in
+        // LibboxHelpers.kt.
+        context.success(filtered.joinToString("\n") { it.zoneFreeHostAddress() ?: "" })
     }
 
     override fun exchange(context: ExchangeContext, message: ByteArray) {
