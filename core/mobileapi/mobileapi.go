@@ -244,20 +244,17 @@ func buildEnginePlan(credentialJSON string) (Plan, *engine.Plan, error) {
 		NetworkControlAllowed: true,
 	}
 	for _, server := range doc.Servers {
-		transport := server.Transport
-		if server.Protocol == "wireguard" && transport == "udp" {
-			// The parser spells a WireGuard spec's transport "udp";
-			// the plan vocabulary has no such transport and the
-			// renderers ignore it for WireGuard endpoints, whose
-			// transport is UDP by definition. Normalize it away
-			// instead of failing plan validation on it.
-			transport = ""
-		}
+		// The transport passes through verbatim: the parser spells
+		// a WireGuard spec's transport "udp", which is not a plan
+		// transport, and control.BuildEnginePlan (outboundFromProto)
+		// normalizes the WireGuard producer spellings to the plan's
+		// empty transport — the canonical fix lives there, so this
+		// facade needs no local normalization of its own.
 		spec := &corev1.OutboundSpec{
 			Id:          server.ID,
 			DisplayName: server.Name,
 			Protocol:    server.Protocol,
-			Transport:   transport,
+			Transport:   server.Transport,
 			Security:    server.Security,
 			Endpoint:    &corev1.Endpoint{Host: server.Server, Port: uint32(server.Port)}, //nolint:gosec // parsePlanDocument bounds Port to 0-65535
 		}

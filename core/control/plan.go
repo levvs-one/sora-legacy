@@ -1291,6 +1291,34 @@ func outboundFromProto(index int, spec *corev1.OutboundSpec, secrets resolver) (
 		},
 		TLS: engine.TLS{Enabled: !strings.EqualFold(spec.GetSecurity(), "none")},
 	}
+	if outbound.Protocol == engine.ProtocolWireGuard {
+		// WireGuard has no stream transport: the parser labels its
+		// specs "udp" (a datagram protocol, not an engine transport),
+		// and custom specs arrive with no transport at all, which the
+		// default above turns into "tcp". Both spellings failed plan
+		// validation ("unknown transport") or misdescribed the
+		// outbound, so a WireGuard server imported from a link or a
+		// .conf could never build a plan. The engine's WireGuard
+		// outbound carries no transport type. (Ported from sora,
+		// B1 servers audit — sora's parser spells "udp" identically
+		// and its plan vocabulary is the same set, so the fix lives
+		// in this converter, not in the parser or the whitelist.)
+		//
+		// Only those producer spellings ("", "tcp", "udp") are
+		// normalized. Any other value is not a WireGuard transport
+		// at all: erasing it unconditionally would let wireguard/
+		// "bogus" — and wireguard/"ws" or "grpc", which the plan
+		// whitelist accepts for other protocols — silently become
+		// valid plans, hence the honest rejection here, in the
+		// converter that knows the protocol (B1 review in sora).
+		switch outbound.Transport.Type {
+		case "", "tcp", "udp":
+			outbound.Transport.Type = ""
+		default:
+			return engine.Outbound{}, errs.Newf(errs.CodeInvalidArgument, errs.KeyPlanOutbounds,
+				"control: outbound %q: wireguard has no stream transport, got %q", id, outbound.Transport.Type)
+		}
+	}
 	if outbound.Name == "" {
 		outbound.Name = id
 	}
