@@ -93,7 +93,9 @@ func (pr Prober) Probe(ctx context.Context, path string) (Binary, error) {
 
 // digestManifestName is the SHA-256 manifest written next to shipped engine
 // binaries by packaging/engines/fetch.sh. Discover verifies enginesDir
-// candidates against it when present.
+// candidates against it when present. The name is this generation's own:
+// the main sora repo calls the same mechanism engines.digests, and the two
+// packaging trees are not interchangeable.
 const digestManifestName = "SHA256SUMS"
 
 // Discover checks the environment override (only when the prober allows it)

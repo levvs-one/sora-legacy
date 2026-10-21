@@ -30,6 +30,12 @@
 нему бинари при discovery. Не удаляйте и не правьте его вручную: подпись релизов
 (offline minisign-ключ) — за владельцем, см. раздел 9 плана исправлений.
 
+Имя манифеста в поколении legacy — именно `SHA256SUMS`: так его пишет
+`fetch.sh`, так его ждёт служба (`core/engine/supervise`). В основном
+репозитории sora тот же механизм называется `engines.digests`. Деревья
+packaging двух репозиториев не взаимозаменяемы: не копируйте манифест и
+пакеты одного поколения в другое.
+
 ## Сборка
 
 ```sh
@@ -39,8 +45,10 @@ packaging/zapret/build.sh dist/engines
 SORA_ARCH=amd64 SORA_VERSION=0.3.0 nfpm package --config packaging/linux/nfpm.yaml --packager deb --target dist/
 ```
 
-`--packager rpm` и `--packager archlinux` собирают остальные форматы. CI пакеты
-не собирает — сборка идёт вручную командами выше.
+`--packager rpm` и `--packager archlinux` собирают остальные форматы. CI
+собирает пакеты job'ом `linux-packages` workflow `legacy.yml`: те же шаги,
+что выше, плюс проверка состава всех трёх форматов; локально — теми же
+командами вручную.
 
 ## Что не проверено
 

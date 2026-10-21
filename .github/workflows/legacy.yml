@@ -7,6 +7,8 @@ on:
       - 'legacy/**'
       - 'core/**'
       - 'proto/**'
+      - 'packaging/**'
+      - 'service/**'
       - '.github/workflows/legacy.yml'
   pull_request:
     branches: [legacy]
@@ -14,6 +16,8 @@ on:
       - 'legacy/**'
       - 'core/**'
       - 'proto/**'
+      - 'packaging/**'
+      - 'service/**'
       - '.github/workflows/legacy.yml'
 
 permissions:
@@ -56,6 +60,65 @@ jobs:
         with:
           version: v2.15.0
           working-directory: core
+
+  linux-packages:
+    name: Legacy Linux packages
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: core/go.mod
+          cache: false
+      - name: Install packaging dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends build-essential zlib1g-dev libcap-dev libnetfilter-queue-dev libnfnetlink-dev libmnl-dev rpm zstd
+      - name: Install nfpm
+        # nfpm is fetched as a release archive and verified by SHA-256
+        # instead of executing a remote install script (same supply-chain
+        # hardening as actionlint in the core job above).
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/nfpm_2.48.0_Linux_x86_64.tar.gz"
+          curl -sSfL -o "$archive" https://github.com/goreleaser/nfpm/releases/download/v2.48.0/nfpm_2.48.0_Linux_x86_64.tar.gz
+          printf '%s  %s\n' '6d7f9a28b2f397934403950fcbba83f598b08d02edbe79a0815b3b4897341750' "$(basename "$archive")" > "$archive.sha256"
+          (cd "$RUNNER_TEMP" && sha256sum -c "$archive.sha256")
+          sudo tar -xzf "$archive" -C /usr/local/bin nfpm
+          nfpm --version
+      - name: Build the core service
+        run: |
+          cd core && CGO_ENABLED=0 GOARCH=amd64 go build -trimpath -ldflags '-s -w' -o ../dist/sora-core ./cmd/sora-core
+      - name: Fetch engines and build zapret
+        run: |
+          packaging/engines/fetch.sh amd64 dist/engines
+          packaging/zapret/build.sh dist/engines
+      - name: Build deb, rpm and Arch packages
+        run: |
+          for packager in deb rpm archlinux; do
+            SORA_ARCH=amd64 SORA_VERSION=0.3.0 nfpm package --config packaging/linux/nfpm.yaml --packager "$packager" --target dist/
+          done
+      - name: Verify package contents
+        run: |
+          set -euo pipefail
+          dpkg-deb -c dist/*.deb > "$RUNNER_TEMP/deb.list"
+          rpm -qlp dist/*.rpm > "$RUNNER_TEMP/rpm.list"
+          tar --zstd -tf dist/*.pkg.tar.* > "$RUNNER_TEMP/arch.list"
+          for list in deb rpm arch; do
+            grep -q 'usr/bin/sora-core' "$RUNNER_TEMP/$list.list"
+            grep -q 'usr/lib/sora/engines/SHA256SUMS' "$RUNNER_TEMP/$list.list"
+            grep -q 'usr/lib/sora/engines/sing-box' "$RUNNER_TEMP/$list.list"
+            grep -q 'usr/lib/sora/engines/tpws' "$RUNNER_TEMP/$list.list"
+            grep -q 'usr/lib/systemd/system/sora-core.service' "$RUNNER_TEMP/$list.list"
+          done
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: sora-legacy-linux-packages-amd64
+          path: |
+            dist/*.deb
+            dist/*.rpm
+            dist/*.pkg.tar.*
+          if-no-files-found: error
 
   control-windows:
     name: Legacy RPC (${{ matrix.platform }})
