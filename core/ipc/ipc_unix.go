@@ -20,9 +20,6 @@ import (
 // installer.
 const defaultSocketGroup = "sora"
 
-// ListenAddress is the platform's core endpoint address.
-func ListenAddress() string { return "/run/sora/core.sock" }
-
 // listenLocal creates a Unix socket, removes stale sockets, and applies
 // platform permissions for authorized peers.
 func listenLocal(address string, opts Options) (net.Listener, error) {

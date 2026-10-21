@@ -1,4 +1,4 @@
-//go:build !windows && !linux
+//go:build !windows && !linux && !darwin
 
 package ipc
 
@@ -8,9 +8,9 @@ import "net"
 // verified.
 const socketMode = 0o660
 
-// peerOf leaves Verified false: macOS LOCAL_PEERCRED/LOCAL_PEERPID support is
-// unimplemented without hardware validation. Socket permissions and the control
-// token enforce access.
+// peerOf leaves Verified false on platforms without a kernel peer-credential
+// mechanism wired up here (darwin has one: see ipc_peer_darwin.go). Socket
+// permissions and the control token enforce access.
 func peerOf(net.Conn) Peer {
 	return Peer{Verified: false, Detail: "the permission on the socket is the boundary"}
 }
