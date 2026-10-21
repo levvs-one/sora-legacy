@@ -181,7 +181,11 @@ func (o Outbound) Validate() error {
 	} else if len(o.ID) > MaxIDLen {
 		errs = append(errs, fmt.Errorf("outbound %q: id longer than %d bytes", o.ID, MaxIDLen))
 	}
-	if err := validateDisplayName("outbound "+o.ID, o.Name); err != nil {
+	// The "outbound <id>" subject is built once: it used to be
+	// concatenated separately for every sub-validator (three
+	// allocations per outbound on the plan admit path).
+	what := "outbound " + o.ID
+	if err := validateDisplayName(what, o.Name); err != nil {
 		errs = append(errs, err)
 	}
 	if o.Protocol == "" {
@@ -196,7 +200,7 @@ func (o Outbound) Validate() error {
 	if !serverless && o.Port == 0 {
 		errs = append(errs, fmt.Errorf("outbound %s: port must be between 1 and 65535", o.ID))
 	}
-	if err := validateServer("outbound "+o.ID, o.Server, !serverless); err != nil {
+	if err := validateServer(what, o.Server, !serverless); err != nil {
 		errs = append(errs, err)
 	}
 	if o.Protocol == ProtocolBypass {
@@ -213,7 +217,7 @@ func (o Outbound) Validate() error {
 	if len(o.TLS.ALPN) > 8 {
 		errs = append(errs, fmt.Errorf("outbound %s: too many ALPN entries", o.ID))
 	}
-	errs = append(errs, o.TLS.validate("outbound "+o.ID)...)
+	errs = append(errs, o.TLS.validate(what)...)
 	if len(o.Transport.Headers) > MaxHeaderCount {
 		errs = append(errs, fmt.Errorf("outbound %s: more than %d headers", o.ID, MaxHeaderCount))
 	}
