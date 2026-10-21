@@ -106,28 +106,38 @@ func credentialDocument(spec parser.OutboundSpec) ([]byte, error) {
 		return nil, err
 	}
 	spec = resolved
-	values := map[string]string{
-		"uuid":         spec.UUID,
-		"password":     spec.Password,
-		"method":       spec.Cipher,
-		"user":         spec.User,
-		"flow":         spec.Flow,
-		"public_key":   spec.PublicKey,
-		"short_id":     spec.ShortID,
-		"server_name":  spec.ServerName,
-		"fingerprint":  spec.Fingerprint,
-		"spider_x":     spec.SpiderX,
-		"mode":         spec.Mode,
-		"path":         spec.Path,
-		"host_header":  spec.HostHeader,
-		"service_name": spec.ServiceName,
-		"alpn":         strings.Join(spec.ALPN, ","),
-		"security":     spec.Security,
-		"encryption":   spec.Options["encryption"],
+	// Only non-empty values enter the map: empty entries are deleted
+	// before the marshal below anyway, so inserting them changes no
+	// stored byte — but every dead insert grows the map's bucket array
+	// (~2.3 KB per server once the W1 tuning keys pushed a typical
+	// document past the growth threshold). sora's credentialDocument
+	// gates the same way: its field writer skips empty values.
+	values := make(map[string]string, 16)
+	set := func(key, value string) {
+		if value != "" {
+			values[key] = value
+		}
 	}
+	set("uuid", spec.UUID)
+	set("password", spec.Password)
+	set("method", spec.Cipher)
+	set("user", spec.User)
+	set("flow", spec.Flow)
+	set("public_key", spec.PublicKey)
+	set("short_id", spec.ShortID)
+	set("server_name", spec.ServerName)
+	set("fingerprint", spec.Fingerprint)
+	set("spider_x", spec.SpiderX)
+	set("mode", spec.Mode)
+	set("path", spec.Path)
+	set("host_header", spec.HostHeader)
+	set("service_name", spec.ServiceName)
+	set("alpn", strings.Join(spec.ALPN, ","))
+	set("security", spec.Security)
+	set("encryption", spec.Options["encryption"])
 	// Copy only known obfuscation options from untrusted links. Normalize
 	// the three password aliases to one vault key.
-	values["obfs"] = spec.Options["obfs"]
+	set("obfs", spec.Options["obfs"])
 	for _, key := range []string{"obfs_param", "obfs-password", "obfs_password"} {
 		if value := spec.Options[key]; value != "" {
 			values["obfs_param"] = value
@@ -148,31 +158,31 @@ func credentialDocument(spec parser.OutboundSpec) ([]byte, error) {
 		}
 		return ""
 	}
-	values["upmbps"] = spec.Options["upmbps"]
-	values["downmbps"] = spec.Options["downmbps"]
-	values["hop_ports"] = firstOpt("mport", "ports")
-	values["hop_interval"] = firstOpt("hop-interval", "hopinterval")
-	values["hop_interval_max"] = firstOpt("hop-interval-max", "hopintervalmax")
-	values["bbr_profile"] = firstOpt("bbr-profile", "bbr_profile")
-	values["congestion_control"] = spec.Options["congestion_control"]
-	values["udp_relay_mode"] = spec.Options["udp_relay_mode"]
-	values["heartbeat"] = spec.Options["heartbeat"]
-	values["token"] = spec.Options["token"]
+	set("upmbps", spec.Options["upmbps"])
+	set("downmbps", spec.Options["downmbps"])
+	set("hop_ports", firstOpt("mport", "ports"))
+	set("hop_interval", firstOpt("hop-interval", "hopinterval"))
+	set("hop_interval_max", firstOpt("hop-interval-max", "hopintervalmax"))
+	set("bbr_profile", firstOpt("bbr-profile", "bbr_profile"))
+	set("congestion_control", spec.Options["congestion_control"])
+	set("udp_relay_mode", spec.Options["udp_relay_mode"])
+	set("heartbeat", spec.Options["heartbeat"])
+	set("token", spec.Options["token"])
 	// SIP002 plugin/plugin_opts for Shadowsocks. The raw "plugin" query
 	// key stays in Options but is never stored under that name; only the
 	// parser's canonical ss_plugin keys reach the vault.
-	values["ss_plugin"] = spec.Options["ss_plugin"]
-	values["ss_plugin_opts"] = spec.Options["ss_plugin_opts"]
+	set("ss_plugin", spec.Options["ss_plugin"])
+	set("ss_plugin_opts", spec.Options["ss_plugin_opts"])
 	// XHTTP up/down split, padding range and xmux reuse tuning from
 	// the link's extra= JSON (S5-SP4): they travel inside the
 	// credential document, not the proto contract, so no contract
 	// change is needed. Zero tuning is the engine default and is not
 	// stored.
-	values["download_address"] = spec.DownloadAddress
+	set("download_address", spec.DownloadAddress)
 	if spec.DownloadPort != 0 {
 		values["download_port"] = strconv.Itoa(int(spec.DownloadPort))
 	}
-	values["x_padding_bytes"] = spec.XPaddingBytes
+	set("x_padding_bytes", spec.XPaddingBytes)
 	if spec.XmuxMaxConcurrency != 0 {
 		values["xmux_max_concurrency"] = strconv.Itoa(spec.XmuxMaxConcurrency)
 	}
@@ -197,8 +207,8 @@ func credentialDocument(spec parser.OutboundSpec) ([]byte, error) {
 	}
 	if strings.EqualFold(spec.Protocol, "wireguard") {
 		key, addresses, peers := wireguardMaterial(spec)
-		values["private_key"] = key
-		values["addresses"] = strings.Join(addresses, ",")
+		set("private_key", key)
+		set("addresses", strings.Join(addresses, ","))
 		if len(peers) > 0 {
 			raw, err := json.Marshal(peers)
 			if err != nil {
