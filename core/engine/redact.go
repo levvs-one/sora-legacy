@@ -192,8 +192,11 @@ func (r *Redactor) Err(err error) error {
 // time; derivedForms itself last changed there in bc54d959, the
 // CENSOR-LEAK extension REVIEW-GFOLLOWUP G3-F1 found missing here).
 // The returned list — contents and order — is byte-identical to
-// the verbatim port (pinned by the snapshot differential in
-// redact_review_g_test.go); the construction below only avoids
+// the verbatim port for every valid UTF-8 seed (pinned by the
+// snapshot differential in redact_review_g_test.go); for a seed
+// holding invalid UTF-8, singleEscapes deliberately diverges
+// from the reference instead of panicking (see its comment,
+// REVIEW-PERFFIX). The construction below only avoids
 // allocations the port spent on forms it then deduplicated or on
 // intermediate copies (PERF flow B): exact slice capacities,
 // pre-grown builders in singleEscapes, the raw/URL base64 forms
@@ -444,7 +447,29 @@ func singleEscapes(v string) []string {
 	// Rune offsets for the \u forms; a rune-wise walk keeps
 	// multi-byte characters intact (escaping half a UTF-8 sequence
 	// is not a form any JSON encoder emits).
-	for i, r := range v {
+	//
+	// Deliberate divergence from the sora reference, which panics
+	// here (legacy is intentionally harder than the reference on
+	// this point): the walk decodes with DecodeRuneInString and
+	// advances by its reported size, NOT by utf8.RuneLen(r). A seed
+	// is a credential from a provider config and may hold arbitrary
+	// bytes; an invalid byte decodes as RuneError with size 1,
+	// while RuneLen(RuneError) is 3 — slicing v[i+RuneLen(r):] on
+	// an invalid byte at the end of a seed panicked (REVIEW-PERFFIX,
+	// 138/200 byte-fuzz seeds), and mid-seed it silently skipped
+	// the two following bytes. With the decoded size, an invalid
+	// byte is one escape position (\ufffd, upper case \uFFFD) and
+	// the walk resumes at the next byte. For every valid UTF-8
+	// seed the decoded size equals RuneLen — an honestly encoded
+	// U+FFFD included (size 3 either way) — so the form list and
+	// every redactor output stay byte-identical there; the other
+	// rune walks in derivedForms and its helpers were audited for
+	// the same disease and slice nothing by rune length (the
+	// upperDiffers scan in derivedForms and unicodeEscapeAll only
+	// read the decoded rune, and range decoding already yields one
+	// RuneError per invalid byte for them).
+	for i := 0; i < len(v); {
+		r, size := utf8.DecodeRuneInString(v[i:])
 		// Same dedup as above: the cases coincide when no hex
 		// digit of the escape is a letter (a surrogate pair always
 		// contains a D, so non-BMP runes always differ).
@@ -457,9 +482,10 @@ func singleEscapes(v string) []string {
 			b.Grow(len(v) + 12)
 			b.WriteString(v[:i])
 			writeUnicodeEscape(&b, r, digits)
-			b.WriteString(v[i+utf8.RuneLen(r):])
+			b.WriteString(v[i+size:])
 			out = append(out, b.String())
 		}
+		i += size
 	}
 	return out
 }

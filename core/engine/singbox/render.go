@@ -346,8 +346,11 @@ func (r *renderer) tls(o engine.Outbound) (obj, error) {
 	if o.TLS.ECH.Enabled {
 		// Without a pinned config the engine fetches the ECHConfigList
 		// from the server's HTTPS DNS record. query_server_name exists
-		// since sing-box 1.13, below the 1.14.3/1.15 floor, so it is
-		// always safe to emit.
+		// since sing-box 1.13, but legacy's sing-box floor is 1.12.0
+		// (MinVersion in the engine catalog), NOT 1.14.3: a plan that
+		// sets it on a user-supplied 1.12.x build passes the version
+		// gate and fails when the engine loads the config. The
+		// shipped 1.14.3 pin is unaffected.
 		ech := obj{"enabled": true}
 		if len(o.TLS.ECH.Config) > 0 {
 			// The pinned list is canonicalized to the PEM label the

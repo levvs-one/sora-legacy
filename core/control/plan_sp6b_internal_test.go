@@ -509,3 +509,107 @@ func TestImportedSpecHeaderSemantics(t *testing.T) {
 		})
 	}
 }
+
+// REVIEW-SP6B-MICRO: the per-entry half of the F1 null semantics.
+// F1 handled a null headers BLOCK ("headers": null); a null header
+// VALUE ({"X-Custom": null}) still survived blobHeaders as a header
+// with an empty value, because blobString reads nil as "". A null
+// value is an absent header: it is dropped, valid neighbours
+// survive, and a block of only nulls yields no headers at all.
+func TestImportedHeaderNullValuesAreAbsent(t *testing.T) {
+	direct := []struct {
+		name  string
+		spec  parser.OutboundSpec
+		check func(t *testing.T, resolved parser.OutboundSpec, headers map[string]string)
+	}{
+		{
+			name: "transport headers: null among valid values",
+			spec: parser.OutboundSpec{Protocol: "vless", Host: "edge.example.com", Port: 443, UUID: sp6bUUID,
+				Options: map[string]string{"transport": `{"type":"ws","path":"/ws","headers":{"Host":"cdn.example.com","X-Custom":null,"X-Trace":"trace-1"}}`}},
+			check: func(t *testing.T, resolved parser.OutboundSpec, headers map[string]string) {
+				if len(headers) != 2 || headers["Host"] != "cdn.example.com" || headers["X-Trace"] != "trace-1" {
+					t.Errorf("headers = %v, want exactly the two valid headers", headers)
+				}
+				if _, present := headers["X-Custom"]; present {
+					t.Errorf("a null header value must be absent, got %v", headers)
+				}
+				if resolved.HostHeader != "cdn.example.com" || resolved.Path != "/ws" {
+					t.Errorf("resolved = %+v, want the valid Host header and path intact", resolved)
+				}
+			},
+		},
+		{
+			name: "ws-opts headers: null among valid values",
+			spec: parser.OutboundSpec{Protocol: "vless", Host: "edge.example.com", Port: 443, UUID: sp6bUUID,
+				Options: map[string]string{"ws-opts": `{"path":"/ws-path","headers":{"Host":"cdn.example.com","X-Custom":null}}`}},
+			check: func(t *testing.T, resolved parser.OutboundSpec, headers map[string]string) {
+				if len(headers) != 1 || headers["Host"] != "cdn.example.com" {
+					t.Errorf("headers = %v, want only the valid Host header", headers)
+				}
+				if _, present := headers["X-Custom"]; present {
+					t.Errorf("a null header value must be absent, got %v", headers)
+				}
+			},
+		},
+		{
+			name: "h2-opts headers: null among valid values",
+			spec: parser.OutboundSpec{Protocol: "vless", Host: "edge.example.com", Port: 443, UUID: sp6bUUID,
+				Options: map[string]string{"h2-opts": `{"path":"/h2-path","headers":{"X-Custom":null,"X-Trace":"trace-1"}}`}},
+			check: func(t *testing.T, resolved parser.OutboundSpec, headers map[string]string) {
+				if len(headers) != 1 || headers["X-Trace"] != "trace-1" {
+					t.Errorf("headers = %v, want only the valid header", headers)
+				}
+				if _, present := headers["X-Custom"]; present {
+					t.Errorf("a null header value must be absent, got %v", headers)
+				}
+			},
+		},
+		{
+			name: "transport headers: every value null",
+			spec: parser.OutboundSpec{Protocol: "vless", Host: "edge.example.com", Port: 443, UUID: sp6bUUID,
+				Options: map[string]string{"transport": `{"type":"ws","path":"/ws","headers":{"Host":null,"X-Custom":null}}`}},
+			check: func(t *testing.T, resolved parser.OutboundSpec, headers map[string]string) {
+				if len(headers) != 0 {
+					t.Errorf("headers = %v, want no headers when every value is null", headers)
+				}
+				if resolved.HostHeader != "" {
+					t.Errorf("a null Host header must not invent a host: %+v", resolved)
+				}
+				if resolved.Transport != "ws" || resolved.Path != "/ws" {
+					t.Errorf("resolved = %+v, want the ws transport and path intact", resolved)
+				}
+			},
+		},
+	}
+	for _, tc := range direct {
+		t.Run(tc.name, func(t *testing.T) {
+			resolved, headers, err := resolveImportedSpec(tc.spec)
+			if err != nil {
+				t.Fatalf("a null header value is an absent header and must not fail the import: %v", err)
+			}
+			tc.check(t, resolved, headers)
+		})
+	}
+	// The full import path: parser, credential document, vault and
+	// plan — the null-valued header must not reappear at any stage.
+	t.Run("sing-box document through the full import path", func(t *testing.T) {
+		src := `{"outbounds":[{"type":"vless","tag":"p","server":"edge.example.com","server_port":443,` +
+			`"uuid":"` + sp6bUUID + `","tls":{"enabled":true,"server_name":"s.example.com"},` +
+			`"transport":{"type":"ws","path":"/ws","headers":{"Host":"cdn.example.com","X-Custom":null}}}]}`
+		result, err := parser.LinkParser{}.Parse([]byte(src))
+		if err != nil {
+			t.Fatalf("Parse: %v", err)
+		}
+		plan, _ := importedPlan(t, result)
+		o := plan.Outbounds[0]
+		if len(o.Transport.Headers) != 1 || o.Transport.Headers["Host"] != "cdn.example.com" {
+			t.Errorf("transport headers = %v, want only the valid Host header", o.Transport.Headers)
+		}
+		if _, present := o.Transport.Headers["X-Custom"]; present {
+			t.Errorf("a null header value reached the plan as an empty header: %v", o.Transport.Headers)
+		}
+		if o.Transport.Host != "cdn.example.com" || o.Transport.Path != "/ws" {
+			t.Errorf("transport = %+v, want the valid host and path intact", o.Transport)
+		}
+	})
+}

@@ -964,7 +964,11 @@ func blobHost(v any, what string) (string, error) {
 // blobHeaders reads a headers object into a flat string map. Header
 // values are strings in both dialects; anything else is a shape the
 // engines would misapply, so it fails closed like the other blobs.
-// A JSON null is an absent value, read as no headers.
+// A JSON null is an absent value, read as no headers — and the F1
+// null semantics apply per entry as well (REVIEW-SP6B-MICRO): a
+// header whose value is null is absent, never stored, so
+// {"X-Custom": null} does not become a header with an empty value
+// on its way to the engine.
 func blobHeaders(v any, what string) (map[string]string, error) {
 	if v == nil {
 		return nil, nil
@@ -975,6 +979,9 @@ func blobHeaders(v any, what string) (map[string]string, error) {
 	}
 	out := make(map[string]string, len(obj))
 	for key, raw := range obj {
+		if raw == nil {
+			continue
+		}
 		value, err := blobString(raw, what+"."+key)
 		if err != nil {
 			return nil, err
