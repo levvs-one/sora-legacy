@@ -118,7 +118,17 @@ begin
     Result := Result or (Release >= 528040);
 end;
 
-function IsKb3033929Installed: Boolean;
+// A hotfix counts as installed when a CBS package for it is in the
+// installed state (CurrentState 112). Package subkey names come in
+// two shapes - "Package_for_KB<...>~..." and the numbered variants
+// "Package_<n>_for_KB<...>~..." - so the match looks for the
+// "for_KB<...>~" segment anywhere in the name; the trailing "~"
+// keeps a longer KB number from matching as a prefix. The scan sees
+// the package that delivered the hotfix; a hotfix that arrived
+// inside a monthly rollup is recorded under the rollup's own
+// number, so "not found" must be reported to the user as "not
+// detected", never as a proven absence.
+function IsKbInstalled(const KbNumber: String): Boolean;
 var
   PackageNames: TArrayOfString;
   PackagePath: String;
@@ -131,7 +141,7 @@ begin
     Exit;
   for Index := 0 to GetArrayLength(PackageNames) - 1 do
   begin
-    if Pos('Package_for_KB3033929~', PackageNames[Index]) = 1 then
+    if Pos('for_' + KbNumber + '~', PackageNames[Index]) > 0 then
     begin
       if RegQueryDWordValue(HKLM32, PackagePath + '\' + PackageNames[Index], 'CurrentState', CurrentState) and (CurrentState = 112) then
       begin
@@ -142,12 +152,61 @@ begin
   end;
 end;
 
+function IsKb3033929Installed: Boolean;
+begin
+  Result := IsKbInstalled('KB3033929');
+end;
+
+// Windows 7 SP1 prerequisites this installer cannot provide itself
+// (checked on Windows 7 only, both architectures):
+//   KB4490628 - the servicing stack update Microsoft requires before
+//     .NET Framework updates install on Windows 7 SP1;
+//   KB4474419 - SHA-2 code-signing support; without it those updates
+//     cannot be validated. The bundled KB3033929 step below covers
+//     the SHA-2 gap only on 32-bit Windows 7, because only the x86
+//     .msu is bundled; on x64 this check is the SHA-2 coverage.
+//   KB3140245 - enables TLS 1.2 in the system SChannel stack. The
+//     shipped client enables TLS 1.2 in code (v2rayN Utils.
+//     SetSecurityProtocol), and without this update HTTPS
+//     subscription downloads can fail on a bare Windows 7 SP1.
+// A missing update is no longer a silent runtime failure: the user
+// sees exactly what was not detected and what it affects, and
+// chooses to stop and update Windows first or to continue anyway.
+function ConfirmWindows7Prerequisites: Boolean;
+var
+  Missing: String;
+begin
+  Result := True;
+  if not IsWindows7 then
+    Exit;
+  Missing := '';
+  if not IsKbInstalled('KB4490628') then
+    Missing := Missing + #13#10 + '- KB4490628: стек обслуживания, нужен для установки обновлений .NET Framework.';
+  if not IsKbInstalled('KB4474419') then
+    Missing := Missing + #13#10 + '- KB4474419: поддержка подписей SHA-2, нужна для обновлений .NET Framework.';
+  if not IsKbInstalled('KB3140245') then
+    Missing := Missing + #13#10 + '- KB3140245: включает TLS 1.2 в системном стеке, без него загрузка подписок по HTTPS может не работать.';
+  if Missing = '' then
+    Exit;
+  Log('Windows 7 prerequisites not detected:' + Missing);
+  Result := MsgBox('В системе не обнаружены обновления Windows 7 SP1:' + Missing + #13#10#13#10 +
+    'Обновление могло прийти в составе накопительного пакета под другим номером - тогда это предупреждение ложное и можно продолжать.' + #13#10#13#10 +
+    'Если система давно не обновлялась, сначала поставьте обновления через Центр обновления Windows. Продолжить установку?',
+    mbConfirmation, MB_YESNO) = IDYES;
+end;
+
 function PrepareToInstall(var NeedsRestart: Boolean): String;
 var
   ResultCode: Integer;
   InstallerPath: String;
 begin
   Result := '';
+
+  if not ConfirmWindows7Prerequisites then
+  begin
+    Result := 'Установка отменена: сначала установите обновления Windows 7 SP1 (KB4490628, KB4474419, KB3140245) через Центр обновления Windows и запустите установщик снова.';
+    Exit;
+  end;
 
   if IsWindows7 and not IsWin64 and not IsKb3033929Installed then
   begin
