@@ -47,7 +47,7 @@ CGO_ENABLED=0 go build -trimpath -ldflags '-s -w -X main.buildVersion=<верс�
 
 ## Клиенты и тесты (C#)
 
-Пять проектов net48:
+В репозитории шесть проектов с целевым net48: пять ниже (новый клиент, Control и три интероп-теста; `Control` и `ControlInterop` при этом мультитаргетны — `net48;net8.0`) плюс поставляемый `legacy/v2rayN/v2rayN/v2rayN.csproj`, который собирается профилями из следующего раздела:
 
 ```sh
 dotnet build legacy/Client/Sora.Legacy.Client.csproj -c Release -p:PlatformTarget=x86
