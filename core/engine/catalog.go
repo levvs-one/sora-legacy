@@ -40,7 +40,7 @@ var Catalog = map[Kind]Capabilities{
 			FeatureXHTTPDownloadSplit: true, FeatureXHTTPXmux: true, FeatureXHTTPPadding: true, FeatureRealityKeyShare: true,
 			FeatureAmneziaWG: true, FeaturePrivateControl: true, FeatureECH: true,
 			FeatureECHQueryServerName: true,
-			FeatureHy2PortHop: true, FeatureHy2Obfs: true,
+			FeatureHy2PortHop:         true, FeatureHy2Obfs: true,
 		},
 	},
 	KindSingBox: {
