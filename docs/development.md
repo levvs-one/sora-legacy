@@ -6,7 +6,7 @@
 
 | Инструмент | Зачем |
 | --- | --- |
-| Go | служба ядра, модуль `core/`. Локально — системный Go или сборка из `~/workspace/go`; для Windows 7 службы CI собирает закреплённый Windows 7 SDK Go 1.26.9 (архив и его SHA-256 — в `.github/workflows/legacy.yml`) |
+| Go | служба ядра, модуль `core/`. Локально — системный Go или сборка из `~/workspace/go`; сборка службы для Windows 7 — только пропатченным Windows 7 SDK Go 1.26.9: в CI его собирает job `control-windows` (архив и его SHA-256 — в `.github/workflows/legacy.yml`), локально — скрипт `legacy/build/Build-CoreWin7.ps1`. Обычный `go build` системным Go даёт службу с полом Windows 10, см. предупреждение в разделе «Ядро (Go)» |
 | .NET SDK 8 | клиенты и тесты C#. Проекты — .NET Framework 4.8; на Linux net48 собирается через ReferenceAssemblies, это проверенный путь тулчейна |
 | Inno Setup 6 | установщик Windows из `legacy/installer/Sora.iss` (только на Windows) |
 | nfpm | пакеты службы для Linux |
@@ -42,6 +42,25 @@ go test ./...
 # из core/
 CGO_ENABLED=0 go build -trimpath -ldflags '-s -w -X main.buildVersion=<версия>' -o sora-core ./cmd/sora-core
 ```
+
+> **Пол Windows задаёт SDK, а не рецепт.** Приведённая выше сборка системным
+> Go даёт исполняемый файл с полом Windows 10: стоковый Go начиная с 1.21 на
+> Windows 7 и 8.1 не запускается. Исполняемый файл для Windows 7 SP1
+> получается только из пропатченного SDK XTLS/go-win7 (базовая линия NT 6.1):
+> в CI это job `control-windows` workflow `legacy.yml`, локально — та же
+> последовательность одним скриптом:
+>
+> ```powershell
+> # из legacy/, на Windows, стоковый Go версии из core/go.mod — в PATH
+> .\build\Build-CoreWin7.ps1
+> ```
+>
+> Скрипт скачивает тот же архив SDK, сверяет его SHA-256 и `VERSION` с
+> версией из `core/go.mod`, собирает SDK стоковым Go и кладёт
+> `sora-legacy-core-x86.exe` и `sora-legacy-core-x64.exe` в
+> `legacy/artifacts` — те же имена, что у артефактов CI. Ядро, собранное
+> обычным `go build`, на Windows 7 не стартует; не выдавайте его за сборку
+> для Windows 7.
 
 На Windows служба регистрируется сама: `sora-core --install-service` (служба `SoraLegacyCore`), снимается — `sora-core --uninstall-service`. Каталог данных по умолчанию — `%APPDATA%\sora-legacy\core` на Windows и `~/.config/sora-legacy/core` на Linux; для привилегированного запуска переменная окружения `SORA_LEGACY_DATA_DIR` игнорируется сознательно (см. `core/cmd/sora-core/cli.go`).
 

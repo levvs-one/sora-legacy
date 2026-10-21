@@ -80,6 +80,12 @@ jobs:
       - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
         with:
           dotnet-version: 8.0.424
+      - name: Parse-check the local Windows 7 build script
+        shell: pwsh
+        run: |
+          $parseErrors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path 'legacy/build/Build-CoreWin7.ps1').Path, [ref]$null, [ref]$parseErrors) | Out-Null
+          if ($parseErrors.Count) { $parseErrors | Out-String | Write-Error; exit 1 }
       - name: Build verified Windows 7 SDK
         shell: pwsh
         run: |
