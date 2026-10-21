@@ -9,16 +9,18 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"unicode/utf8"
 )
 
 // Redactor masks credentials in engine output, controller errors, and events
 // before they leave the core. It matches plan values exactly and uses patterns
 // for unknown values such as engine-generated tokens.
 type Redactor struct {
-	mu       sync.Mutex
-	values   []string
-	build    *strings.Replacer
-	patterns []string
+	mu        sync.Mutex
+	values    []string
+	ready     bool // gateForms holds the derived forms for values
+	build     *strings.Replacer
+	gateForms [][]string // parallel to values: gate list per seed
 }
 
 // NewRedactor returns a redactor seeded with the plan secrets.
@@ -54,6 +56,7 @@ func (r *Redactor) Add(values ...string) {
 		// partially mask a longer value.
 		sort.SliceStable(r.values, func(i, j int) bool { return len(r.values[i]) > len(r.values[j]) })
 		r.build = nil
+		r.ready = false
 	}
 	r.mu.Unlock()
 }
@@ -64,12 +67,13 @@ func (r *Redactor) String(s string) string {
 		return s
 	}
 	r.mu.Lock()
-	if r.build == nil {
-		pairs := make([]string, 0, len(r.values)*2)
-		r.patterns = r.patterns[:0]
+	if !r.ready {
+		// The gate list: every seed and its derived forms, kept
+		// grouped per seed. The replacer pairs built on the first
+		// gate hit consume them flattened — seed, then its forms
+		// that differ from it — in exactly this order.
+		r.gateForms = r.gateForms[:0]
 		for _, v := range r.values {
-			pairs = append(pairs, v, "[masked]")
-			r.patterns = append(r.patterns, v)
 			// A seed that reaches a log rarely arrives raw: engines
 			// and HTTP stacks re-encode it (percent-encoding in URLs
 			// and error strings, base64 in vmess-style blobs and
@@ -79,26 +83,10 @@ func (r *Redactor) String(s string) string {
 			// the encoded forms are part of the seed, so they are
 			// registered alongside it (AUDIT-PARITY G3: close the
 			// class, not the latest spelling).
-			for _, form := range derivedForms(v) {
-				if form != v && len(form) >= 4 {
-					pairs = append(pairs, form, "[masked]")
-					r.patterns = append(r.patterns, form)
-				}
-			}
+			r.gateForms = append(r.gateForms, derivedForms(v))
 		}
-		// One combined replacer over raw seeds and derived forms,
-		// in exactly sora's pair order — the layout is load-bearing,
-		// not a style choice. The previous legacy layout kept the
-		// forms in a second replacer applied to the OUTPUT of the
-		// raw pass, and REVIEW-G proved it diverges: when a raw
-		// seed B is a substring of another seed A's derived form,
-		// the raw pass masks B inside the form, mangles the form so
-		// the second replacer no longer recognises it, and leaks
-		// the rest of A's encoding. A single replacer scans the
-		// original string once, so a form that starts earlier in
-		// the string is consumed whole before the scanner reaches
-		// the raw seed inside it.
-		r.build = strings.NewReplacer(pairs...)
+		r.build = nil
+		r.ready = true
 	}
 	// The combined replacer is a generic-trie replacer and
 	// allocates when it rewrites, so it is gated: strings.Contains
@@ -116,11 +104,56 @@ func (r *Redactor) String(s string) string {
 	// pass, byte-identical to the seed stage of the sora snapshot
 	// named at derivedForms (sora@1ec55191).
 	out := s
-	for _, p := range r.patterns {
-		if strings.Contains(s, p) {
-			out = r.build.Replace(s)
+	hit := false
+	for i, v := range r.values {
+		if strings.Contains(s, v) {
+			hit = true
 			break
 		}
+		for _, form := range r.gateForms[i] {
+			if form != v && len(form) >= 4 && strings.Contains(s, form) {
+				hit = true
+				break
+			}
+		}
+		if hit {
+			break
+		}
+	}
+	if hit {
+		if r.build == nil {
+			// One combined replacer over raw seeds and derived
+			// forms, in exactly sora's pair order — the layout
+			// is load-bearing, not a style choice. The previous
+			// legacy layout kept the forms in a second replacer
+			// applied to the OUTPUT of the raw pass, and REVIEW-G
+			// proved it diverges: when a raw seed B is a substring
+			// of another seed A's derived form, the raw pass
+			// masks B inside the form, mangles the form so the
+			// second replacer no longer recognises it, and leaks
+			// the rest of A's encoding. A single replacer scans
+			// the original string once, so a form that starts
+			// earlier in the string is consumed whole before the
+			// scanner reaches the raw seed inside it.
+			//
+			// The replacer is built only here, on the first gate
+			// hit: its pairs are exactly the gate list — each seed
+			// followed by its kept forms — zipped with the mask,
+			// so deferring the trie construction cannot change
+			// any output; a redactor whose lines never contain a
+			// seed simply never pays for it.
+			pairs := make([]string, 0, 64)
+			for i, v := range r.values {
+				pairs = append(pairs, v, "[masked]")
+				for _, form := range r.gateForms[i] {
+					if form != v && len(form) >= 4 {
+						pairs = append(pairs, form, "[masked]")
+					}
+				}
+			}
+			r.build = strings.NewReplacer(pairs...)
+		}
+		out = r.build.Replace(s)
 	}
 	r.mu.Unlock()
 	return maskPatterns(out)
@@ -154,13 +187,27 @@ func (r *Redactor) Err(err error) error {
 //
 // Port source: this function and its helpers (percentEncodeAll,
 // unicodeEscapeAll, writeUnicodeEscape, upperUnicodeHexDigits,
-// singleEscapes) are ported verbatim from sora's
-// core/engine/redact.go at commit
-// 1ec551910016e292eadf666da43b1f8a9715fc9c (HEAD at port time;
-// derivedForms itself last changed there in bc54d959, the
+// singleEscapes) are ported from sora's core/engine/redact.go at
+// commit 1ec551910016e292eadf666da43b1f8a9715fc9c (HEAD at port
+// time; derivedForms itself last changed there in bc54d959, the
 // CENSOR-LEAK extension REVIEW-GFOLLOWUP G3-F1 found missing here).
+// The returned list — contents and order — is byte-identical to
+// the verbatim port (pinned by the snapshot differential in
+// redact_review_g_test.go); the construction below only avoids
+// allocations the port spent on forms it then deduplicated or on
+// intermediate copies (PERF flow B): exact slice capacities,
+// pre-grown builders in singleEscapes, the raw/URL base64 forms
+// derived from the standard encoding instead of re-encoded, and
+// no-op case transforms returned without a copy.
 func derivedForms(v string) []string {
-	forms := make([]string, 0, 10)
+	capacity := 20
+	if len(v) <= 64 {
+		// Base forms plus the single-escape enumeration (up to
+		// 2 percent forms per byte and 2 \u forms per rune,
+		// fewer after the case dedup in singleEscapes).
+		capacity += 2 * len(v)
+	}
+	forms := make([]string, 0, capacity)
 	add := func(s string) {
 		for _, have := range forms {
 			if have == s {
@@ -169,42 +216,88 @@ func derivedForms(v string) []string {
 		}
 		forms = append(forms, s)
 	}
-	for _, esc := range []string{url.QueryEscape(v), url.PathEscape(v)} {
-		add(esc)
-		add(lowerPercentHex(esc))
+	// A seed made only of bytes no encoder escapes ([A-Za-z0-9-_.~]
+	// is left alone by QueryEscape, PathEscape and encoding/json
+	// alike) has esc == json-inner == v: computing those forms
+	// would only manufacture copies of v that add() deduplicates
+	// and the caller filters out anyway.
+	plain := true
+	for i := 0; i < len(v); i++ {
+		c := v[i]
+		if !('a' <= c && c <= 'z' || 'A' <= c && c <= 'Z' || '0' <= c && c <= '9' ||
+			c == '-' || c == '_' || c == '.' || c == '~') {
+			plain = false
+			break
+		}
+	}
+	if !plain {
+		for _, esc := range []string{url.QueryEscape(v), url.PathEscape(v)} {
+			add(esc)
+			add(lowerPercentHex(esc))
+		}
 	}
 	// An encoder that escapes every byte, not only the specials
 	// (defensive formatters, some subscription proxies): the seed
-	// then survives as one long %XX run in both hex cases.
+	// then survives as one long %XX run in both hex cases. The
+	// cases coincide when no byte has a hex-letter nibble — then
+	// the second add would only deduplicate a fresh copy.
+	hexLetters := false
+	for i := 0; i < len(v); i++ {
+		if v[i]>>4 >= 10 || v[i]&0x0f >= 10 {
+			hexLetters = true
+			break
+		}
+	}
 	add(percentEncodeAll(v, true))
-	add(percentEncodeAll(v, false))
+	if hexLetters {
+		add(percentEncodeAll(v, false))
+	}
 	raw := []byte(v)
-	for _, enc := range []*base64.Encoding{
-		base64.StdEncoding, base64.RawStdEncoding,
-		base64.URLEncoding, base64.RawURLEncoding,
-	} {
-		add(enc.EncodeToString(raw))
+	// The raw encodings are the standard one minus its padding,
+	// and the URL-safe ones equal the standard ones whenever the
+	// standard output holds no '+' or '/' — derive instead of
+	// re-encoding; the forms (and their order) are unchanged.
+	std64 := base64.StdEncoding.EncodeToString(raw)
+	add(std64)
+	pad := len(std64) - len(strings.TrimRight(std64, "="))
+	add(std64[:len(std64)-pad])
+	if strings.ContainsAny(std64, "+/") {
+		url64 := base64.URLEncoding.EncodeToString(raw)
+		add(url64)
+		add(url64[:len(url64)-pad])
 	}
 	// WireGuard tooling and %X formatters print hex uppercase; the
 	// pure-uppercase form is a different string the replacer must
 	// know, symmetric to lowercase percent-hex.
 	lowerHex := hex.EncodeToString(raw)
 	add(lowerHex)
-	add(strings.ToUpper(lowerHex))
-	if marshalled, err := json.Marshal(v); err == nil && len(marshalled) >= 2 {
-		inner := string(marshalled[1 : len(marshalled)-1])
-		add(inner)
-		// Encoders disagree on the case of \uXXXX hex digits in
-		// the escapes json.Marshal does emit (\u003c vs \u003C).
-		add(upperUnicodeHexDigits(inner))
+	if hexLetters {
+		add(strings.ToUpper(lowerHex))
+	}
+	if !plain {
+		if marshalled, err := json.Marshal(v); err == nil && len(marshalled) >= 2 {
+			inner := string(marshalled[1 : len(marshalled)-1])
+			add(inner)
+			// Encoders disagree on the case of \uXXXX hex digits in
+			// the escapes json.Marshal does emit (\u003c vs \u003C).
+			add(upperUnicodeHexDigits(inner))
+		}
 	}
 	// Per-rune \uXXXX: encoders that escape every character, and
 	// encoders that escape exactly one character of an otherwise
 	// raw string (the reviewer's mysecr\u0065t1234 probe), in both
 	// hex cases.
-	uni := unicodeEscapeAll(v)
-	add(uni)
-	add(upperUnicodeHexDigits(uni))
+	add(unicodeEscapeAll(v, unicodeDigitsLower))
+	upperDiffers := false
+	for _, r := range v {
+		if hexLetterInRune(r) {
+			upperDiffers = true
+			break
+		}
+	}
+	if upperDiffers {
+		add(unicodeEscapeAll(v, unicodeDigitsUpper))
+	}
 	// Single-position escapes are enumerated only for bounded
 	// seeds: the form count grows linearly with the seed, and a
 	// very long seed's single-escape variants would bloat the
@@ -236,21 +329,26 @@ func percentEncodeAll(v string, upper bool) string {
 	return b.String()
 }
 
-// unicodeEscapeAll escapes every rune of v as \uXXXX with lowercase
-// hex digits, using a surrogate pair above the BMP exactly as JSON
-// string encoders do.
-func unicodeEscapeAll(v string) string {
+const (
+	unicodeDigitsLower = "0123456789abcdef"
+	unicodeDigitsUpper = "0123456789ABCDEF"
+)
+
+// unicodeEscapeAll escapes every rune of v as \uXXXX with the given
+// hex digit case, using a surrogate pair above the BMP exactly as
+// JSON string encoders do.
+func unicodeEscapeAll(v string, digits string) string {
 	var b strings.Builder
+	b.Grow(len(v) * 6)
 	for _, r := range v {
-		writeUnicodeEscape(&b, r)
+		writeUnicodeEscape(&b, r, digits)
 	}
 	return b.String()
 }
 
-// writeUnicodeEscape writes one rune as \uXXXX (lowercase hex), or a
-// surrogate pair for runes above U+FFFF.
-func writeUnicodeEscape(b *strings.Builder, r rune) {
-	const digits = "0123456789abcdef"
+// writeUnicodeEscape writes one rune as \uXXXX in the given digit
+// case, or a surrogate pair for runes above U+FFFF.
+func writeUnicodeEscape(b *strings.Builder, r rune, digits string) {
 	put := func(u uint16) {
 		b.WriteString(`\u`)
 		for shift := 12; shift >= 0; shift -= 4 {
@@ -267,8 +365,25 @@ func writeUnicodeEscape(b *strings.Builder, r rune) {
 }
 
 // upperUnicodeHexDigits uppercases the four hex digits of every
-// \uXXXX escape in s; all other bytes pass through unchanged.
+// \uXXXX escape in s; all other bytes pass through unchanged. A
+// string holding no lowercase hex digit inside a \uXXXX escape is
+// returned as is — the copy is only made when a digit will change.
 func upperUnicodeHexDigits(s string) string {
+	changes := false
+	for i := 0; i+5 < len(s) && !changes; i++ {
+		if s[i] != '\\' || s[i+1] != 'u' {
+			continue
+		}
+		for j := i + 2; j <= i+5; j++ {
+			if 'a' <= s[j] && s[j] <= 'f' {
+				changes = true
+				break
+			}
+		}
+	}
+	if !changes {
+		return s
+	}
 	b := []byte(s)
 	for i := 0; i+5 < len(b); i++ {
 		if b[i] != '\\' || b[i+1] != 'u' {
@@ -299,34 +414,91 @@ func upperUnicodeHexDigits(s string) string {
 // is escaped and the rest is raw: per byte as %XX (both hex cases)
 // and per rune as \uXXXX (both hex cases). These are the shapes an
 // encoder produces when it escapes one character class member inside
-// an otherwise literal string.
+// an otherwise literal string. Each form is assembled in one
+// pre-grown builder: the list is long (four forms per character)
+// and the concatenation chains of the original port made it the
+// most expensive part of building a Redactor (PERF flow B).
 func singleEscapes(v string) []string {
 	const digitsLower, digitsUpper = "0123456789abcdef", "0123456789ABCDEF"
-	var out []string
+	out := make([]string, 0, len(v)+2*utf8.RuneCountInString(v))
 	for i := 0; i < len(v); i++ {
-		for _, digits := range []string{digitsUpper, digitsLower} {
-			c := v[i]
-			out = append(out, v[:i]+"%"+string([]byte{digits[c>>4], digits[c&0x0f]})+v[i+1:])
+		c := v[i]
+		// The two digit cases produce the same form when neither
+		// nibble of c is a hex letter; generating both would only
+		// feed derivedForms' dedup a copy it discards.
+		cases := []string{digitsUpper}
+		if c>>4 >= 10 || c&0x0f >= 10 {
+			cases = append(cases, digitsLower)
+		}
+		for _, digits := range cases {
+			var b strings.Builder
+			b.Grow(len(v) + 3)
+			b.WriteString(v[:i])
+			b.WriteByte('%')
+			b.WriteByte(digits[c>>4])
+			b.WriteByte(digits[c&0x0f])
+			b.WriteString(v[i+1:])
+			out = append(out, b.String())
 		}
 	}
 	// Rune offsets for the \u forms; a rune-wise walk keeps
 	// multi-byte characters intact (escaping half a UTF-8 sequence
 	// is not a form any JSON encoder emits).
 	for i, r := range v {
-		var esc strings.Builder
-		writeUnicodeEscape(&esc, r)
-		lower := esc.String()
-		for _, form := range []string{lower, upperUnicodeHexDigits(lower)} {
-			out = append(out, v[:i]+form+v[i+len(string(r)):])
+		// Same dedup as above: the cases coincide when no hex
+		// digit of the escape is a letter (a surrogate pair always
+		// contains a D, so non-BMP runes always differ).
+		cases := []string{digitsLower}
+		if hexLetterInRune(r) {
+			cases = append(cases, digitsUpper)
+		}
+		for _, digits := range cases {
+			var b strings.Builder
+			b.Grow(len(v) + 12)
+			b.WriteString(v[:i])
+			writeUnicodeEscape(&b, r, digits)
+			b.WriteString(v[i+utf8.RuneLen(r):])
+			out = append(out, b.String())
 		}
 	}
 	return out
 }
 
+// hexLetterInRune reports whether the \uXXXX escape of r contains
+// a hex letter digit (a–f): only then do its lower- and uppercase
+// forms differ.
+func hexLetterInRune(r rune) bool {
+	if r > 0xffff {
+		return true // the surrogate halves start with D
+	}
+	for shift := 0; shift < 16; shift += 4 {
+		if (r>>uint(shift))&0x0f >= 10 {
+			return true
+		}
+	}
+	return false
+}
+
 // lowerPercentHex lowercases the hex digits of %XX escapes: encoders
 // disagree on the case, and a seed masked as %2F must also be masked
-// as %2f.
+// as %2f. A string with no uppercase hex digit behind a '%' is
+// returned as is — the copy is only made when a digit will change.
 func lowerPercentHex(s string) string {
+	changes := false
+	for i := 0; i+2 < len(s) && !changes; i++ {
+		if s[i] != '%' {
+			continue
+		}
+		for j := i + 1; j <= i+2; j++ {
+			if 'A' <= s[j] && s[j] <= 'F' {
+				changes = true
+				break
+			}
+		}
+	}
+	if !changes {
+		return s
+	}
 	b := []byte(s)
 	for i := 0; i+2 < len(b); i++ {
 		if b[i] != '%' {
@@ -617,15 +789,31 @@ func maskPatterns(s string) string {
 	if !isASCII(s) {
 		// The unconditional pipeline, unchanged: Unicode case folding
 		// decides what the (?i) patterns can see, so no ASCII shortcut
-		// may skip a pass here.
-		s = userInfoPattern.ReplaceAllString(s, "${1}://[masked]@")
-		s = tokenLinkPattern.ReplaceAllString(s, "${1}://[masked]")
-		s = subscriptionPathPattern.ReplaceAllString(s, "${1}[masked]")
-		s = authHeaderPattern.ReplaceAllString(s, "${1}[masked]")
-		s = bearerPattern.ReplaceAllString(s, "${1}[masked]")
+		// may skip a pass here. Each ReplaceAllString pass is still
+		// probed with MatchString first: ReplaceAllString spends
+		// allocations even when nothing matches, MatchString spends
+		// none, and a pass without a match is the identity — so the
+		// probe cannot change any output.
+		if userInfoPattern.MatchString(s) {
+			s = userInfoPattern.ReplaceAllString(s, "${1}://[masked]@")
+		}
+		if tokenLinkPattern.MatchString(s) {
+			s = tokenLinkPattern.ReplaceAllString(s, "${1}://[masked]")
+		}
+		if subscriptionPathPattern.MatchString(s) {
+			s = subscriptionPathPattern.ReplaceAllString(s, "${1}[masked]")
+		}
+		if authHeaderPattern.MatchString(s) {
+			s = authHeaderPattern.ReplaceAllString(s, "${1}[masked]")
+		}
+		if bearerPattern.MatchString(s) {
+			s = bearerPattern.ReplaceAllString(s, "${1}[masked]")
+		}
 		s = replaceKeyValues(keyValuePattern, s)
 		s = replaceKeyValues(strictKeyValuePattern, s)
-		s = uuidPattern.ReplaceAllString(s, "[masked]")
+		if uuidPattern.MatchString(s) {
+			s = uuidPattern.ReplaceAllString(s, "[masked]")
+		}
 		return s
 	}
 	// ASCII fast path: one gate per pattern, each a necessary condition
@@ -649,14 +837,31 @@ func maskPatterns(s string) string {
 	if !f.scheme && !f.key && !f.strict && !f.uuid && !f.bearer {
 		return s
 	}
+	// The flags are necessary conditions, not exact ones (the
+	// strict flag, say, fires on the substring "server", which the
+	// pattern itself cannot match without an assignment). Each
+	// ReplaceAllString pass is therefore probed with MatchString
+	// first — ReplaceAllString spends allocations even on a
+	// no-match line, MatchString spends none, and a pass without
+	// a match is the identity (PERF flow B).
 	if f.scheme {
-		s = userInfoPattern.ReplaceAllString(s, "${1}://[masked]@")
-		s = tokenLinkPattern.ReplaceAllString(s, "${1}://[masked]")
-		s = subscriptionPathPattern.ReplaceAllString(s, "${1}[masked]")
+		if userInfoPattern.MatchString(s) {
+			s = userInfoPattern.ReplaceAllString(s, "${1}://[masked]@")
+		}
+		if tokenLinkPattern.MatchString(s) {
+			s = tokenLinkPattern.ReplaceAllString(s, "${1}://[masked]")
+		}
+		if subscriptionPathPattern.MatchString(s) {
+			s = subscriptionPathPattern.ReplaceAllString(s, "${1}[masked]")
+		}
 	}
 	if f.bearer {
-		s = authHeaderPattern.ReplaceAllString(s, "${1}[masked]")
-		s = bearerPattern.ReplaceAllString(s, "${1}[masked]")
+		if authHeaderPattern.MatchString(s) {
+			s = authHeaderPattern.ReplaceAllString(s, "${1}[masked]")
+		}
+		if bearerPattern.MatchString(s) {
+			s = bearerPattern.ReplaceAllString(s, "${1}[masked]")
+		}
 	}
 	if f.key {
 		s = replaceKeyValues(keyValuePattern, s)
@@ -664,7 +869,7 @@ func maskPatterns(s string) string {
 	if f.strict {
 		s = replaceKeyValues(strictKeyValuePattern, s)
 	}
-	if f.uuid {
+	if f.uuid && uuidPattern.MatchString(s) {
 		s = uuidPattern.ReplaceAllString(s, "[masked]")
 	}
 	return s
