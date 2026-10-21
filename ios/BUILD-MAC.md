@@ -40,8 +40,14 @@
 ```sh
 # исходники пина из архива с sha256 выше
 tar -xzf sing-box-1.12.12.tar.gz && cd sing-box-1.12.12
-# gomobile/gobind v0.1.8 в GOPATH/bin (build_libbox их требует:
-# cmd/internal/build_shared.FindMobile)
+# СНАЧАЛА sagernet gomobile/gobind v0.1.8 в GOPATH/bin — без них
+# build_libbox фаталит: cmd/internal/build_shared.FindMobile
+# проверяет $GOPATH/bin/gobind и делает log.Fatal("missing
+# gomobile installation"). Версия — та же, что в go.mod пина
+# (github.com/sagernet/gomobile v0.1.8), по образцу установки
+# официального gomobile в §2.2:
+go install github.com/sagernet/gomobile/cmd/gomobile@v0.1.8
+go install github.com/sagernet/gomobile/cmd/gobind@v0.1.8
 go run ./cmd/internal/build_libbox -target apple -platform ios
 # результат: Libbox.xcframework в текущей папке
 cp -R Libbox.xcframework ~/…/sora-legacy/ios/Frameworks/
@@ -121,6 +127,13 @@ open SoraLegacy.xcodeproj
   MDM/per-app VPN территория) — не обещаем.
 - Sleep/wake: provider вызывает BoxService.Pause()/Wake()
   (service_pause.go пина).
+- Per-app фильтрация (tun inbound include_package/exclude_package):
+  значения дренируются из TunOptions в snapshot целиком, но на iOS
+  НЕ применяются — per-app VPN это MDM-возможность (per-app VPN
+  payload), у не-MDM packet-tunnel провайдера публичного API для
+  неё нет. Поведение честное, а не молчаливое: при непустых списках
+  provider пишет явный отказ в лог (PacketTunnelProvider
+  .applyTunOptions), туннель при этом работает для всех приложений.
 - Системный рестарт расширения: конфиг берётся из зеркала App
   Group (ServerStore.exchangeKey), не только из providerConfiguration.
 
@@ -154,7 +167,21 @@ open SoraLegacy.xcodeproj
 8. [ ] GetInterfaces: DNS-серверы по интерфейсам пусты
        (getifaddrs их не даёт). Если движку это мешает — источник:
        `res_ninit`/`res_getservers` из libresolv, добавить тогда.
+       Заодно: MTU сейчас 0 (unknown) — Darwin несёт ifi_mtu в
+       ifa_data AF_LINK-записей ifaddrs, но перечисление их не
+       декодирует; если движку понадобится MTU интерфейсов —
+       декодировать там, а не выдумывать значение.
 9. [ ] Энергопотребление/память расширения (лимит NE ~50 MB):
        профиль Instruments на слабом сервере с QUIC.
 10. [ ] TestFlight сборка и установка на iOS 13-устройстве/симуляторе
        (пол — проверять именно нижнюю границу).
+11. [ ] Keychain round-trip на устройстве: импортировать сервер с
+       кредами → убедиться, что сервер работает → полностью
+       перезапустить приложение → сервер на месте И креды на месте
+       (подключение проходит без повторного импорта). Отдельно:
+       тот же сценарий после переустановки/обновления приложения.
+       Это единственный пункт, закрывающий access group: группа
+       резолвится в рантайме из константы Models (префикс
+       `$(AppIdentifierPrefix)` Xcode раскрывает только в
+       entitlements), и на Linux эта цепочка не проверяется в
+       принципе — тесты ходят через InMemorySecrets.

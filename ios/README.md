@@ -13,8 +13,9 @@ app build are Mac work, specified exactly in
 [BUILD-MAC.md](BUILD-MAC.md) with a verify-on-mac checklist (§7).
 What *was* verified here: every Swift file passes `swiftc -parse`;
 the pure-Swift core (`SoraLegacyCore`) builds and its tests pass on
-Linux Swift 6.0.3 (`swift test`, 10/10 — TunConfig injection,
-store/secrets split, mobileapi JSON shapes).
+Linux Swift 6.0.3 (`swift test`, 19/19 — TunConfig injection,
+store/secrets split, mobileapi JSON shapes, TunOptions snapshot
+shape and route-range selection, netmask parsing).
 
 ## Deployment target: iOS 13.0
 
@@ -56,8 +57,24 @@ returns the fd from the pin's own `GetTunnelFileDescriptor()`
 (tun_darwin.go).
 
 Secrets: server credentials live in the Keychain (shared access
-group); the App Group suite holds only credential-stripped server
-metadata, settings and the tunnel exchange.
+group, resolved at runtime from the Models constant — the
+`$(AppIdentifierPrefix)` prefix is expanded by Xcode only in
+entitlements, never in Swift sources; see App/KeychainSecrets.swift).
+The App Group suite holds credential-stripped server metadata and
+settings — plus the tunnel exchange, which by design carries the
+full rendered config, outbound credentials inside: the extension
+cannot run the tunnel without the complete config (Android writes
+the same rendered config to its private filesDir, and the exchange
+is mirrored into providerConfiguration for the same reason). The
+suite is not a credential store, but the exchange is not
+credential-free either.
+
+Per-app filtering: TunOptions' include/exclude package lists are
+drained into the snapshot in full, but cannot be applied on iOS —
+per-app VPN is an MDM-only capability and a non-MDM provider has
+no API for it. The provider logs an explicit refusal when the
+lists are non-empty (BUILD-MAC.md §6); nothing is silently
+dropped.
 
 ## Tree map
 
@@ -70,6 +87,8 @@ metadata, settings and the tunnel exchange.
 | `PacketTunnel/` | Provider + the one file that touches Libbox types (`LibboxBridgeImpl.swift`: BoxService lifecycle, all 18 PlatformInterface methods, local-DNS transport, iterators) |
 
 Generated-framework spellings that only a Mac header can settle are
-behind seams and marked `TODO(verify-on-mac)` at the call site —
-the Go side of every call is cited from the pin's sources in the
-file headers.
+behind seams and marked `TODO(verify-on-mac)` at each generated
+spelling's site in LibboxBridgeImpl.swift (MobileAPIGenerated.swift
+carries one file-level TODO covering all of its calls) — the Go
+side of every call is cited from the pin's sources in the file
+headers.

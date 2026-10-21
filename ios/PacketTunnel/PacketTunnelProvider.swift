@@ -82,6 +82,18 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     /// blocks until NetworkExtension answers, because openTun must
     /// only return the fd once the utun exists with these settings.
     func applyTunOptions(_ snap: TunOptionsSnapshot) throws {
+        // Honest refusal, logged, never silent: the engine drained
+        // GetIncludePackage/GetExcludePackage into the snapshot,
+        // but per-app VPN filtering is available only to
+        // MDM-managed apps (per-app VPN payload) — a non-MDM
+        // packet-tunnel provider has no API to apply these lists,
+        // so they are not applied and the tunnel runs for all apps.
+        // Documented in BUILD-MAC.md §6 and README.
+        if !snap.includePackage.isEmpty || !snap.excludePackage.isEmpty {
+            NSLog("[sora-legacy] TunOptions include/exclude package lists cannot be applied on iOS (per-app filtering is MDM-only); tunnel applies to all apps. include=%@ exclude=%@",
+                  snap.includePackage.joined(separator: ","),
+                  snap.excludePackage.joined(separator: ","))
+        }
         let settings = Self.makeSettings(from: snap)
         let semaphore = DispatchSemaphore(value: 0)
         var installError: Error?
@@ -104,10 +116,21 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             let ipv4 = NEIPv4Settings(addresses: parsed.map(\.address),
                                       subnetMasks: parsed.map { mask(prefix: $0.prefix, v6: false) })
             if snap.autoRoute {
-                ipv4.includedRoutes = snap.inet4RouteAddress.isEmpty
+                // Included routes come from the snapshot's
+                // effective set: the route ranges the pin's
+                // wrapper precomputed (BuildAutoRouteRanges —
+                // route addresses or the full space, excludes
+                // already subtracted) when present, else the raw
+                // route addresses; empty means the NE default
+                // route, mirroring the ranges' 0.0.0.0/0 case. The
+                // excludes are only handed to NE when raw route
+                // addresses are in use — with ranges they are
+                // already carved out (see TunOptionsSnapshot).
+                let included = snap.includedRouteCIDRs4
+                ipv4.includedRoutes = included.isEmpty
                     ? [NEIPv4Route.default()]
-                    : snap.inet4RouteAddress.map(route4)
-                ipv4.excludedRoutes = snap.inet4RouteExcludeAddress.map(route4)
+                    : included.map(route4)
+                ipv4.excludedRoutes = snap.excludedRouteCIDRs4.map(route4)
             }
             settings.ipv4Settings = ipv4
         }
@@ -116,10 +139,11 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             let ipv6 = NEIPv6Settings(addresses: parsed.map(\.address),
                                       networkPrefixLengths: parsed.map { NSNumber(value: $0.prefix) })
             if snap.autoRoute {
-                ipv6.includedRoutes = snap.inet6RouteAddress.isEmpty
+                let included = snap.includedRouteCIDRs6
+                ipv6.includedRoutes = included.isEmpty
                     ? [NEIPv6Route.default()]
-                    : snap.inet6RouteAddress.map(route6)
-                ipv6.excludedRoutes = snap.inet6RouteExcludeAddress.map(route6)
+                    : included.map(route6)
+                ipv6.excludedRoutes = snap.excludedRouteCIDRs6.map(route6)
             }
             settings.ipv6Settings = ipv6
         }
@@ -183,4 +207,5 @@ final class UnavailableBridge: LibboxBridge {
     func pause() {}
     func wake() {}
     func resetNetwork() {}
+    func version() -> String { "" }
 }

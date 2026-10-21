@@ -18,16 +18,20 @@ import Libbox
 //   GetTunnelFileDescriptor() int32                       tun_darwin.go
 //   PlatformInterface — 18 methods                        platform.go
 //   LocalDNSTransport — Raw/Lookup/Exchange               dns.go
-//   TunOptions — 20 getters                               tun.go
+//   TunOptions — 19 getters                               tun.go
 //   StringIterator — Len/HasNext/Next                     iterator.go
 //
 // What only a Mac can settle is gomobile's generated Swift spelling
-// of those signatures in Libbox.h — call sites carry
-// TODO(verify-on-mac) and BUILD-MAC.md §7 is the reconciliation
-// checklist. Nothing outside this file references Libbox types.
+// of those signatures in Libbox.h — every generated spelling used
+// below carries TODO(verify-on-mac) at its site, and BUILD-MAC.md
+// §7 is the reconciliation checklist. Nothing outside this file
+// references Libbox types.
 
 /// Iterator plumbing (iterator.go contract: destructive Next(),
 /// HasNext(), plus Len() on StringIterator).
+// TODO(verify-on-mac): the protocol name
+// LibboxStringIteratorProtocol and the len/hasNext/next method
+// spellings are generated (iterator.go).
 final class StringIteratorImpl: NSObject, LibboxStringIteratorProtocol {
     private var items: [String]
     init(_ items: [String]) { self.items = items }
@@ -36,6 +40,10 @@ final class StringIteratorImpl: NSObject, LibboxStringIteratorProtocol {
     func next() -> String { items.isEmpty ? "" : items.removeFirst() }
 }
 
+// TODO(verify-on-mac): the protocol name
+// LibboxNetworkInterfaceIteratorProtocol and its hasNext/next
+// spellings are generated (platform.go returns this iterator type
+// from GetInterfaces).
 final class NetworkInterfaceIteratorImpl: NSObject, LibboxNetworkInterfaceIteratorProtocol {
     private var items: [LibboxNetworkInterface]
     init(_ items: [LibboxNetworkInterface]) { self.items = items }
@@ -48,6 +56,11 @@ final class NetworkInterfaceIteratorImpl: NSObject, LibboxNetworkInterfaceIterat
 /// as newline-joined IPs — the Android client's LocalDnsTransport.kt
 /// makes the same choice with the system resolver; here the resolver
 /// is getaddrinfo (the platform's own path on Darwin).
+// TODO(verify-on-mac): the protocol name
+// LibboxLocalDNSTransportProtocol and the raw/lookup/exchange
+// method spellings are generated (dns.go), as are
+// LibboxExchangeContext's success/errorCode methods used inside
+// lookup/exchange below.
 final class LocalDNSTransportImpl: NSObject, LibboxLocalDNSTransportProtocol {
     func raw() -> Bool { false }
 
@@ -88,10 +101,18 @@ final class LocalDNSTransportImpl: NSObject, LibboxLocalDNSTransportProtocol {
 }
 
 extension PlatformInterfaceImpl {
-    /// TunOptions (tun.go, 20 getters) drained into the core's value
-    /// snapshot. GetDNSServerAddress throws when the first IPv4
-    /// address is a /32 — our injected /30 keeps that unreachable,
-    /// and a throw here degrades to "no hijack DNS", not a crash.
+    /// TunOptions (tun.go:14-34 — exactly 19 getters, counted in the
+    /// interface) drained into the core's value snapshot: every one
+    /// of the 19, in the interface's order. GetDNSServerAddress
+    /// throws when the first IPv4 address is a /32 — our injected
+    /// /30 keeps that unreachable, and a throw here degrades to
+    /// "no hijack DNS", not a crash.
+    // TODO(verify-on-mac): every getter spelling on
+    // LibboxTunOptionsProtocol below is generated (tun.go),
+    // including the four drained last-but-two; also
+    // LibboxStringBoxProtocol's `value` property
+    // (GetDNSServerAddress's return) and, in drainPrefixes,
+    // LibboxRoutePrefixProtocol's string() (tun.go RoutePrefix).
     static func snapshot(of options: LibboxTunOptionsProtocol) -> TunOptionsSnapshot {
         var snap = TunOptionsSnapshot()
         snap.inet4Address = drainPrefixes(options.getInet4Address())
@@ -104,6 +125,18 @@ extension PlatformInterfaceImpl {
         snap.inet6RouteAddress = drainPrefixes(options.getInet6RouteAddress())
         snap.inet4RouteExcludeAddress = drainPrefixes(options.getInet4RouteExcludeAddress())
         snap.inet6RouteExcludeAddress = drainPrefixes(options.getInet6RouteExcludeAddress())
+        // The wrapper's BuildAutoRouteRanges result (service.go):
+        // the effective included routes — the provider builds the
+        // NE settings from these (see TunOptionsSnapshot's helpers),
+        // they are not decorative.
+        snap.inet4RouteRange = drainPrefixes(options.getInet4RouteRange())
+        snap.inet6RouteRange = drainPrefixes(options.getInet6RouteRange())
+        // Android package filters: drained and kept in the snapshot,
+        // but not applicable on iOS — per-app filtering is MDM-only,
+        // so the provider refuses them loudly instead of applying
+        // or silently dropping them (see TunOptionsSnapshot).
+        snap.includePackage = drainStrings(options.getIncludePackage())
+        snap.excludePackage = drainStrings(options.getExcludePackage())
         snap.httpProxyEnabled = options.isHTTPProxyEnabled()
         snap.httpProxyServer = options.getHTTPProxyServer() ?? ""
         snap.httpProxyServerPort = options.getHTTPProxyServerPort()
@@ -205,6 +238,9 @@ final class PlatformInterfaceImpl: NSObject, LibboxPlatformInterfaceProtocol {
     private func report(_ path: NWPath) {
         guard let listener else { return }
         let iface = path.availableInterfaces.first
+        // TODO(verify-on-mac): the generated spelling of
+        // InterfaceUpdateListener.updateDefaultInterface
+        // (platform.go: name, index, isExpensive, isConstrained).
         listener.updateDefaultInterface(
             iface?.name ?? "",
             interfaceIndex: Int32(iface?.index ?? -1),
@@ -215,10 +251,14 @@ final class PlatformInterfaceImpl: NSObject, LibboxPlatformInterfaceProtocol {
     // 12. GetInterfaces() — getifaddrs enumeration: names, CIDR
     // addresses (zone-stripped: libbox parses them with
     // netip.MustParsePrefix, service.go — a zone would panic the
-    // engine), flags, MTU is not in ifaddrs (0 = unknown, honest),
-    // type by interface kind/name, DNS servers are not exposed per
-    // interface by getifaddrs and stay empty (documented in
-    // BUILD-MAC.md §7 as a known gap, not a fabricated value).
+    // engine), flags, type by interface kind/name. MTU: Darwin
+    // does carry it — ifi_mtu in the AF_LINK record's ifa_data —
+    // but this loop does not decode AF_LINK records, so MTU stays
+    // 0 = unknown rather than a guessed value (decoding ifi_mtu
+    // is a verify-on-mac candidate, BUILD-MAC.md §7). DNS servers
+    // are not exposed per interface by getifaddrs and stay empty
+    // (documented in BUILD-MAC.md §7 as a known gap, not a
+    // fabricated value).
     func getInterfaces() throws -> LibboxNetworkInterfaceIteratorProtocol? {
         NetworkInterfaceIteratorImpl(Self.enumerateInterfaces())
     }
@@ -234,6 +274,10 @@ final class PlatformInterfaceImpl: NSObject, LibboxPlatformInterfaceProtocol {
             let ifa = current.pointee
             let name = String(cString: ifa.ifa_name)
             if byName[name] == nil {
+                // TODO(verify-on-mac): the generated property
+                // setters of LibboxNetworkInterface (platform.go:
+                // Index, MTU, Name, Flags, Type, Metered, and
+                // Addresses/DNSServer below).
                 let item = LibboxNetworkInterface()
                 item.index = Int32(if_nametoindex(name))
                 item.mtu = 0
@@ -273,6 +317,8 @@ final class PlatformInterfaceImpl: NSObject, LibboxPlatformInterfaceProtocol {
     private static func interfaceType(name: String) -> Int32 {
         // platform.go constants: WIFI/CELLULAR/ETHERNET/OTHER come
         // from sing-box constant.InterfaceType*.
+        // TODO(verify-on-mac): the generated spellings of the
+        // LibboxInterfaceType* constants below.
         if name.hasPrefix("en") { return LibboxInterfaceTypeWIFI }
         if name.hasPrefix("pdp_ip") { return LibboxInterfaceTypeCellular }
         if name.hasPrefix("bridge") || name.hasPrefix("eth") { return LibboxInterfaceTypeEthernet }
@@ -290,19 +336,14 @@ final class PlatformInterfaceImpl: NSObject, LibboxPlatformInterfaceProtocol {
     }
 
     private static func prefixLength(mask: String, isV6: Bool) -> Int? {
-        if isV6 {
-            let parts = mask.split(separator: ":")
-            guard !parts.isEmpty else { return nil }
-            var bits = 0
-            for part in parts {
-                guard let value = UInt16(part, radix: 16) else { return nil }
-                bits += value.nonzeroBitCount
-            }
-            return bits
-        }
-        let parts = mask.split(separator: ".").compactMap { UInt8($0) }
-        guard parts.count == 4 else { return nil }
-        return parts.reduce(0) { $0 + $1.nonzeroBitCount }
+        // The parsing lives in the core (NetmaskPrefixLength)
+        // because the IPv6 form is a real trap: getnameinfo renders
+        // the netmask compressed ("ffff:ffff::"), where splitting
+        // on ":" yields empty groups — the previous inline version
+        // returned nil there and the interface's address was
+        // silently dropped from GetInterfaces. Unit-tested on
+        // Linux (NetmaskPrefixLengthTests).
+        isV6 ? NetmaskPrefixLength.ipv6(mask) : NetmaskPrefixLength.ipv4(mask)
     }
 
     // 13. UnderNetworkExtension() — true: this code only ever runs
@@ -366,6 +407,8 @@ final class LibboxBridgeImpl: LibboxBridge {
         // (setup.go); on iOS it stays false.
         options.fixAndroidStack = false
         var error: NSError?
+        // TODO(verify-on-mac): the generated name LibboxSetup
+        // itself (setup.go: Setup(options) error).
         LibboxSetup(options, &error)
         if let error { throw LibboxBridgeError.startFailed(error.localizedDescription) }
         setupDone = true
@@ -375,6 +418,8 @@ final class LibboxBridgeImpl: LibboxBridge {
         var error: NSError?
         // Preflight (config.go CheckConfig): refuse before creating
         // a service, so a bad config fails as invalidConfig.
+        // TODO(verify-on-mac): the generated name LibboxCheckConfig
+        // itself (config.go: CheckConfig(configContent) error).
         LibboxCheckConfig(configJSON, &error)
         if let error { throw LibboxBridgeError.invalidConfig(error.localizedDescription) }
         let platform = PlatformInterfaceImpl()
@@ -385,6 +430,8 @@ final class LibboxBridgeImpl: LibboxBridge {
         let created = LibboxNewService(configJSON, platform, &error)
         if let error { throw LibboxBridgeError.startFailed(error.localizedDescription) }
         guard let created else { throw LibboxBridgeError.frameworkMissing }
+        // TODO(verify-on-mac): the generated spelling of
+        // BoxService.Start (service.go).
         created.start(&error)
         if let error { throw LibboxBridgeError.startFailed(error.localizedDescription) }
         service = created
@@ -392,6 +439,8 @@ final class LibboxBridgeImpl: LibboxBridge {
 
     func stopService() throws {
         var error: NSError?
+        // TODO(verify-on-mac): the generated spelling of
+        // BoxService.Close (service.go).
         service?.close(&error)
         service = nil
         platform = nil
@@ -399,8 +448,17 @@ final class LibboxBridgeImpl: LibboxBridge {
     }
 
     var isRunning: Bool { service != nil }
+    // TODO(verify-on-mac): the generated spellings of the
+    // BoxService power methods below (service_pause.go: Pause /
+    // Wake / ResetNetwork).
     func pause() { service?.pause() }
     func wake() { service?.wake() }
     func resetNetwork() { service?.resetNetwork() }
+
+    func version() -> String {
+        // TODO(verify-on-mac): the generated name LibboxVersion
+        // (setup.go: Version() string — no error return).
+        LibboxVersion()
+    }
 }
 #endif

@@ -23,6 +23,14 @@ final class TunnelManager {
     var onChange: (() -> Void)?
     private var manager: NETunnelProviderManager?
     private var statusObserver: NSObjectProtocol?
+    /// Monotonic token of the current connect attempt. Every
+    /// connect() and every cancel-during-start bumps it; the
+    /// background pipeline and the install completions capture the
+    /// token they were started with and refuse to act when it no
+    /// longer matches — otherwise a tunnel would come up after the
+    /// user pressed Cancel during `.starting`, before
+    /// installAndStart ever ran (review minor M4).
+    private var connectEpoch = 0
 
     func load() {
         NETunnelProviderManager.loadAllFromPreferences { [weak self] managers, _ in
@@ -40,6 +48,8 @@ final class TunnelManager {
             state = .error
             return
         }
+        connectEpoch += 1
+        let epoch = connectEpoch
         state = .starting
         lastError = nil
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
@@ -54,9 +64,16 @@ final class TunnelManager {
                 let exchange = TunnelConfigExchange(
                     configJSON: config, serverName: server.label, localPort: store.localPort())
                 store.saveExchange(exchange)
-                DispatchQueue.main.async { self.installAndStart(exchange) }
+                DispatchQueue.main.async {
+                    // Cancelled while the pipeline ran: the epoch
+                    // moved on (and state left .starting) — do not
+                    // install or start anything.
+                    guard self.connectEpoch == epoch, self.state == .starting else { return }
+                    self.installAndStart(exchange, epoch: epoch)
+                }
             } catch {
                 DispatchQueue.main.async {
+                    guard self.connectEpoch == epoch else { return }
                     self.lastError = (error as? MobileAPIError).map {
                         switch $0 { case .engine(let m), .badJSON(let m): return m }
                     } ?? error.localizedDescription
@@ -66,7 +83,7 @@ final class TunnelManager {
         }
     }
 
-    private func installAndStart(_ exchange: TunnelConfigExchange) {
+    private func installAndStart(_ exchange: TunnelConfigExchange, epoch: Int) {
         let manager = self.manager ?? NETunnelProviderManager()
         let proto = NETunnelProviderProtocol()
         proto.providerBundleIdentifier = SoraLegacyIdentifiers.tunnelBundleID
@@ -83,20 +100,39 @@ final class TunnelManager {
         manager.isEnabled = true
         manager.saveToPreferences { [weak self] error in
             if let error {
-                DispatchQueue.main.async { self?.lastError = error.localizedDescription; self?.state = .error }
+                DispatchQueue.main.async {
+                    guard self?.connectEpoch == epoch else { return }
+                    self?.lastError = error.localizedDescription; self?.state = .error
+                }
                 return
             }
             manager.loadFromPreferences { _ in
                 DispatchQueue.main.async {
-                    self?.manager = manager
+                    // Re-check at the last moment: a Cancel that
+                    // landed during save/load must win over the
+                    // start it raced with.
+                    guard let self, self.connectEpoch == epoch, self.state == .starting else { return }
+                    self.manager = manager
                     do { try manager.connection.startVPNTunnel() }
-                    catch { self?.lastError = error.localizedDescription; self?.state = .error }
+                    catch { self.lastError = error.localizedDescription; self.state = .error }
                 }
             }
         }
     }
 
     func disconnect() {
+        if state == .starting {
+            // Cancel before the tunnel exists: invalidate the
+            // in-flight pipeline (epoch bump — its completions all
+            // check it) and settle in .stopped. There is no live
+            // connection to stop yet; stopVPNTunnel is still called
+            // defensively in case preferences installed a manager
+            // whose status has not been observed yet.
+            connectEpoch += 1
+            manager?.connection.stopVPNTunnel()
+            state = .stopped
+            return
+        }
         state = .stopping
         manager?.connection.stopVPNTunnel()
     }

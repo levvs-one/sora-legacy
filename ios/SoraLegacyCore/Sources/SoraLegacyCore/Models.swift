@@ -115,5 +115,13 @@ public enum SoraLegacyIdentifiers {
     public static let bundleID = "one.levvs.sora.legacy"
     public static let tunnelBundleID = "one.levvs.sora.legacy.PacketTunnel"
     public static let appGroup = "group.one.levvs.sora.legacy"
+    /// The keychain access group exactly as written in both
+    /// targets' entitlements. The `$(AppIdentifierPrefix)` prefix
+    /// is expanded by Xcode at signing time (to the team prefix)
+    /// in entitlements and plists only — never in Swift sources —
+    /// so this literal must not be passed to `kSecAttrAccessGroup`
+    /// verbatim. App/KeychainSecrets.swift uses this constant as
+    /// the expected group and resolves the real prefix at runtime
+    /// before putting anything in a query.
     public static let keychainGroup = "$(AppIdentifierPrefix)one.levvs.sora.legacy"
 }

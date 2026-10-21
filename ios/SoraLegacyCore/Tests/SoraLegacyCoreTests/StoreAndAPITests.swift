@@ -19,22 +19,22 @@ final class StoreAndAPITests: XCTestCase {
 
     func testCredentialsLiveInSecretsNotInDefaults() throws {
         let (store, secrets) = makeStore()
-        store.saveServers([sample])
+        try store.saveServers([sample])
         XCTAssertNotNil(secrets.secret(forKey: "s1"))
         let data = try XCTUnwrap(UserDefaults(suiteName: suiteName)?.data(forKey: ServerStore.serversKey))
         XCTAssertFalse(String(decoding: data, as: UTF8.self).contains("00000000-0000"))
         XCTAssertEqual(store.servers().first?.credentials?["uuid"], "00000000-0000-0000-0000-000000000000")
     }
 
-    func testSelectionAndDefaultsMirrorAndroid() {
+    func testSelectionAndDefaultsMirrorAndroid() throws {
         let (store, _) = makeStore()
         XCTAssertEqual(store.localPort(), 7890)
         XCTAssertEqual(store.tunMTU(), 1500)
         XCTAssertFalse(store.strictRoute())
-        store.saveServers([sample])
+        try store.saveServers([sample])
         store.select(id: "s1")
         XCTAssertEqual(store.selected()?.id, "s1")
-        store.removeServer(id: "s1")
+        try store.removeServer(id: "s1")
         XCTAssertNil(store.selectedID())
         XCTAssertTrue(store.servers().isEmpty)
     }

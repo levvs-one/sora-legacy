@@ -51,7 +51,14 @@ final class ServersViewController: UITableViewController {
                             commit editingStyle: UITableViewCell.EditingStyle,
                             forRowAt indexPath: IndexPath) {
         if editingStyle == .delete {
-            AppStore.shared.removeServer(id: servers[indexPath.row].id)
+            do {
+                try AppStore.shared.removeServer(id: servers[indexPath.row].id)
+            } catch {
+                // A Keychain failure must not be swallowed: log the
+                // status and surface it like other store errors.
+                NSLog("[servers] remove failed: %@", "\(error)")
+                showError("\(error)", title: "Delete failed")
+            }
             reload()
         }
     }
@@ -84,6 +91,9 @@ final class ServersViewController: UITableViewController {
             var request = URLRequest(url: url)
             request.timeoutInterval = 30
             URLSession.shared.dataTask(with: request) { [weak self] data, _, error in
+                // URLSession completions run on a background queue;
+                // showError hops to main itself (see below), and the
+                // import hop goes through runImport's own queues.
                 guard let self else { return }
                 if let error { self.showError(error.localizedDescription); return }
                 guard let data else { self.showError("Empty response"); return }
@@ -97,7 +107,13 @@ final class ServersViewController: UITableViewController {
             do {
                 let imported = try work()
                 DispatchQueue.main.async {
-                    AppStore.shared.addServers(imported)
+                    do {
+                        try AppStore.shared.addServers(imported)
+                    } catch {
+                        NSLog("[servers] save failed: %@", "\(error)")
+                        self?.showError("\(error)")
+                        return
+                    }
                     if AppStore.shared.selectedID() == nil, let first = imported.first {
                         AppStore.shared.select(id: first.id)
                     }
@@ -119,9 +135,16 @@ final class ServersViewController: UITableViewController {
         present(alert, animated: true)
     }
 
-    private func showError(_ message: String) {
-        let alert = UIAlertController(title: "Import failed", message: message, preferredStyle: .alert)
-        alert.addAction(UIAlertAction(title: "OK", style: .default))
-        present(alert, animated: true)
+    private func showError(_ message: String, title: String = "Import failed") {
+        // Callers include URLSession and background import
+        // completions: UIKit work must hop to the main queue here,
+        // centrally, so no call site can present from a background
+        // thread by forgetting the hop.
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            let alert = UIAlertController(title: title, message: message, preferredStyle: .alert)
+            alert.addAction(UIAlertAction(title: "OK", style: .default))
+            self.present(alert, animated: true)
+        }
     }
 }

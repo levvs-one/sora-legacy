@@ -14,8 +14,10 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
-	<key>UILaunchStoryboardName</key>
-	<string></string>
+	<!-- No UILaunchStoryboardName: there is no storyboard in this
+	     tree — AppDelegate builds the window in code. The key was
+	     previously present with an empty string, which is not the
+	     same as absent; removed rather than faked. -->
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<!-- Subscriptions are fetched from user-supplied URLs only;

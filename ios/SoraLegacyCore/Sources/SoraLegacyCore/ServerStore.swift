@@ -3,19 +3,31 @@ import Foundation
 /// Secret storage seam: server credentials are passwords. The app
 /// target backs this with the Keychain (App/KeychainSecrets.swift);
 /// tests back it with memory. Nothing else in the core touches
-/// secrets directly.
+/// secrets directly. Writes throw: a Keychain failure (e.g. a bad
+/// access group) must surface to the caller as an error, never be
+/// swallowed — a server whose credentials silently failed to save
+/// would reappear after relaunch without them.
 public protocol SecretsStore {
     func secret(forKey key: String) -> String?
-    func setSecret(_ value: String?, forKey key: String)
+    func setSecret(_ value: String?, forKey key: String) throws
 }
 
-/// Shared app<->extension store. Non-secret state (server list
-/// without credentials, selection, settings, the tunnel exchange)
-/// lives in the App Group suite so the PacketTunnel extension —
-/// which the system may start alone — reads the same facts the app
-/// wrote. Credentials never enter the suite: the server list stored
-/// here has `credentials` stripped, and the full documents live in
-/// the Keychain under each server's id.
+/// Shared app<->extension store. State lives in the App Group suite
+/// so the PacketTunnel extension — which the system may start
+/// alone — reads the same facts the app wrote. Precisely what the
+/// suite holds: the server list with `credentials` stripped (the
+/// full credential documents live only in the Keychain, under each
+/// server's id), the selection, the settings — and the tunnel
+/// exchange. The exchange is the one deliberate exception to
+/// "no credentials in the suite": it carries the full rendered
+/// sing-box config, outbound credentials inside, because the
+/// extension needs the complete config to run the tunnel at all
+/// (Android writes the same rendered config to its private
+/// filesDir, and the exchange is also mirrored into the
+/// providerConfiguration for the same reason). It is not a
+/// credential store — credentials at rest are the Keychain's job —
+/// but it is not credential-free either, and docs must not claim
+/// otherwise.
 public final class ServerStore {
     public static let serversKey = "servers.v1"
     public static let selectedIDKey = "selected_id"
@@ -49,13 +61,13 @@ public final class ServerStore {
         }
     }
 
-    public func saveServers(_ servers: [Server]) {
+    public func saveServers(_ servers: [Server]) throws {
         for server in servers {
             if let creds = server.credentials,
                let data = try? JSONEncoder().encode(creds) {
-                secrets.setSecret(String(decoding: data, as: UTF8.self), forKey: server.id)
+                try secrets.setSecret(String(decoding: data, as: UTF8.self), forKey: server.id)
             } else {
-                secrets.setSecret(nil, forKey: server.id)
+                try secrets.setSecret(nil, forKey: server.id)
             }
         }
         let stripped = servers.map { server -> Server in
@@ -71,17 +83,17 @@ public final class ServerStore {
         }
     }
 
-    public func addServers(_ new: [Server]) {
+    public func addServers(_ new: [Server]) throws {
         var all = servers()
         for server in new where !all.contains(where: { $0.id == server.id }) {
             all.append(server)
         }
-        saveServers(all)
+        try saveServers(all)
     }
 
-    public func removeServer(id: String) {
-        saveServers(servers().filter { $0.id != id })
-        secrets.setSecret(nil, forKey: id)
+    public func removeServer(id: String) throws {
+        try saveServers(servers().filter { $0.id != id })
+        try secrets.setSecret(nil, forKey: id)
     }
 
     // MARK: Selection & settings (defaults mirror Android ServerStore)
