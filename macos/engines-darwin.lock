@@ -1,0 +1,34 @@
+# Engine builds the macOS service ships, one line per engine and
+# architecture, in the format of packaging/engines/engines.lock:
+#   engine  arch  sha256  url
+# Versions are the SERVICE pins of packaging/engines/engines.lock
+# (sing-box 1.14.3 / Xray 26.3.27 / mihomo 1.19.32) — not the Windows
+# payload pins (D4/LEGACY-FLOORS-FIX records the divergence).
+#
+# Every digest below was measured 2026-10-22 from the real downloaded
+# artifact AND cross-checked: Xray against the release's official
+# .dgst (SHA2-256 matches byte for byte), sing-box and mihomo against
+# the digest the GitHub API publishes for the release asset.
+#
+# The "min macOS" notes are also measured, from each binary's Mach-O
+# LC_BUILD_VERSION / LC_VERSION_MIN_MACOSX load command — they decide
+# which engines can even launch on a given system, and the capability
+# matrix in README.md is built from them:
+#
+#   sing-box amd64: the LEGACY asset is pinned on purpose. Upstream's
+#     regular darwin builds of 1.14.3 declare min macOS 26.0; the
+#     legacy-macos-10.13 build declares 10.13 and is the only sing-box
+#     that runs on the systems this client targets.
+#   sing-box arm64: no legacy asset exists upstream; the regular build
+#     declares min macOS 26.0. On Apple Silicon below macOS 26 the
+#     core honestly has no sing-box — Xray and mihomo carry the plans
+#     they can, and the core's engine selection says so.
+#   xray: min macOS 12.0 on both architectures (matches the daemon's
+#     own floor — see README.md).
+#   mihomo: min macOS 10.13 (amd64) / 11.0 (arm64).
+sing-box  amd64  5deb29edfa07ff7a9db7be084ef90f661cc483136e797daa2c14d4479995d112  https://github.com/SagerNet/sing-box/releases/download/v1.14.3/sing-box-1.14.3-darwin-amd64-legacy-macos-10.13.tar.gz
+sing-box  arm64  0360ce634a04c26a6b4fd957517987bb4f6c8950f63435ce3c5af2fcae5860c5  https://github.com/SagerNet/sing-box/releases/download/v1.14.3/sing-box-1.14.3-darwin-arm64.tar.gz
+xray      amd64  f5b0471d3459eff1b82e48af0aeac186abcc3298210070afbbbd8437a4e8b203  https://github.com/XTLS/Xray-core/releases/download/v26.3.27/Xray-macos-64.zip
+xray      arm64  2e93a67e8aa1936ecefb307e120830fcbd4c643ab9b1c46a2d0838d5f8409eaf  https://github.com/XTLS/Xray-core/releases/download/v26.3.27/Xray-macos-arm64-v8a.zip
+mihomo    amd64  b7de9fc46af2ca985ecfb302a6362170e04ff2023dee1e82addc54133e669bc9  https://github.com/MetaCubeX/mihomo/releases/download/v1.19.32/mihomo-darwin-amd64-v1.19.32.gz
+mihomo    arm64  3312a6780652c622890fd4357c6a853bbf865464fd047ac7b7f52dab8de18652  https://github.com/MetaCubeX/mihomo/releases/download/v1.19.32/mihomo-darwin-arm64-v1.19.32.gz

@@ -1,0 +1,44 @@
+# XcodeGen spec for the sora-legacy macOS client. Generate with:
+#   xcodegen generate --spec project.yml
+# (or create the project by hand from this spec — it is one AppKit
+# target and one helper binary, nothing else).
+#
+# Floor: macOS 10.13 (High Sierra) — the legacy client's reason to
+# exist. AppKit sources use only APIs available at 10.13 in the common
+# path; the pure-Swift core (App/Core) is also an SPM package
+# (Package.swift) so it type-checks and tests without Xcode.
+#
+# The app bundles NO engine and NO daemon: sora-core and sora-ctl are
+# installed system-wide by service/darwin/install.sh. A copy of
+# sora-ctl may optionally be placed in Contents/Helpers for a
+# self-contained drag-install; HelperClient prefers the bundled copy
+# when present (Bundle.path(forAuxiliaryExecutable:)).
+name: SoraLegacy
+options:
+  bundleIdPrefix: io.github.levvs-one
+  deploymentTarget:
+    macOS: "10.13"
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    MARKETING_VERSION: "1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    # Signing is parameterised: no team id or certificate name is
+    # committed. Unsigned/ad-hoc builds run locally; distribution
+    # signing + notarization are the owner's step (verify-on-mac
+    # checklist in README.md).
+    DEVELOPMENT_TEAM: "$(SORA_LEGACY_DEVELOPMENT_TEAM)"
+    CODE_SIGN_STYLE: Manual
+    CODE_SIGN_IDENTITY: "$(SORA_LEGACY_CODE_SIGN_IDENTITY)"
+targets:
+  SoraLegacy:
+    type: application
+    platform: macOS
+    sources:
+      - path: App/Core
+      - path: App/UI
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.levvs-one.sora-legacy
+        INFOPLIST_FILE: App/Info.plist
+        PRODUCT_NAME: SoraLegacy

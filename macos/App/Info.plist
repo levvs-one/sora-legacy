@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- App bundle metadata for the macOS legacy client. No entitlements
+     are declared: this app uses no NetworkExtension, no app sandbox
+     exceptions and no privileged helper of its own — privilege lives
+     in the root core daemon (service/darwin), the app is a plain
+     user-session AppKit program talking to a Go helper. -->
+<plist version="1.0">
+<dict>
+	<key>CFBundleName</key>
+	<string>Sora Legacy</string>
+	<key>CFBundleDisplayName</key>
+	<string>Sora Legacy</string>
+	<key>CFBundleIdentifier</key>
+	<string>io.github.levvs-one.sora-legacy</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>CFBundleShortVersionString</key>
+	<string>1.0</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleExecutable</key>
+	<string>SoraLegacy</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>10.13</string>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>NSPrincipalClass</key>
+	<string>NSApplication</string>
+</dict>
+</plist>
