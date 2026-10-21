@@ -17,21 +17,21 @@ import (
 
 // flags holds operator settings with defaults for a standard installation.
 type flags struct {
-	dataDir       string
-	enginesDir    string
-	engine        string
-	localPort     int
-	bypass        string
-	socket        string
-	logLevel      string
-	check         bool
-	fileKeys      bool
-	showVersion   bool
-	install       bool
-	uninstall     bool
-	showToken     bool
-	legacyControl bool
-	allowEnvBin   bool
+	dataDir                string
+	enginesDir             string
+	engine                 string
+	localPort              int
+	bypass                 string
+	socket                 string
+	logLevel               string
+	check                  bool
+	fileKeys               bool
+	showVersion            bool
+	install                bool
+	uninstall              bool
+	showToken              bool
+	legacyControl          bool
+	allowEnvBin            bool
 	allowUnverifiedEngines bool
 }
 
@@ -141,17 +141,17 @@ func run(ctx context.Context, arguments []string) error {
 			"dir", f.dataDir)
 	}
 	options := Options{
-		LegacyControl: f.legacyControl,
-		Diagnostic:    f.check,
-		DataDir:       f.dataDir,
-		EnginesDir:    f.enginesDir,
-		Engine:        engine.Kind(f.engine),
-		LocalPort:     f.localPort,
-		Bypass:        splitList(f.bypass),
-		Socket:        f.socket,
-		Log:           logger,
-		AllowFileKeys: f.fileKeys,
-		AllowEnvBin:   f.allowEnvBin,
+		LegacyControl:          f.legacyControl,
+		Diagnostic:             f.check,
+		DataDir:                f.dataDir,
+		EnginesDir:             f.enginesDir,
+		Engine:                 engine.Kind(f.engine),
+		LocalPort:              f.localPort,
+		Bypass:                 splitList(f.bypass),
+		Socket:                 f.socket,
+		Log:                    logger,
+		AllowFileKeys:          f.fileKeys,
+		AllowEnvBin:            f.allowEnvBin,
 		AllowUnverifiedEngines: f.allowUnverifiedEngines,
 	}
 	app, err := New(ctx, options)
