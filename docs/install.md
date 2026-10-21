@@ -72,3 +72,29 @@
 ### Ограничение восстановления прокси в новом клиенте
 
 Когда комплект переключится на новый клиент, его собственное восстановление (`--restore-proxy`, нативная реализация без `sysproxy.exe`) будет работать с двумя честными ограничениями, зафиксированными в его коде: восстанавливаются именованные значения HKCU Internet Settings, включая PAC-URL, но **бит AUTO_DETECT не восстанавливается** (он живёт только в бинарном `DefaultConnectionSettings`, который восстановление сознательно не переписывает), а **per-connection записи RAS не переигрываются** (поставляемый путь через `sysproxy.exe` применяет настройки шире). До смены комплекта пользователю работает поставляемый путь из пункта 1 выше.
+
+## Android
+
+Готового публичного релиза для Android нет. То, что существует и проверено в песочнице, — debug-APK, собранный ручным пайплайном (см. [development.md](development.md), раздел «Android»): пакет `one.levvs.sora.legacy`, versionCode 1 / versionName 0.1.0, `minSdk 21` / `targetSdk 34`, размер 279 213 197 байт, SHA-256 `81f55b9fee04d778ff5daa305c19a8fb7f6f42f7b131f6ea430491c474dcaa7c`. Подпись — debug-ключ, сгенерированный пайплайном (алиас `androiddebugkey`): это не релизная идентичность, обновить такой APK поверх будущего релизного нельзя.
+
+Установка в этом виде — только вручную на устройство (sideload): разрешить установку из выбранного источника, открыть APK, при первом подключении подтвердить системный VPN consent-диалог (`VpnService.prepare`). **На устройстве эта сборка не проверялась вообще**: установка, consent-флоу, трафик через туннель, DNS, disconnect/reconnect и always-on — пункты verify-on-device из `android/README.md` (11 пунктов). Не выдавайте debug-APK за проверенный продукт. Удаление — стандартное, средствами Android; данные клиента лежат в app-private `filesDir` (`servers.json` с кредами внутри, `config.json`), `allowBackup=false` — в резервные копии они не попадают и удаляются вместе с приложением.
+
+## macOS
+
+Установщика (pkg/нотаризации) для macOS нет. Установка — скриптами службы из дерева, на Mac, с правами администратора:
+
+1. Соберите демон, хелпер и движки по [development.md](development.md) (раздел «macOS») или возьмите собранные бинари; движки раскладывает `macos/fetch-engines-darwin.sh` и пишет `SHA256SUMS`, без которого ядро движки не запустит (fail-closed).
+2. `sudo sh service/darwin/install.sh <каталог с sora-core, sora-ctl и engines/>` — создаёт группу `sora` и добавляет в неё консольного пользователя, ставит бинари в `/usr/local/lib/sora-legacy/`, данные — в `/Library/SoraLegacy/core` (0700, root), plist корневого LaunchDaemon — в `/Library/LaunchDaemons/`, делает bootstrap.
+3. Приложение `SoraLegacy.app` собирается Xcode-проектом на Mac (см. development.md); отдельного шага установки у него нет — это обычное AppKit-приложение.
+
+Честные границы: в этой среде ничего из перечисленного на Mac не запускалось (verify-on-mac — 8 пунктов в `macos/README.md`). Пол демона и хелпера — macOS 12.0: на более старой системе клиент запустится и объяснит, но служба работать не будет. На Apple Silicon ниже macOS 26 upstream-бинаря sing-box нет — часть планов там честно не поедет. Kill switch на macOS не форсится (`NoopFirewall`): клиент показывает запрос, а не защиту. Удаление: `service/darwin/uninstall.sh` (bootout и удаление бинарей; данные и логи сохраняет, `--purge` удаляет и их; группу `sora` сознательно не удаляет, каталог сокета `/var/run/sora` тоже остаётся).
+
+## iOS
+
+Публичной установки для iOS нет и в этом виде быть не может: сборка, подписи и распространение — только через Mac с Xcode и Apple Developer аккаунтом по спеке `ios/BUILD-MAC.md`:
+
+1. На Mac собираются оба xcframework (Libbox штатным `build_libbox` пина 1.12.12, Mobileapi официальным gomobile с `-iosversion 13.0`).
+2. Проект генерируется XcodeGen из `ios/project.yml` (приложение `one.levvs.sora.legacy` + расширение PacketTunnel), подписывается командой владельца; App Group `group.one.levvs.sora.legacy` и NetworkExtension-capability должны быть зарегистрированы на оба App ID.
+3. Установка на устройство — из Xcode или через TestFlight; для TestFlight/App Store отдельно нужен разбор экспортного контроля шифрования (`ITSAppUsesNonExemptEncryption`) — вопрос владельца, в дереве не решён.
+
+Пол — iOS 13.0 (вывод из пина — в `ios/BUILD-MAC.md` §1 и в [platforms.md](../legacy/docs/platforms.md)). В этой среде iOS-сборка не собиралась и на устройстве не проверялась: verify-on-mac — 11 пунктов в `ios/BUILD-MAC.md` §7, включая Keychain round-trip и установку именно на iOS 13. Удаление — стандартное, средствами iOS; креды серверов при этом уходят вместе с Keychain-записями приложения, tunnel exchange в App Group — вместе с контейнером.

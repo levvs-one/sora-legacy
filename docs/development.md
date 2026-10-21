@@ -11,6 +11,9 @@
 | Inno Setup 6 | установщик Windows из `legacy/installer/Sora.iss` (только на Windows) |
 | nfpm | пакеты службы для Linux |
 | C-компилятор, zlib, заголовки libnetfilter_queue/libnfnetlink/libmnl | сборка zapret (`tpws`/`nfqws`) для Linux-пакета |
+| JDK 17, Android SDK (platform 34, build-tools 34.0.0), NDK 27.2, gomobile/gobind | AAR для Android (`mobileapi.aar`, `libbox.aar`) и ручной APK-пайплайн; канонические версии и хэши — в разделе «Android» |
+| Swift 6.0.3 (Linux) | typecheck и тесты Foundation-частей macOS/iOS (`swift test`); AppKit/UIKit этим не собираются |
+| Mac с Xcode, XcodeGen, Apple Developer аккаунт | сборка и подпись приложений macOS/iOS и обоих xcframework — в этой среде недоступны, спеки: `macos/README.md`, `ios/BUILD-MAC.md` |
 
 ## Каталоги
 
@@ -26,6 +29,12 @@
 | `packaging/engines` | `engines.lock`, `fetch.sh` |
 | `packaging/zapret` | шаг сборки zapret для Linux-пакета |
 | `packaging/linux` | nfpm-описание пакета службы |
+| `core/mobileapi` | gomobile-фасад ядра для мобильных клиентов (`ImportLinks`/`ParseSubscription`/`BuildPlan`/`RenderSingBoxConfig`/`EngineInfo`) |
+| `core/ipc` | транспорт службы; darwin-часть — верификация пира `LOCAL_PEERCRED` и сокет `/var/run/sora/core.sock` |
+| `android` | Android-клиент (`one.levvs.sora.legacy`, Kotlin, framework Views) + ручной APK-пайплайн `tools/build-manual.sh` |
+| `macos` | macOS-клиент: AppKit-приложение, Go-хелпер `helper/` (`sora-ctl`), пины движков `engines-darwin.lock` |
+| `service/darwin` | корневой LaunchDaemon службы для macOS (plist, install/uninstall) |
+| `ios` | iOS-клиент: UIKit-приложение, расширение PacketTunnel, SPM-пакет `SoraLegacyCore`, спека сборки `BUILD-MAC.md` |
 
 ## Ядро (Go)
 
@@ -138,3 +147,64 @@ iscc legacy\installer\Sora.iss
 ```
 
 Профили 8.1/10/11 задаются определениями Inno Setup (`WindowsTarget`, `WindowsDisplayName`, `MinimumWindowsVersion`), значения по умолчанию в `Sora.iss` — win7 / `6.1sp1`. Встроенные установщики .NET Framework 4.8 и KB3033929 скрипт ожидает рядом и сверяет по SHA-256 внутри себя; их хеши закреплены в `Sora.iss`.
+
+## Мобильное ядро (mobileapi)
+
+Общий фундамент Android и iOS. Пакет `core/mobileapi` собирается как обычный пакет ядра (кросс-сборки `GOOS=darwin` amd64/arm64 и `GOOS=android` arm64 — exit 0), тесты — в составе `go test ./...` из `core/`. Настоящий `gomobile bind` в сам репозиторий не делается: современный gomobile требует `golang.org/x/mobile` в графе модуля, поэтому bind выполняется из копии `core/` с добавленной tool-директивой (`go get -tool golang.org/x/mobile/cmd/gobind@…`) — исходники в копии не меняются. Версии, которыми строились AAR/xcframework в этой работе: официальный gomobile `golang.org/x/mobile v0.0.0-20261011034528-197770444867` (хост-Go 1.24.7, тулчейн модуля — 1.26.9 по `core/go.mod`); для libbox — sagernet gomobile v0.1.8 из `go.mod` пина sing-box 1.12.12. Детали Android-тулчейна (JDK, SDK, NDK, хэши пакетов и диагноз песочницы) — в `android/README.md` и отчётах отдела; спека iOS-bind — `ios/BUILD-MAC.md` §2.
+
+## Android
+
+Дерево `android/`: пакет `one.levvs.sora.legacy`, `minSdk 21` / `targetSdk 34`, зависимости — только Kotlin stdlib, framework API и `org.json` (без AndroidX/Compose).
+
+Каноническая сборка (dev-машина): нужны JDK 17, Android SDK platform 34 / build-tools 34.0.0, NDK 27.2 и оба AAR в `android/app/libs/` (`mobileapi.aar` — gomobile bind `./mobileapi` с `-androidapi 21` из копии `core/`; `libbox.aar` — штатный bind пина sing-box 1.12.12; AAR в git не коммитятся):
+
+```sh
+cp /path/to/mobileapi.aar /path/to/libbox.aar android/app/libs/
+cd android && ./gradlew assembleDebug
+```
+
+AGP 8.5.2 + Kotlin 2.0.21, Gradle 8.7 (wrapper properties в `gradle/wrapper/`; сам wrapper jar в песочнице сгенерировать нечем — на dev-машине это `gradle wrapper` одной командой).
+
+Ручной пайплайн (песочница): Gradle в этой среде невозможен — демон общается по loopback-TCP, который песочница перехватывает у Java-процессов (`Could not receive a message from the daemon` до резолва плагинов). Замена на официальных инструментах:
+
+```sh
+bash android/tools/build-manual.sh
+```
+
+Скрипт: kotlinc 2.0.21 (zip скачивается curl'ом, SHA-256 `0352c0a45bd22f80f6b26e485cd04da8047baa5de54865281fb9f89a4a7bcf2a` закреплён в скрипте и перепроверяется на каждом запуске) компилирует Kotlin + сгенерированный `R.java` против `android.jar` (34) и classes.jar обоих AAR; дальше aapt2 compile+link, d8 (с дедупом `go/**`: остаётся копия libbox), zip из dex + ресурсов + `lib/<abi>/*.so`, zipalign, apksigner debug-ключом. Результат этой среды: APK 279 213 197 байт, SHA-256 `81f55b9fee04d778ff5daa305c19a8fb7f6f42f7b131f6ea430491c474dcaa7c`, `apksigner verify` — v1/v2/v3 true. Известный след пайплайна: d8 из build-tools 34 печатает `malformed kotlin.Metadata` по классам Kotlin 2.0 — dex при этом валиден, AGP-сборка этого предупреждения не имеет. На устройстве сборка не проверялась (verify-on-device — `android/README.md`).
+
+## macOS
+
+Три части: демон и хелпер (Go), Swift-клиент, служба (launchd).
+
+```sh
+export PATH=$HOME/workspace/go/bin:$PATH
+# демон и хелпер — реальные darwin Mach-O, обе архитектуры
+cd core && CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -trimpath ./cmd/sora-core
+cd ../macos/helper && go test ./... && CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -trimpath .
+# движки службы (пины и SHA-256 — macos/engines-darwin.lock)
+sh macos/fetch-engines-darwin.sh amd64 build/darwin/engines
+# Swift-ядро клиента (Foundation-only): typecheck и тесты возможны и на Linux
+cd macos && swift test
+```
+
+Что этим доказано: тесты хелпера гоняют настоящий стек ipc + legacycontrol + control (стаб — только движок); `swift test` — 8/8 по `macos/App/Core`. Файлы `macos/App/UI` (AppKit) на Linux только `swiftc -parse` — не typecheck. Полы измерены по Mach-O: демон и `sora-ctl` — macOS 12.0 обе архитектуры; клиент проектируется под 10.13 (API ≤ 10.13 в общем пути); sing-box службы на amd64 пиннится legacy-ассетом 10.13, на arm64 regular-ассет требует macOS 26 (см. `macos/engines-darwin.lock`).
+
+Сборка приложения — только на Mac: `brew install xcodegen`, `xcodegen generate --spec macos/project.yml`, сборка таргета (deployment 10.13) в Xcode; установка службы — `sudo sh service/darwin/install.sh <каталог с бинарями и движками>`. Verify-on-mac — 8 пунктов в `macos/README.md`; kill switch на darwin не форсится (`NoopFirewall` в `core/guard`) — в коде и UI это помечено, не маскируется.
+
+## iOS
+
+В этой среде iOS не собирается: нет Xcode и Apple SDK. Проверяемое здесь:
+
+```sh
+cd ios/SoraLegacyCore && swift test   # Linux Swift 6.0.3: 19/19
+swiftc -parse <каждый Swift-файл дерева>   # 18/18; App/ и PacketTunnel/ — parse-only, не typecheck
+```
+
+Полная сборка — только на Mac, точная спека — `ios/BUILD-MAC.md`:
+
+1. **Libbox.xcframework** — из исходников пина sing-box 1.12.12 (архив SHA-256 `f08add81eab7e4d6091195179bb39fa3f64dbb0326feaa022994566b702d1245`): сначала sagernet gomobile/gobind v0.1.8 в `GOPATH/bin` (без них `build_libbox` фаталит), затем `go run ./cmd/internal/build_libbox -target apple -platform ios`.
+2. **Mobileapi.xcframework** — официальным gomobile (версии — раздел «Мобильное ядро» выше) из копии `core/` с tool-директивой: `gomobile bind -target ios -iosversion 13.0 -o ios/Frameworks/Mobileapi.xcframework ./mobileapi`.
+3. **Проект** — `brew install xcodegen`, `xcodegen generate --spec ios/project.yml`; подписи, entitlements (packet-tunnel, App Group `group.one.levvs.sora.legacy`, keychain group) и `DEVELOPMENT_TEAM` через `$(SORA_DEVELOPMENT_TEAM)` — `ios/BUILD-MAC.md` §3–§4. Оба фреймворка в git не коммитятся (`ios/Frameworks/`).
+
+Пол iOS 13.0 — не декларация, а вывод из пина (`build_libbox` без `-iosversion` + дефолт sagernet gomobile v0.1.8), цепочка — `ios/BUILD-MAC.md` §1. Verify-on-mac — 11 пунктов там же (§7), включая сверку всех спеллингов `TODO(verify-on-mac)` с заголовками собранных фреймворков, реальный туннель на устройстве, Keychain round-trip и проверку нижней границы на iOS 13.
