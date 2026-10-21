@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  LaunchDaemon for the sora-legacy core on macOS. Install to
+  /Library/LaunchDaemons/io.github.levvs-one.sora-legacy.core.plist
+  (root:wheel, 0644) — see service/darwin/install.sh.
+
+  Why root: the core creates the engine TUN (utun) and changes routes
+  for TUN mode, both of which require privilege on macOS; the engines
+  are its children and inherit it. There is no narrower launchd
+  identity for this: a user LaunchAgent cannot create utun devices or
+  system routes. The privilege is bounded by what the process does —
+  it listens only on its unix socket (/var/run/sora/core.sock, peer
+  verified via LOCAL_PEERCRED, group "sora"), holds its data in a
+  root-owned 0700 directory, and serves no network port for control.
+
+  Honest limits of this unit (see macos/README.md capability matrix):
+  the core's kill-switch firewall is a no-op on darwin
+  (core/guard/nftables_other.go returns NoopFirewall), and host-side
+  routing into an external TUN adapter is Linux-only
+  (core/engine/tunroute); TUN here means the engine's own utun with
+  its auto_route, running as this root daemon.
+-->
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>io.github.levvs-one.sora-legacy.core</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/usr/local/lib/sora-legacy/sora-core</string>
+		<string>-data-dir</string>
+		<string>/Library/SoraLegacy/core</string>
+		<string>-engines-dir</string>
+		<string>/usr/local/lib/sora-legacy/engines</string>
+	</array>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>KeepAlive</key>
+	<dict>
+		<key>SuccessfulExit</key>
+		<false/>
+	</dict>
+	<key>ProcessType</key>
+	<string>Standard</string>
+	<key>StandardOutPath</key>
+	<string>/Library/Logs/SoraLegacy/core.log</string>
+	<key>StandardErrorPath</key>
+	<string>/Library/Logs/SoraLegacy/core.err.log</string>
+	<!-- Stopping must give the core time to restore routes and the
+	     system proxy state it can observe; 20s mirrors the core's own
+	     shutdown budget (App.Close). -->
+	<key>ExitTimeOut</key>
+	<integer>20</integer>
+	<key>ThrottleInterval</key>
+	<integer>2</integer>
+</dict>
+</plist>
