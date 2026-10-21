@@ -1,0 +1,67 @@
+# XcodeGen spec for the sora-legacy iOS client. Generate with:
+#   xcodegen generate --spec project.yml   (see BUILD-MAC.md)
+#
+# Deployment target: iOS 13.0 — the libbox floor of the pin,
+# established from sources (BUILD-MAC.md §1): build_libbox passes no
+# -iosversion, so sagernet/gomobile v0.1.8's default applies
+# (cmd/gomobile/build.go: "13.0"). Do not lower this by hand and do
+# not raise it without re-checking the pin.
+#
+# Bundle IDs mirror the Android applicationId
+# (one.levvs.sora.legacy, android/app/build.gradle.kts); the App
+# Group is group.one.levvs.sora.legacy.
+name: SoraLegacy
+options:
+  bundleIdPrefix: one.levvs.sora
+  deploymentTarget:
+    iOS: "13.0"
+  createIntermediateGroups: true
+packages:
+  SoraLegacyCore:
+    path: SoraLegacyCore
+settings:
+  base:
+    MARKETING_VERSION: "1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    SWIFT_VERSION: "5.9"
+    # Signing is parameterised: set in Xcode or via xcconfig/CI
+    # secrets. No team id or certificate name is committed.
+    DEVELOPMENT_TEAM: "$(SORA_DEVELOPMENT_TEAM)"
+    CODE_SIGN_STYLE: Manual
+    CODE_SIGN_IDENTITY: "$(SORA_CODE_SIGN_IDENTITY)"
+targets:
+  SoraLegacy:
+    type: application
+    platform: iOS
+    sources:
+      - path: App
+    dependencies:
+      - package: SoraLegacyCore
+      - target: PacketTunnel
+        embed: true
+      # The two xcframeworks are built on the Mac (BUILD-MAC.md §2)
+      # into Frameworks/ and added there; they are not in git.
+      - framework: Frameworks/Libbox.xcframework
+        embed: false
+      - framework: Frameworks/Mobileapi.xcframework
+        embed: false
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: one.levvs.sora.legacy
+        INFOPLIST_FILE: App/Info.plist
+        CODE_SIGN_ENTITLEMENTS: App/App.entitlements
+        TARGETED_DEVICE_FAMILY: "1,2"
+  PacketTunnel:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: PacketTunnel
+    dependencies:
+      - package: SoraLegacyCore
+      - framework: Frameworks/Libbox.xcframework
+        embed: false
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: one.levvs.sora.legacy.PacketTunnel
+        INFOPLIST_FILE: PacketTunnel/Info.plist
+        CODE_SIGN_ENTITLEMENTS: PacketTunnel/PacketTunnel.entitlements
