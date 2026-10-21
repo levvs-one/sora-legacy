@@ -88,6 +88,9 @@ var credentialKeys = map[string]struct{}{
 	"obfs": {}, "obfs_param": {}, "private_key": {}, "addresses": {},
 	"peers": {}, "insecure": {}, "xray_profile": {}, "amneziawg": {},
 	"ss_plugin": {}, "ss_plugin_opts": {},
+	"olcrtc_provider": {}, "olcrtc_room": {}, "olcrtc_transport": {},
+	"olcrtc_channel": {}, "olcrtc_auth_token": {}, "olcrtc_mode": {},
+	"olcrtc_params": {}, "olcrtc_meta": {},
 	"download_address": {}, "download_port": {},
 	"x_padding_bytes": {}, "xmux_max_concurrency": {}, "xmux_max_connections": {},
 	"xmux_max_request_times": {}, "xmux_max_reuse_times": {},
@@ -222,6 +225,60 @@ func credentialDocument(spec parser.OutboundSpec) ([]byte, error) {
 				return nil, errs.Wrap(err, errs.CodeInternal, errs.KeySecretStoreUnavailable)
 			}
 			values["amneziawg"] = string(raw)
+		}
+	}
+	// OpenLibre (olcrtc): the whole server definition rides the
+	// document — provider, room, transport and every transport
+	// parameter of the link, plus the ## subscription metadata —
+	// because outboundToProto carries only a room-shaped endpoint
+	// and the key (as "password"): the proto has no field for the
+	// provider or the parameters. Without this block an imported
+	// olcrtc server lost everything but the room and the key at the
+	// first restart — the same vault gap sora's import review found
+	// (IMPORT-REVIEW Z-7) and sora later closed in its credential
+	// document; the document keys and shapes here mirror sora's, so
+	// a future legacy transport restores from the same fields
+	// (olcrtc_params/olcrtc_meta are JSON documents like peers and
+	// headers above). Restoring them into an engine outbound is the
+	// transport's job: legacy has no olcrtc transport, and plan
+	// validation refuses the protocol until one exists.
+	if strings.EqualFold(spec.Protocol, "olcrtc") {
+		set("olcrtc_provider", spec.Options["olcrtc_provider"])
+		room := spec.Options["olcrtc_room"]
+		if room == "" {
+			room = spec.Host
+		}
+		set("olcrtc_room", room)
+		set("olcrtc_transport", spec.Transport)
+		set("olcrtc_channel", spec.Options["olcrtc_channel"])
+		set("olcrtc_auth_token", spec.Options["olcrtc_auth_token"])
+		set("olcrtc_mode", spec.Options["olcrtc_mode"])
+		params := map[string]string{}
+		meta := map[string]string{}
+		for k, v := range spec.Options {
+			switch {
+			case k == "olcrtc_provider" || k == "olcrtc_room" || k == "olcrtc_channel" ||
+				k == "olcrtc_auth_token" || k == "olcrtc_mode":
+				// Carried by their own document fields above.
+			case strings.HasPrefix(k, "olcrtc_meta_"):
+				meta[strings.TrimPrefix(k, "olcrtc_meta_")] = v
+			default:
+				params[k] = v
+			}
+		}
+		if len(params) > 0 {
+			raw, err := json.Marshal(params)
+			if err != nil {
+				return nil, errs.Wrap(err, errs.CodeInternal, errs.KeySecretStoreUnavailable)
+			}
+			values["olcrtc_params"] = string(raw)
+		}
+		if len(meta) > 0 {
+			raw, err := json.Marshal(meta)
+			if err != nil {
+				return nil, errs.Wrap(err, errs.CodeInternal, errs.KeySecretStoreUnavailable)
+			}
+			values["olcrtc_meta"] = string(raw)
 		}
 	}
 	if spec.AllowInsecure {
