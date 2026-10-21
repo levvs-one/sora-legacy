@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Sora Legacy</string>
+    <string name="servers_title">Servers</string>
+    <string name="settings_title">Settings</string>
+    <string name="channel_vpn">VPN status</string>
+    <string name="channel_alerts">Engine notifications</string>
+</resources>
