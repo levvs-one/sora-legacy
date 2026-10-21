@@ -10,12 +10,19 @@
 #      so the language picker can never offer a missing resource.
 #   3. Every ARB key the C# code asks Strings for exists in app_en.arb.
 #      Keys reach Strings through literal indexer calls (text["..."]),
-#      through MakeButton("...", ...) tags that ApplyText resolves, and
-#      through switch arms that return a key (Strings.Error and the
-#      status rendering); all three shapes are scanned in Client\*.cs.
+#      through ternary indexer calls (text[condition ? "..." : "..."] —
+#      the tray toggle and the subscription-card toggles), through the
+#      status ternary in MainForm.StateKey (both arms are keys; the
+#      result is fed to text[...] there), through MakeButton("...", ...)
+#      tags that ApplyText resolves, and through switch arms that
+#      return a key (Strings.Error and the status rendering); every
+#      shape is scanned in Client\*.cs.
 #
-# Runs on stock Windows PowerShell 5.1 and in CI:
+# Runs on stock Windows PowerShell 5.1, manually:
 #   powershell -File legacy\tests\Sora.ArbParity.ps1
+# It is not wired into CI: no workflow in this repository invokes this
+# script today, so until that connection is made as its own step, the
+# pin holds only when someone runs it — the command above is the run.
 # Exit code 0 and PASS lines on success; 1 with every failure listed.
 param(
     [string]$ClientPath = (Join-Path $PSScriptRoot '..\Client')
@@ -68,8 +75,14 @@ foreach ($code in $onDisk) {
 Write-Host "languages.json: $($listed.Count) locales listed, $($onDisk.Count) ARB files on disk"
 
 $used = New-Object System.Collections.Generic.HashSet[string]
+# The ternary shapes are deliberately narrow — a bare '?' ... ':' scan
+# of every string pair would also catch non-key literals (the caret
+# icon names "right"/"down" in SubscriptionCard) and turn this pin
+# permanently red on strings that are not ARB keys at all.
 $patterns = @(
     'text\["([A-Za-z][A-Za-z0-9]*)"\]',
+    'text\[[^\]\r\n]*\?\s*"([A-Za-z][A-Za-z0-9]*)"\s*:\s*"([A-Za-z][A-Za-z0-9]*)"\]',
+    '\?\s*"(state[A-Za-z][A-Za-z0-9]*)"\s*:\s*"(state[A-Za-z][A-Za-z0-9]*)"',
     'MakeButton\("([A-Za-z][A-Za-z0-9]*)"',
     '=>\s*"([a-z][A-Za-z0-9]*)"'
 )
@@ -77,7 +90,9 @@ foreach ($source in Get-ChildItem (Join-Path $ClientPath '*.cs')) {
     $code = Get-Content $source.FullName -Raw -Encoding UTF8
     foreach ($pattern in $patterns) {
         foreach ($match in [regex]::Matches($code, $pattern)) {
-            [void]$used.Add($match.Groups[1].Value)
+            for ($group = 1; $group -lt $match.Groups.Count; $group++) {
+                if ($match.Groups[$group].Success) { [void]$used.Add($match.Groups[$group].Value) }
+            }
         }
     }
 }
