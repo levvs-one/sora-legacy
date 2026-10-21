@@ -112,7 +112,6 @@ func TestShadowsocksPluginSurvivesTheVaultFromSingBoxJSON(t *testing.T) {
 	}
 }
 
-
 // importedPlan follows one parsed server through the credential vault
 // into an engine plan — the ParseImport + planFromProto path a client
 // takes — and requires the resulting plan to validate.
