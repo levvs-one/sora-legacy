@@ -18,6 +18,7 @@
     <AssemblyName>Sora.Ancient</AssemblyName>
     <Product>Sora Ancient (XP / Vista / Windows 8.0 track)</Product>
     <RootNamespace>Sora.Ancient</RootNamespace>
+    <ApplicationIcon>sora.ico</ApplicationIcon>
     <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <WarningLevel>4</WarningLevel>

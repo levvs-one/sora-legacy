@@ -52,6 +52,7 @@ targets:
     platform: iOS
     sources:
       - path: App
+      - path: Assets/Media.xcassets
         excludes:
           - StatusViewController.swift
       - path: Tiers/IOS12/Replacements/StatusViewController.swift
@@ -67,6 +68,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: one.levvs.sora.legacy
         INFOPLIST_FILE: App/Info.plist
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         CODE_SIGN_ENTITLEMENTS: App/App.entitlements
         TARGETED_DEVICE_FAMILY: "1,2"
   PacketTunnel:

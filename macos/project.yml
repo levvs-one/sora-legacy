@@ -37,8 +37,10 @@ targets:
     sources:
       - path: App/Core
       - path: App/UI
+      - path: Assets/Media.xcassets
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: io.github.levvs-one.sora-legacy
         INFOPLIST_FILE: App/Info.plist
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         PRODUCT_NAME: SoraLegacy
