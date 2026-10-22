@@ -9,6 +9,7 @@ on:
       - 'proto/**'
       - 'packaging/**'
       - 'service/**'
+      - 'tools/**'
       - '.github/workflows/legacy.yml'
   pull_request:
     branches: [legacy]
@@ -18,6 +19,7 @@ on:
       - 'proto/**'
       - 'packaging/**'
       - 'service/**'
+      - 'tools/**'
       - '.github/workflows/legacy.yml'
 
 permissions:
@@ -56,6 +58,23 @@ jobs:
       - name: Test the core with the race detector
         working-directory: core
         run: go test -race ./...
+      - name: ARB parity pin (legacy Client locales)
+        # The executable pin for the Client ARB files: identical key
+        # sets in all 31 locales, languages.json in sync, and every
+        # key the C# code requests present in app_en.arb. It also runs
+        # inside the full test suite above; the explicit step names
+        # the gate so a parity break is visible as its own failure.
+        # Local equivalent:
+        #   cd core && go test ./control/ -run TestARBMirrorLocalesLanguagesAndCodeKeys -count=1 -v
+        working-directory: core
+        run: go test ./control/ -run TestARBMirrorLocalesLanguagesAndCodeKeys -count=1 -v
+      - name: Benchmark allocation gate
+        # Allocation-regression gate over every baselined benchmark
+        # (tools/bench-baseline.txt); B/op and allocs/op only, ns/op
+        # is deliberately not gated (see the script header).
+        # Local equivalent:
+        #   tools/bench-baseline.sh
+        run: tools/bench-baseline.sh
       - uses: golangci/golangci-lint-action@4afd733a84b1f43292c63897423277bb7f4313a9 # v8
         with:
           version: v2.15.0
