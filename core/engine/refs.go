@@ -107,6 +107,32 @@ func (p *Plan) RequiredFeatures() map[Feature]bool {
 			// the gate an obfuscated plan was selected for Xray and
 			// only failed at render time.
 			out[FeatureHy2Obfs] = true
+			if o.Obfs == "gecko" {
+				// Gecko is a separate, younger spelling than the
+				// obfs block itself (sing-box 1.14, see
+				// FeatureHy2ObfsGecko): a build that carries
+				// salamander can still refuse gecko at load, so
+				// the type demands its own claim.
+				out[FeatureHy2ObfsGecko] = true
+			}
+		}
+		if o.Protocol == ProtocolHysteria2 && o.HopIntervalMax > 0 {
+			// hop_interval_max exists only since sing-box 1.14,
+			// above the catalog's 1.12.0 floor (see
+			// FeatureHy2HopIntervalMax): a plan pinning a
+			// randomized hop bound must not route to a build that
+			// would refuse the rendered field at load, nor to an
+			// engine whose renderer drops the bound silently.
+			out[FeatureHy2HopIntervalMax] = true
+		}
+		if o.Protocol == ProtocolHysteria2 && o.BBRProfile != "" {
+			// bbr_profile likewise exists only since sing-box
+			// 1.14 (see FeatureHy2BBRProfile). The demand keys on
+			// the plan field, not on whether this renderer would
+			// emit it for a given bandwidth combination: the
+			// profile is plan intent, and a build below the floor
+			// cannot honour it in any combination.
+			out[FeatureHy2BBRProfile] = true
 		}
 	}
 	if p.Options.Fragment.Enabled {

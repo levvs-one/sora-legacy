@@ -104,7 +104,45 @@ const (
 	// refuses the field. Without the gate an obfuscated plan routed
 	// to Xray failed only at render time, after selection had promised
 	// it could run.
-	FeatureHy2Obfs        Feature = "hy2-obfs"
+	FeatureHy2Obfs Feature = "hy2-obfs"
+	// FeatureHy2HopIntervalMax marks engines whose Hysteria2 spelling
+	// carries a randomized hop interval upper bound
+	// (Outbound.HopIntervalMax): sing-box renders hop_interval_max
+	// only since 1.14 — the option structs of 1.12.25 and 1.13.21 have
+	// no such field, and their binaries refuse the rendered config at
+	// load (`unknown field "hop_interval_max"`), while 1.14.3 accepts
+	// it (all probed with `sing-box check` on the release binaries,
+	// LEGACY-FULL gates). The sing-box claim is version-gated in
+	// BuildCapabilities, not static: the static floor is 1.12.0.
+	// Mihomo and Xray claim it nowhere: neither renderer emits the
+	// bound, so a plan pinning one fails selection there instead of
+	// silently collapsing to a fixed hop interval.
+	FeatureHy2HopIntervalMax Feature = "hy2-hop-interval-max"
+	// FeatureHy2BBRProfile marks engines whose Hysteria2 spelling
+	// carries a BBR congestion profile (Outbound.BBRProfile):
+	// sing-box renders bbr_profile only since 1.14 — absent from the
+	// 1.12.25/1.13.21 option structs, refused by their binaries at
+	// load (`unknown field "bbr_profile"`), accepted by 1.14.3
+	// (probed as above). The sing-box claim is version-gated in
+	// BuildCapabilities; mihomo and Xray have no profile spelling
+	// and claim it nowhere, so a plan pinning a profile fails
+	// selection there instead of silently running the engine
+	// default.
+	FeatureHy2BBRProfile Feature = "hy2-bbr-profile"
+	// FeatureHy2ObfsGecko marks engines whose Hysteria2 obfs
+	// implements the gecko type (Outbound.Obfs == "gecko"), the
+	// Hysteria 2.9.2 obfuscation sing-box spells only since 1.14:
+	// older sing-box builds accept the obfs block at decode (the
+	// type is a free string there) and then refuse it when the
+	// outbound is built (`unknown obfs type: gecko` at load, probed
+	// on 1.12.12 and 1.13.21; 1.14.3 accepts). The sing-box claim is
+	// version-gated in BuildCapabilities. Mihomo claims it
+	// statically: its renderer passes the obfs type through and the
+	// shipped pin 1.19.32 accepts gecko while rejecting an unknown
+	// type (`mihomo -t`, probed with a bogus-type control). Xray
+	// claims it nowhere: it implements no Hysteria2 obfs at all
+	// (see FeatureHy2Obfs).
+	FeatureHy2ObfsGecko   Feature = "hy2-obfs-gecko"
 	FeatureAmneziaWG      Feature = "amneziawg"
 	FeaturePrivateControl Feature = "private-control"
 )

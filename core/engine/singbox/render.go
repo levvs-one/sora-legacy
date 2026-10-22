@@ -263,18 +263,35 @@ func (r *renderer) outbound(o engine.Outbound) (obj, error) {
 		}
 		// Randomized hop interval (sing-box 1.14, Hysteria 2.8 server
 		// side): hop_interval_max >= hop_interval is enforced by plan
-		// validation; only a valid range reaches the render.
+		// validation; only a valid range reaches the render. The
+		// field exists only since 1.14, above the catalog's 1.12.0
+		// floor: builds the catalog honestly accepts refuse it at
+		// load (`unknown field "hop_interval_max"` on 1.12.12 and
+		// 1.13.21, probed — LEGACY-FULL gates). Selection therefore
+		// gates such plans to sing-box builds >= 1.14
+		// (FeatureHy2HopIntervalMax in BuildCapabilities); a bare
+		// Render that bypasses selection still emits the field,
+		// and a pre-1.14 build refuses it.
 		if o.HopIntervalMax > 0 {
 			out["hop_interval_max"] = strconv.Itoa(o.HopIntervalMax) + "s"
 		}
-		// BBR congestion profile (sing-box 1.14 bbr_profile). Emitted
-		// only when BBR is actually in charge: with bandwidth caps the
-		// client runs Brutal instead and the profile would be dead text.
+		// BBR congestion profile (sing-box 1.14 bbr_profile, gated
+		// exactly like hop_interval_max above —
+		// FeatureHy2BBRProfile). Emitted only when BBR is actually
+		// in charge: with bandwidth caps the client runs Brutal
+		// instead and the profile would be dead text.
 		if o.BBRProfile != "" && o.UpMbps == 0 && o.DownMbps == 0 {
 			out["bbr_profile"] = o.BBRProfile
 		}
 		if o.Obfs != "" {
-			// sing-box 1.14 Hysteria2 obfs types: salamander and gecko.
+			// Hysteria2 obfs types: salamander (the Hysteria2
+			// standard, spelled by every sing-box build in the
+			// catalog) and gecko (sing-box 1.14 only — older
+			// builds build the outbound and refuse the type,
+			// `unknown obfs type: gecko`, probed). Gecko plans
+			// are gated to >= 1.14 builds at selection
+			// (FeatureHy2ObfsGecko); a bare Render still emits
+			// the type, and a pre-1.14 build refuses it.
 			out["obfs"] = obj{"type": o.Obfs, "password": o.ObfsParam}
 		}
 		needsTLS = true

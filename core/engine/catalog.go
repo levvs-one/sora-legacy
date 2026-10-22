@@ -41,6 +41,14 @@ var Catalog = map[Kind]Capabilities{
 			FeatureAmneziaWG: true, FeaturePrivateControl: true, FeatureECH: true,
 			FeatureECHQueryServerName: true,
 			FeatureHy2PortHop:         true, FeatureHy2Obfs: true,
+			// The shipped pin 1.19.32 spells the gecko obfs type
+			// (probed with `mihomo -t`, bogus-type control —
+			// see FeatureHy2ObfsGecko). Deliberately no
+			// FeatureHy2HopIntervalMax / FeatureHy2BBRProfile:
+			// the mihomo renderer emits neither field, so such
+			// plans must fail selection here instead of dropping
+			// the tuning silently.
+			FeatureHy2ObfsGecko: true,
 		},
 	},
 	KindSingBox: {
@@ -65,6 +73,15 @@ var Catalog = map[Kind]Capabilities{
 			// load (probed, LEGACY-PLAT-OBFS). The claim is
 			// version-gated in BuildCapabilities.
 			FeatureHy2PortHop: true, FeatureHy2Obfs: true,
+			// Deliberately no static FeatureHy2HopIntervalMax,
+			// FeatureHy2BBRProfile or FeatureHy2ObfsGecko:
+			// hop_interval_max, bbr_profile and the gecko obfs
+			// type exist only since sing-box 1.14, above this
+			// entry's 1.12.0 floor — builds the catalog honestly
+			// accepts (the shipped payload 1.12.12, the self-built
+			// 1.13.21) refuse such renders at load (probed with
+			// `sing-box check`, LEGACY-FULL gates). The claims
+			// are version-gated in BuildCapabilities.
 			// Deliberately no static FeatureRealityKeyShare: the
 			// key_share spelling is the lx fork's (probed on lx.22
 			// in sora, whose shipped pin IS the fork); legacy ships
@@ -124,6 +141,12 @@ var Catalog = map[Kind]Capabilities{
 			// outbound cannot hop ports (see FeatureHy2PortHop).
 			// Deliberately no FeatureHy2Obfs: Xray's hysteria
 			// transport exposes no obfs option (see FeatureHy2Obfs).
+			// Deliberately no FeatureHy2HopIntervalMax,
+			// FeatureHy2BBRProfile or FeatureHy2ObfsGecko: Xray's
+			// renderer spells none of the three (its hysteria
+			// settings carry only the bandwidth hints), so such
+			// plans fail selection here instead of losing the
+			// tuning silently (LEGACY-FULL gates).
 			// Deliberately no FeatureRealityKeyShare: Xray has no
 			// key-share knob — the chosen parrot decides whether the
 			// hybrid group is offered — so a plan pinning the choice
@@ -144,6 +167,23 @@ func BuildCapabilities(kind Kind, version Version, tags []string) Capabilities {
 		// only here, on a build new enough to spell it.
 		caps.Features = maps.Clone(caps.Features)
 		caps.Features[FeatureECHQueryServerName] = true
+	}
+	if kind == KindSingBox && !version.Less(Version{Major: 1, Minor: 14}) {
+		// The Hysteria2 1.14 spellings — hop_interval_max,
+		// bbr_profile and the gecko obfs type — were added in
+		// sing-box 1.14; every older build the static floor
+		// accepts refuses such renders at load (probed with
+		// `sing-box check` on 1.12.12 and 1.13.21; 1.14.3
+		// accepts, LEGACY-FULL gates), so the claims exist only
+		// here, on a build new enough to spell them. The
+		// Features map may already be a private clone (the 1.13
+		// branch above) or still the shared static one; cloning
+		// an already-cloned map is harmless, mutating the shared
+		// one would poison the catalog for every other build.
+		caps.Features = maps.Clone(caps.Features)
+		caps.Features[FeatureHy2HopIntervalMax] = true
+		caps.Features[FeatureHy2BBRProfile] = true
+		caps.Features[FeatureHy2ObfsGecko] = true
 	}
 	if kind == KindSingBox && strings.HasPrefix(version.PreRelease, "lx.") &&
 		!version.Less(Version{Major: 1, Minor: 14, Patch: 3}) {

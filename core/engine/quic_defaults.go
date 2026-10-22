@@ -78,7 +78,11 @@ const (
 // pending a UDP-capable dev machine — see hy2tuic_test.go, which
 // self-skips there). Xray implements neither: its
 // renderer refuses every obfs value and the FeatureHy2Obfs gate
-// keeps obfuscated plans off it at selection time.
+// keeps obfuscated plans off it at selection time. Gecko carries
+// its own additional gate (FeatureHy2ObfsGecko): the vocabulary is
+// plan-valid on every engine, but a sing-box build below 1.14
+// refuses the type at load, so selection — not this list — decides
+// which builds a gecko plan may run on (LEGACY-FULL gates).
 var ValidHy2Obfs = map[string]bool{"salamander": true, "gecko": true}
 
 // ValidTUICCongestion lists the TUIC congestion controllers both
