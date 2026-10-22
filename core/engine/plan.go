@@ -312,8 +312,11 @@ type DNSServer struct {
 	Address   string
 	Port      uint16
 	// Dialer names the outbound used to reach this resolver ("direct" or an
-	// outbound ID). Only the mihomo renderer honors it (dialer-proxy);
-	// nothing in the tree sets it.
+	// outbound ID). The mihomo renderer honors it (dialer-proxy, rendered
+	// as a "#<name>" suffix on the resolver address). It is set in the
+	// tree: the xraytun bridge rewrites every non-"direct" dialer of the
+	// tunneled plan to its bridge outbound (xraytun/bridge.go), and
+	// renderers/tests set it directly.
 	Dialer    string
 	ProxyOnly bool
 }
