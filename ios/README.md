@@ -13,9 +13,10 @@ app build are Mac work, specified exactly in
 [BUILD-MAC.md](BUILD-MAC.md) with a verify-on-mac checklist (§7).
 What *was* verified here: every Swift file passes `swiftc -parse`;
 the pure-Swift core (`SoraLegacyCore`) builds and its tests pass on
-Linux Swift 6.0.3 (`swift test`, 19/19 — TunConfig injection,
-store/secrets split, mobileapi JSON shapes, TunOptions snapshot
-shape and route-range selection, netmask parsing).
+Linux Swift 6.0.3 (`swift test`, 35/35 — the original 19: TunConfig
+injection, store/secrets split, mobileapi JSON shapes, TunOptions
+snapshot shape and route-range selection, netmask parsing; plus 16
+tests of the additive iOS 12 tier: pins, DNS translation, gates).
 
 ## Deployment target: iOS 13.0
 

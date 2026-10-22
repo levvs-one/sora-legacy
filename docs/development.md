@@ -198,8 +198,8 @@ cd macos && swift test
 В этой среде iOS не собирается: нет Xcode и Apple SDK. Проверяемое здесь:
 
 ```sh
-cd ios/SoraLegacyCore && swift test   # Linux Swift 6.0.3: 19/19
-swiftc -parse <каждый Swift-файл дерева>   # 18/18; App/ и PacketTunnel/ — parse-only, не typecheck
+cd ios/SoraLegacyCore && swift test   # Linux Swift 6.0.3: 35/35 (19 исходных + 16 тестов тира iOS 12)
+swiftc -parse <каждый Swift-файл дерева>   # 23/23; App/ и PacketTunnel/ — parse-only, не typecheck
 ```
 
 Полная сборка — только на Mac, точная спека — `ios/BUILD-MAC.md`:
