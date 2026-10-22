@@ -55,3 +55,6 @@ key.properties
 !.vscode/extensions.json
 .DS_Store
 Thumbs.db
+
+# SwiftPM
+**/.build/
