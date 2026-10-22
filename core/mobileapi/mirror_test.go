@@ -254,9 +254,9 @@ func swiftStructBody(t *testing.T, models, structName string) string {
 	return body
 }
 
-// swiftJSONKeys extracts the JSON keys of one Swift struct in
-// Models.swift: the raw values of its CodingKeys when it declares
-// them, otherwise its stored property names.
+// swiftJSONKeys extracts the JSON keys of one Swift struct in a
+// Models.swift source: the raw values of its CodingKeys when it
+// declares them, otherwise its stored property names.
 func swiftJSONKeys(t *testing.T, models, structName string) []string {
 	t.Helper()
 	body := swiftStructBody(t, models, structName)
@@ -329,6 +329,17 @@ func TestMobileAPIMirrorJSONShapes(t *testing.T) {
 	}
 	if got := swiftJSONKeys(t, models, "Engine"); strings.Join(got, ",") != "features,kind,min_version,protocols" {
 		t.Errorf("Swift EngineInfo.Engine keys = %v, the Go document carries kind/min_version/protocols/features", got)
+	}
+
+	// The macOS client decodes the same EngineInfo document (via the
+	// sora-ctl helper) into its own EngineCatalog type: same mirror,
+	// second spelling.
+	macModels := mobileRead(t, root, "macos/App/Core/Models.swift")
+	if got := swiftJSONKeys(t, macModels, "EngineCatalog"); strings.Join(got, ",") != "default_preference,engines" {
+		t.Errorf("macOS EngineCatalog keys = %v, the Go document carries engines/default_preference", got)
+	}
+	if got := swiftJSONKeys(t, macModels, "Engine"); strings.Join(got, ",") != "features,kind,min_version,protocols" {
+		t.Errorf("macOS EngineCatalog.Engine keys = %v, the Go document carries kind/min_version/protocols/features", got)
 	}
 
 	// The Kotlin side builds the plan document by hand; the keys it
