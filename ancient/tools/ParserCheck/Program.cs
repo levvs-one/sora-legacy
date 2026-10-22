@@ -45,6 +45,14 @@ namespace ParserCheck
             Refuses("vless", "vless://b831381d-6324-4d53-ad4f-8cda48b30811@example.com:443#x");
             Refuses("trojan", "trojan://pw@example.com:443#x");
             Refuses("ss-2022", "ss://" + B64("2022-blake3-aes-128-gcm:secret") + "@ss.example.com:8388#x");
+            // SIP002 with a plugin query: the query sits after host:port
+            // (host:port/?plugin=...), so this pins that query extraction
+            // happens before port parsing and the refusal is the named
+            // EraGate SIP003 refusal, not a generic port FormatException.
+            // Control: the plain SIP002 link above (no plugin) still parses.
+            Refuses("sip003-plugin", "ss://" + B64("chacha20-poly1305:secret") + "@ss.example.com:8389/?plugin=obfs-local#sip-plugin");
+            string quicJson = vmessJson.Replace("\"net\":\"ws\"", "\"net\":\"quic\"");
+            Refuses("quic", "vmess://" + B64(quicJson));
             string realityJson = vmessJson.Replace("\"tls\":\"tls\"", "\"tls\":\"reality\"");
             Refuses("reality", "vmess://" + B64(realityJson));
 

@@ -78,12 +78,19 @@ namespace Sora.Ancient
                 // SIP002
                 string creds = Encoding.UTF8.GetString(Convert.FromBase64String(PadBase64(Uri.UnescapeDataString(body.Substring(0, at)))));
                 SplitCreds(creds, out method, out password);
-                SplitHostPort(body.Substring(at + 1), out host, out port);
+                // The query (?plugin=...) sits AFTER host:port in a SIP002
+                // link, so it must be separated BEFORE SplitHostPort:
+                // parsing the port first would choke on
+                // "8388?plugin=..." and the named SIP003 refusal below
+                // would never be reached.
+                string hostPort = body.Substring(at + 1);
                 string query = "";
-                int q = host.IndexOf('?');
-                if (q >= 0) { query = host.Substring(q + 1); host = host.Substring(0, q); }
+                int q = hostPort.IndexOf('?');
+                if (q >= 0) { query = hostPort.Substring(q + 1); hostPort = hostPort.Substring(0, q); }
+                hostPort = hostPort.TrimEnd('/');
                 if (query.IndexOf("plugin=", StringComparison.OrdinalIgnoreCase) >= 0)
                     EraGate.Refuse("Shadowsocks plugins", "The pinned engine has no SIP003 plugin runtime; a plugin link would not behave as its author intended.");
+                SplitHostPort(hostPort, out host, out port);
             }
             else
             {
