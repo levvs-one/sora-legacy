@@ -45,4 +45,4 @@ dotnet build .\legacy\v2rayN\v2rayN\v2rayN.csproj --configuration Release --runt
 
 ## Sora Legacy
 
-Правила сборки Sora Legacy описаны в [legacy/CONTRIBUTING.md](legacy/CONTRIBUTING.md). В Legacy принимаются только исправления безопасности и критических ошибок.
+Правила сборки клиентов Sora Legacy описаны выше в разделе «Клиенты каталога `legacy/`». В Legacy принимаются только исправления безопасности и критических ошибок.
