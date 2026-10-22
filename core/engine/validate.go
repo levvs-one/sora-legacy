@@ -400,15 +400,13 @@ func (t TLS) validate(what string) []error {
 	var errs []error
 	keyShare := t.RealityOrZero().KeyShare
 	// KeyShare is the REALITY key-share knob: only the two documented
-	// values, and only with REALITY — anywhere else it would be a
-	// setting no renderer can honour.
+	// values. It lives inside the REALITY box, so a KeyShare without
+	// REALITY cannot be represented — the pre-boxing "key_share needs
+	// REALITY" rejection has no state left to fire on.
 	switch keyShare {
 	case "", "classical", "hybrid":
 	default:
 		errs = append(errs, fmt.Errorf("%s: reality key_share %q is not \"classical\" or \"hybrid\"", what, keyShare))
-	}
-	if keyShare != "" && (t.Reality == nil) {
-		errs = append(errs, fmt.Errorf("%s: reality key_share needs REALITY", what))
 	}
 	ech := t.ECHOrZero()
 	if !ech.Enabled {

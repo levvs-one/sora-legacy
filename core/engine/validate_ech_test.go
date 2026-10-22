@@ -189,11 +189,15 @@ func TestValidateKeyShare(t *testing.T) {
 	if err := o.Validate(); err == nil || !strings.Contains(err.Error(), "key_share") {
 		t.Errorf("unknown KeyShare: Validate = %v, want a key_share error", err)
 	}
+	// Pre-boxing this case set KeyShare with Reality=false and pinned
+	// the "key_share needs REALITY" rejection. That state no longer
+	// exists: KeyShare lives inside the REALITY box, so the strayest
+	// representable object is a box carrying only a KeyShare — and
+	// it still fails closed, on the missing public key.
 	o = keyShareRealityOutbound()
-	o.TLS.Reality = nil
-	o.TLS.RealityBox().KeyShare = "hybrid"
-	if err := o.Validate(); err == nil || !strings.Contains(err.Error(), "key_share needs REALITY") {
-		t.Errorf("KeyShare without REALITY: Validate = %v, want a key_share error", err)
+	o.TLS.Reality = &RealitySettings{KeyShare: "hybrid"}
+	if err := o.Validate(); err == nil || !strings.Contains(err.Error(), "REALITY requires a public key") {
+		t.Errorf("KeyShare-only REALITY box: Validate = %v, want a public key error", err)
 	}
 	// The selection gate, updated by SP5-render to the new truth:
 	// mihomo carries a KeyShare plan (it renders the knob), Xray
