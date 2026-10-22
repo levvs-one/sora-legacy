@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Linux-runnable proof for the UI-free ancient sources: the exact
+       files the net40/net46 client compiles are linked here unchanged
+       and exercised against era link/config cases. This harness is a
+       build-time check only; it ships nowhere. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>7.3</LangVersion>
+    <Nullable>disable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="..\..\src\Sora.Ancient\JsonMini.cs" Link="JsonMini.cs" />
+    <Compile Include="..\..\src\Sora.Ancient\ServerEntry.cs" Link="ServerEntry.cs" />
+    <Compile Include="..\..\src\Sora.Ancient\EraGate.cs" Link="EraGate.cs" />
+    <Compile Include="..\..\src\Sora.Ancient\LinkParser.cs" Link="LinkParser.cs" />
+    <Compile Include="..\..\src\Sora.Ancient\ConfigBuilder.cs" Link="ConfigBuilder.cs" />
+  </ItemGroup>
+</Project>

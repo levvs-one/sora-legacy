@@ -1,0 +1,15 @@
+# Engine builds the ancient track ships, one line per engine and asset:
+#   engine  asset  sha256  url
+# The SHA-256 below was measured on the downloaded official release asset
+# (2026-10-22) and cross-checked against the SHA-1 that upstream published
+# in the release's metadata.txt (win32 b61c42d2..., win64 cbb57be5...,
+# linux64 4cc31819... — all three match). Changing a version means changing
+# the URL and the digest together and re-running the config probes in
+# README.md ("Protocol surface").
+# v2ray-core v3.36 is pinned deliberately: it is the LAST release whose
+# official binaries embed Go 1.10.2. Go 1.10 is the last Go release that
+# runs on Windows XP / Vista (go.dev/doc/go1.10, Ports); v3.37 already
+# embeds go1.11, whose floor is Windows 7. See README.md.
+v2ray  windows-32  61ccc6110aa1eb9ad38a773639218a33d71e20c37e283e255eb14f8fa4fa2f04  https://github.com/v2ray/v2ray-core/releases/download/v3.36/v2ray-windows-32.zip
+v2ray  windows-64  2f3ce85f54b33bf5520fde197d4cd79fa68a5463f6c3f79a4c30b54991a1b553  https://github.com/v2ray/v2ray-core/releases/download/v3.36/v2ray-windows-64.zip
+v2ray  linux-64    34a22c3041fb58ff831a5cbeeb48a4370dbd0e30cfb3f1dbf3d3eb2d0d95b4ed  https://github.com/v2ray/v2ray-core/releases/download/v3.36/v2ray-linux-64.zip

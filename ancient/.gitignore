@@ -1,0 +1,6 @@
+# Build output and staged engines are never committed: engines are
+# re-staged digest-verified from engines.lock, binaries build from source.
+bin/
+obj/
+engines/
+downloads/

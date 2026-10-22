@@ -1,0 +1,216 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Net;
+using System.Windows.Forms;
+
+namespace Sora.Ancient
+{
+    // The whole UI: a server list, import (single link / subscription
+    // URL), connect/disconnect, and a status line. Honest states only:
+    // "Connected" is shown after the engine process survived its startup
+    // window AND the system proxy was set; every failure is one named
+    // sentence, never a stack trace or raw engine output.
+    internal sealed class MainForm : Form
+    {
+        private readonly ListBox _servers = new ListBox();
+        private readonly Label _status = new Label();
+        private readonly Button _connect = new Button();
+        private readonly Button _disconnect = new Button();
+        private readonly CheckBox _useSystemProxy = new CheckBox();
+        private readonly EngineRunner _engine = new EngineRunner();
+        private List<ServerEntry> _entries = new List<ServerEntry>();
+        private bool _connected;
+
+        public MainForm()
+        {
+            Text = "Sora Ancient — XP / Vista / Windows 8.0";
+            Width = 640;
+            Height = 460;
+            MinimumSize = new System.Drawing.Size(520, 360);
+            StartPosition = FormStartPosition.CenterScreen;
+
+            _servers.Dock = DockStyle.Fill;
+            _servers.DoubleClick += delegate { Connect(); };
+
+            var top = new FlowLayoutPanel();
+            top.Dock = DockStyle.Top;
+            top.Height = 34;
+            top.Controls.Add(MakeButton("Add link…", delegate { AddLink(); }));
+            top.Controls.Add(MakeButton("Subscription…", delegate { AddSubscription(); }));
+            top.Controls.Add(MakeButton("Remove", delegate { RemoveSelected(); }));
+
+            var bottom = new FlowLayoutPanel();
+            bottom.Dock = DockStyle.Bottom;
+            bottom.Height = 72;
+            _connect.Text = "Connect";
+            _connect.Width = 110;
+            _connect.Click += delegate { Connect(); };
+            _disconnect.Text = "Disconnect";
+            _disconnect.Width = 110;
+            _disconnect.Enabled = false;
+            _disconnect.Click += delegate { Disconnect(true); };
+            _useSystemProxy.Text = "Set system proxy while connected";
+            _useSystemProxy.Checked = true;
+            _useSystemProxy.AutoSize = true;
+            _status.AutoSize = true;
+            _status.Text = "Idle. Engine: checking…";
+            bottom.Controls.Add(_connect);
+            bottom.Controls.Add(_disconnect);
+            bottom.Controls.Add(_useSystemProxy);
+            bottom.Controls.Add(_status);
+
+            Controls.Add(_servers);
+            Controls.Add(top);
+            Controls.Add(bottom);
+
+            FormClosing += delegate { Disconnect(false); };
+
+            try { _entries = ServerStore.Load(); }
+            catch (FormatException ex) { _status.Text = ex.Message; }
+            RefreshList();
+            string engine = EngineRunner.FindEngine(AppDomain.CurrentDomain.BaseDirectory);
+            _status.Text = engine == null
+                ? "Idle. Era engine not staged yet (see stage-engines script)."
+                : "Idle. Engine: v2ray-core v3.36 (pinned, digest-verified at staging).";
+        }
+
+        private static Button MakeButton(string text, EventHandler onClick)
+        {
+            var b = new Button();
+            b.Text = text;
+            b.AutoSize = true;
+            b.Click += onClick;
+            return b;
+        }
+
+        private void RefreshList()
+        {
+            _servers.Items.Clear();
+            foreach (ServerEntry e in _entries) _servers.Items.Add(e.DisplayName);
+        }
+
+        private void AddLink()
+        {
+            string link = Prompt("Paste a vmess://, ss:// or socks:// link:", "Add link");
+            if (link == null) return;
+            try
+            {
+                _entries.Add(LinkParser.ParseLink(link));
+                ServerStore.Save(_entries);
+                RefreshList();
+                _status.Text = "Link added.";
+            }
+            catch (FormatException ex) { ShowError(ex.Message); }
+        }
+
+        private void AddSubscription()
+        {
+            string url = Prompt("Subscription URL:", "Add subscription");
+            if (url == null) return;
+            try
+            {
+                string body;
+                using (var client = new WebClient())
+                {
+                    // Era TLS honesty: .NET 4.0/4.6 SChannel on XP/Vista
+                    // cannot offer modern TLS to every host; a failure
+                    // here is reported as such, not retried insecurely.
+                    body = client.DownloadString(url.Trim());
+                }
+                List<ServerEntry> parsed = LinkParser.ParseSubscriptionBody(body);
+                _entries.AddRange(parsed);
+                ServerStore.Save(_entries);
+                RefreshList();
+                _status.Text = "Subscription imported: " + parsed.Count + " era server(s).";
+            }
+            catch (WebException) { ShowError("Subscription download failed (network or TLS). Nothing was imported."); }
+            catch (FormatException ex) { ShowError(ex.Message); }
+        }
+
+        private void RemoveSelected()
+        {
+            int i = _servers.SelectedIndex;
+            if (i < 0 || i >= _entries.Count) return;
+            _entries.RemoveAt(i);
+            ServerStore.Save(_entries);
+            RefreshList();
+        }
+
+        private void Connect()
+        {
+            int i = _servers.SelectedIndex;
+            if (i < 0 || i >= _entries.Count) { ShowError("Select a server first."); return; }
+            try
+            {
+                string config = ConfigBuilder.Build(_entries[i], ConfigBuilder.DefaultSocksPort, ConfigBuilder.DefaultHttpPort);
+                File.WriteAllText(ServerStore.RuntimeConfigPath, config);
+                string engine = EngineRunner.FindEngine(AppDomain.CurrentDomain.BaseDirectory);
+                _engine.Start(engine, ServerStore.RuntimeConfigPath);
+                if (_useSystemProxy.Checked)
+                    SystemProxy.Enable(ServerStore.ProxySnapshotPath, ConfigBuilder.DefaultSocksPort);
+                _connected = true;
+                _connect.Enabled = false;
+                _disconnect.Enabled = true;
+                _status.Text = "Connected via SOCKS 127.0.0.1:" + ConfigBuilder.DefaultSocksPort +
+                               " / HTTP 127.0.0.1:" + ConfigBuilder.DefaultHttpPort + " (proxy mode; TUN is not part of this track).";
+            }
+            catch (FormatException ex) { ShowError(ex.Message); }
+            catch (InvalidOperationException ex) { ShowError(ex.Message); }
+            catch (IOException) { ShowError("Could not write the runtime config file."); }
+        }
+
+        private void Disconnect(bool updateUi)
+        {
+            _engine.Stop();
+            try { SystemProxy.Restore(ServerStore.ProxySnapshotPath); }
+            catch (InvalidOperationException ex) { if (updateUi) ShowError(ex.Message); }
+            _connected = false;
+            if (updateUi)
+            {
+                _connect.Enabled = true;
+                _disconnect.Enabled = false;
+                _status.Text = "Disconnected. System proxy restored.";
+            }
+        }
+
+        private void ShowError(string message)
+        {
+            _status.Text = message;
+            MessageBox.Show(this, message, "Sora Ancient", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
+
+        private static string Prompt(string label, string title)
+        {
+            using (var form = new Form())
+            {
+                form.Text = title;
+                form.Width = 520;
+                form.Height = 150;
+                form.StartPosition = FormStartPosition.CenterParent;
+                var text = new TextBox();
+                text.Dock = DockStyle.Top;
+                var caption = new Label();
+                caption.Text = label;
+                caption.Dock = DockStyle.Top;
+                var ok = new Button();
+                ok.Text = "OK";
+                ok.DialogResult = DialogResult.OK;
+                ok.Dock = DockStyle.Bottom;
+                form.Controls.Add(text);
+                form.Controls.Add(caption);
+                form.Controls.Add(ok);
+                form.AcceptButton = ok;
+                return form.ShowDialog() == DialogResult.OK && text.Text.Trim().Length > 0 ? text.Text : null;
+            }
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing) _engine.Dispose();
+            base.Dispose(disposing);
+        }
+
+        public bool Connected { get { return _connected; } }
+    }
+}

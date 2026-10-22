@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Ancient track client: ONE source tree, two era target frameworks.
+      net40 — Windows XP SP3 ceiling is .NET Framework 4.0.3
+              (Microsoft Learn, "Install .NET Framework on Windows":
+              Windows XP SP3 -> latest supported 4.0.3).
+      net46 — Windows Vista ceiling is 4.6 (Vista SP2) and Windows 8.0
+              reaches 4.6.1; 4.6 is the newest runtime BOTH accept, so
+              Vista and 8.0 share this build. net462 is impossible on
+              both: 4.6.1 dropped Vista, 4.6.2 dropped Windows 8.0.
+    Language level is capped at C# 7.3 and the code uses no API newer
+    than each target framework, so both builds are the same program.
+  -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFrameworks>net40;net46</TargetFrameworks>
+    <LangVersion>7.3</LangVersion>
+    <AssemblyName>Sora.Ancient</AssemblyName>
+    <Product>Sora Ancient (XP / Vista / Windows 8.0 track)</Product>
+    <RootNamespace>Sora.Ancient</RootNamespace>
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="System" />
+    <Reference Include="System.Core" />
+    <Reference Include="System.Drawing" />
+    <Reference Include="System.Windows.Forms" />
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+  </ItemGroup>
+</Project>
