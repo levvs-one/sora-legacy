@@ -308,38 +308,72 @@ func TestMobileAPIMirrorJSONShapes(t *testing.T) {
 	check("Plan.Rule", Rule{}, "Rule")
 
 	// EngineInfo is an anonymous document in Go; its shape is pinned
-	// here from the marshalled output against the Swift mirror type.
-	var infoDoc struct {
-		Engines []struct {
-			Kind       string   `json:"kind"`
-			MinVersion string   `json:"min_version"`
-			Protocols  []string `json:"protocols"`
-			Features   []string `json:"features"`
-		} `json:"engines"`
-		DefaultPreference []string `json:"default_preference"`
+	// here against the Swift mirror types. The expected keys are
+	// DERIVED from the actually marshalled EngineInfo() output —
+	// parsed into maps, never spelled as literals and never decoded
+	// into a private mirror struct (that layout was self-referential:
+	// renaming a Go json tag in EngineInfo(), e.g. min_version ->
+	// minVersion, left the old pin green because both sides of the
+	// comparison were the test's own constants). Equality is exact
+	// in both directions: a key present on only one side — renamed,
+	// dropped or added on either side — fails.
+	rawInfo := EngineInfo()
+	var infoTop map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(rawInfo), &infoTop); err != nil {
+		t.Fatalf("EngineInfo document is not a JSON object: %v", err)
 	}
-	if err := json.Unmarshal([]byte(EngineInfo()), &infoDoc); err != nil {
-		t.Fatalf("EngineInfo document does not decode into its own mirror shape: %v", err)
-	}
-	if len(infoDoc.Engines) == 0 || len(infoDoc.DefaultPreference) == 0 {
+	if len(infoTop) == 0 {
 		t.Fatal("EngineInfo document is empty")
 	}
-	if got := swiftJSONKeys(t, models, "EngineInfo"); strings.Join(got, ",") != "default_preference,engines" {
-		t.Errorf("Swift EngineInfo keys = %v, the Go document carries engines/default_preference", got)
+	goTopKeys := sortedKeys(infoTop)
+	// The nested engine keys come from the one top-level value that
+	// is an array of objects, located by shape, not by its key
+	// name — so a rename of the top-level key is caught by the
+	// top-level comparison above and cannot hide the nested shape.
+	var goEngineKeys []string
+	var engineElems []map[string]json.RawMessage
+	for _, k := range goTopKeys {
+		var arr []map[string]json.RawMessage
+		if err := json.Unmarshal(infoTop[k], &arr); err != nil || len(arr) == 0 {
+			continue
+		}
+		engineElems = arr
+		union := map[string]bool{}
+		for _, elem := range arr {
+			for ek := range elem {
+				union[ek] = true
+			}
+		}
+		goEngineKeys = sortedKeys(union)
+		break
 	}
-	if got := swiftJSONKeys(t, models, "Engine"); strings.Join(got, ",") != "features,kind,min_version,protocols" {
-		t.Errorf("Swift EngineInfo.Engine keys = %v, the Go document carries kind/min_version/protocols/features", got)
+	if len(engineElems) == 0 || len(goEngineKeys) == 0 {
+		t.Fatalf("EngineInfo document carries no engine object array: %s", rawInfo)
+	}
+	// Every engine element must carry exactly the same key set: a
+	// field present on only some elements (or an extra field on
+	// one) is drift the union alone would hide.
+	for i, elem := range engineElems {
+		if got := sortedKeys(elem); strings.Join(got, ",") != strings.Join(goEngineKeys, ",") {
+			t.Errorf("EngineInfo engines[%d] keys = %v, the other engine elements carry %v", i, got, goEngineKeys)
+		}
+	}
+	if got := swiftJSONKeys(t, models, "EngineInfo"); strings.Join(got, ",") != strings.Join(goTopKeys, ",") {
+		t.Errorf("Swift EngineInfo keys = %v, Go EngineInfo() marshalled keys = %v", got, goTopKeys)
+	}
+	if got := swiftJSONKeys(t, models, "Engine"); strings.Join(got, ",") != strings.Join(goEngineKeys, ",") {
+		t.Errorf("Swift EngineInfo.Engine keys = %v, Go EngineInfo() marshalled engine keys = %v", got, goEngineKeys)
 	}
 
 	// The macOS client decodes the same EngineInfo document (via the
 	// sora-ctl helper) into its own EngineCatalog type: same mirror,
-	// second spelling.
+	// second spelling, same Go-derived expectation.
 	macModels := mobileRead(t, root, "macos/App/Core/Models.swift")
-	if got := swiftJSONKeys(t, macModels, "EngineCatalog"); strings.Join(got, ",") != "default_preference,engines" {
-		t.Errorf("macOS EngineCatalog keys = %v, the Go document carries engines/default_preference", got)
+	if got := swiftJSONKeys(t, macModels, "EngineCatalog"); strings.Join(got, ",") != strings.Join(goTopKeys, ",") {
+		t.Errorf("macOS EngineCatalog keys = %v, Go EngineInfo() marshalled keys = %v", got, goTopKeys)
 	}
-	if got := swiftJSONKeys(t, macModels, "Engine"); strings.Join(got, ",") != "features,kind,min_version,protocols" {
-		t.Errorf("macOS EngineCatalog.Engine keys = %v, the Go document carries kind/min_version/protocols/features", got)
+	if got := swiftJSONKeys(t, macModels, "Engine"); strings.Join(got, ",") != strings.Join(goEngineKeys, ",") {
+		t.Errorf("macOS EngineCatalog.Engine keys = %v, Go EngineInfo() marshalled engine keys = %v", got, goEngineKeys)
 	}
 
 	// The Kotlin side builds the plan document by hand; the keys it
