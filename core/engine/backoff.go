@@ -2,14 +2,10 @@ package engine
 
 import (
 	"context"
-	"errors"
 	"math/rand"
 	"sync"
 	"time"
 )
-
-// ErrBudgetExhausted stops the supervision loop when the engine keeps dying.
-var ErrBudgetExhausted = errors.New("engine: restart budget exhausted")
 
 // Backoff schedules engine restart attempts.
 type Backoff struct {
