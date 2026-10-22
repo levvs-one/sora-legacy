@@ -36,9 +36,15 @@ go run ./cmd/sora-core -check                                # check that engine
 go run ./cmd/sora-core -socket /tmp/sora.sock -data-dir ./data   # listen on a custom socket
 ```
 
-The app finds a custom socket through `SORA_CORE_SOCKET`.
+Clients address the platform's standard endpoint (the named pipe
+`\\.\pipe\sora-legacy-core-v1` on Windows, a unix socket elsewhere —
+see `ipc`); there is no environment variable for a custom socket.
+The service itself listens on a custom address when started with
+`-socket`.
 
-On Windows the installer registers the core as the `SoraCore` service (`sora-core.exe -install-service`). On Linux the package ships the `sora-core.service` systemd unit.
+On Windows the core registers itself as the `SoraLegacyCore` service
+(`sora-core.exe -install-service`); the product installer does not
+install the service. On Linux the package ships the `sora-core.service` systemd unit.
 
 ## Test
 
