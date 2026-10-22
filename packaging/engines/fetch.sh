@@ -5,6 +5,10 @@
 # The geo databases come from the Xray archive, which is pinned like the rest.
 #
 #   packaging/engines/fetch.sh amd64|arm64 <destination>
+#
+# tar uses --no-same-owner: chown can be forbidden in rootless containers
+# and restricted sandboxes, and the extracted ownership is never used —
+# every file is laid out afterwards through install -m.
 set -euo pipefail
 
 arch=${1:?architecture: amd64 or arm64}
@@ -94,7 +98,7 @@ while read -r engine line_arch digest url; do
 	verify_upstream_signature "$engine" "$digest" "$url"
 	case "$engine" in
 	sing-box)
-		tar --extract --gzip --file "$file" --directory "$work" --wildcards '*/sing-box'
+		tar --no-same-owner --extract --gzip --file "$file" --directory "$work" --wildcards '*/sing-box'
 		install -m 0755 "$work"/sing-box-*/sing-box "$dest/sing-box"
 		;;
 	xray)
