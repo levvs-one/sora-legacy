@@ -14,7 +14,7 @@
 - Ядро работает от отдельного пользователя `sora`. Kill switch на nftables
   пропускает трафик движков по их uid, поэтому ядро и движки не должны делить
   учётную запись с человеком.
-- Интерфейс подключается к `/run/sora/core.sock`. Сокет пускает человека в
+- Клиент (`sora-ctl`, поставляется пакетом) подключается к `/run/sora/core.sock`. Сокет пускает человека в
   активной локальной сессии — его подтверждает polkit, без пароля и без групп, как
   настройки сети рабочего стола. Удалённые и неактивные сессии получают отказ ещё до
   токена. Политика назначает пользователя `sora` владельцем действия: только так
@@ -35,6 +35,7 @@
 
 ```sh
 sudo install -Dm755 sora-core /usr/bin/sora-core
+sudo install -Dm755 sora-ctl /usr/bin/sora-ctl
 sudo install -Dm644 service/linux/sora-core.service /usr/lib/systemd/system/sora-core.service
 sudo install -Dm644 service/linux/sora.sysusers /usr/lib/sysusers.d/sora.conf
 sudo install -Dm644 service/linux/sora.policy /usr/share/polkit-1/actions/io.github.levvs-one.sora.policy
