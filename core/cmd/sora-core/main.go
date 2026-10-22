@@ -462,12 +462,6 @@ func (a *App) Close() error {
 	return errors.Join(problems...)
 }
 
-// Address returns the endpoint clients dial.
-func (a *App) Address() string { return a.address }
-
-// TunnelAddress returns the loopback address used by the system proxy.
-func (a *App) TunnelAddress() string { return a.local }
-
 // localAddress selects the tunnel's loopback address before the engine starts,
 // so the guard can use it across sessions.
 func localAddress(port int) (string, error) {
