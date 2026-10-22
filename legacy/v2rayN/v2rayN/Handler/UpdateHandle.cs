@@ -177,7 +177,8 @@ namespace v2rayN.Handler
                         }
                         catch (Exception ex)
                         {
-                            _updateFunc(false, ex.Message);
+                            Utils.SaveLog("Core update failed", ex);
+                            _updateFunc(false, "Не удалось обновить ядро.");
                         }
                     }
                     else
@@ -187,7 +188,8 @@ namespace v2rayN.Handler
                 };
                 downloadHandle.Error += (sender2, args) =>
                 {
-                    _updateFunc(true, args.GetException().Message);
+                    Utils.SaveLog("Core download failed", args.GetException());
+                    _updateFunc(true, "Не удалось загрузить обновление ядра.");
                 };
             }
 
@@ -294,7 +296,14 @@ namespace v2rayN.Handler
                         {
                             string downloadError = string.Empty;
                             var downloadHandle = new DownloadHandle();
-                            downloadHandle.Error += (sender2, args) => downloadError = args.GetException().Message;
+                            // Сырой текст ошибки загрузки уходит только в журнал;
+                            // в результат и в сохраняемое lastUpdateError попадает
+                            // только авторское сообщение.
+                            downloadHandle.Error += (sender2, args) =>
+                            {
+                                Utils.SaveLog("Subscription download failed", args.GetException());
+                                downloadError = "Не удалось загрузить подписку.";
+                            };
                             _updateFunc(false, $"{prefix}{ResUI.MsgStartGettingSubscriptions}");
                             string content = await downloadHandle.DownloadStringAsync(url, blProxy, userAgent);
                             if (blProxy && Utils.IsNullOrEmpty(content))
@@ -351,7 +360,7 @@ namespace v2rayN.Handler
                     }
                     catch (Exception exception)
                     {
-                        itemResult.Error = exception.Message;
+                        itemResult.Error = "Не удалось обновить подписку.";
                         Utils.SaveLog("Subscription update failed", exception);
                     }
 
@@ -427,7 +436,8 @@ namespace v2rayN.Handler
                         }
                         catch (Exception ex)
                         {
-                            _updateFunc(false, ex.Message);
+                            Utils.SaveLog("Geo file update failed", ex);
+                            _updateFunc(false, "Не удалось обновить geo-файл.");
                         }
                     }
                     else
@@ -437,7 +447,8 @@ namespace v2rayN.Handler
                 };
                 downloadHandle.Error += (sender2, args) =>
                 {
-                    _updateFunc(false, args.GetException().Message);
+                    Utils.SaveLog("Geo file download failed", args.GetException());
+                    _updateFunc(false, "Не удалось загрузить geo-файл.");
                 };
             }
             askToDownload(downloadHandle, url, false);
@@ -477,7 +488,7 @@ namespace v2rayN.Handler
             catch (Exception ex)
             {
                 Utils.SaveLog(ex.Message, ex);
-                _updateFunc(false, ex.Message);
+                _updateFunc(false, "Не удалось проверить обновление ядра.");
             }
         }
 
@@ -546,7 +557,7 @@ namespace v2rayN.Handler
             catch (Exception ex)
             {
                 Utils.SaveLog(ex.Message, ex);
-                _updateFunc(false, ex.Message);
+                _updateFunc(false, "Не удалось определить версию ядра.");
                 return "";
             }
         }
@@ -619,7 +630,7 @@ namespace v2rayN.Handler
             catch (Exception ex)
             {
                 Utils.SaveLog(ex.Message, ex);
-                _updateFunc(false, ex.Message);
+                _updateFunc(false, "Не удалось обработать ответ проверки обновлений.");
             }
         }
 
@@ -690,7 +701,7 @@ namespace v2rayN.Handler
             catch (Exception ex)
             {
                 Utils.SaveLog("Core archive verification failed", ex);
-                return "Не удалось проверить контрольную сумму архива: " + ex.Message;
+                return "Не удалось проверить контрольную сумму архива; обновление отклонено.";
             }
         }
 
@@ -756,7 +767,7 @@ namespace v2rayN.Handler
             catch (Exception ex)
             {
                 Utils.SaveLog("Geo file verification failed", ex);
-                return "Не удалось проверить контрольную сумму geo-файла: " + ex.Message;
+                return "Не удалось проверить контрольную сумму geo-файла; обновление отклонено.";
             }
         }
 

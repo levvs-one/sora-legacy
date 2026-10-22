@@ -16,7 +16,6 @@ namespace v2rayN.Forms
 {
     public partial class MainForm
     {
-        private readonly Dictionary<string, string> _soraSubscriptionStatuses = new Dictionary<string, string>();
         private readonly HashSet<string> _soraSubscriptionUpdates = new HashSet<string>();
         private Control _happLogsPage;
         private System.Windows.Forms.Timer _soraSubscriptionScheduleTimer;
@@ -86,11 +85,23 @@ namespace v2rayN.Forms
                     Location = new Point(44, remote ? 374 : 244),
                     Size = new Size(672, 62),
                     Text = remote
-                        ? serverCount + " серверов\r\nПоследнее обновление: " + last + "\r\nСледующее обновление: " + next + (string.IsNullOrWhiteSpace(subscription.lastUpdateError) ? string.Empty : "\r\n" + subscription.lastUpdateError)
+                        ? serverCount + " серверов\r\nПоследнее обновление: " + last + "\r\nСледующее обновление: " + next
                         : FormatSoraServerCount(serverCount) + "\r\nДобавлено вручную. Удаление подписки удалит только входящие в неё серверы.",
                     ForeColor = HappMuted,
                     Font = new Font("Segoe UI", 8.5F),
                     AutoEllipsis = true
+                };
+                // Сохраняемый текст ошибки дословно не показываем: наличие ошибки —
+                // обычный статус основным цветом, детали остаются в журнале.
+                bool updateFailed = !string.IsNullOrWhiteSpace(subscription.lastUpdateError);
+                var updateState = new Label
+                {
+                    Location = new Point(44, remote ? 440 : 310),
+                    Size = new Size(672, 20),
+                    Text = updateFailed ? "Ошибка обновления" : string.Empty,
+                    ForeColor = HappText,
+                    Font = new Font("Segoe UI", 8.5F),
+                    Visible = updateFailed
                 };
 
                 Action save = () =>
@@ -147,7 +158,6 @@ namespace v2rayN.Forms
                         return;
                     }
                     ConfigHandler.RemoveSubscription(ref config, subscription.id);
-                    _soraSubscriptionStatuses.Remove(subscription.id);
                     if (string.Equals(_soraExpandedSubscriptionId, subscription.id, StringComparison.Ordinal))
                     {
                         _soraExpandedSubscriptionId = null;
@@ -163,7 +173,7 @@ namespace v2rayN.Forms
                 var saveButton = CreateHappButton("Сохранить", save, true);
                 saveButton.Size = new Size(128, 36);
                 saveButton.Location = new Point(600, 476);
-                dialog.Controls.AddRange(new Control[] { title, close, autoPanel, state, updateNow, delete, saveButton });
+                dialog.Controls.AddRange(new Control[] { title, close, autoPanel, state, updateState, updateNow, delete, saveButton });
                 dialog.AcceptButton = saveButton;
                 dialog.CancelButton = close;
                 dialog.ShowDialog(this);
@@ -727,7 +737,6 @@ namespace v2rayN.Forms
             foreach (string subscriptionId in subscriptionIds)
             {
                 _soraSubscriptionUpdates.Add(subscriptionId);
-                _soraSubscriptionStatuses[subscriptionId] = "Получение серверов…";
             }
             RefreshSoraSubscriptionCard();
             Action<bool, string> update = (completed, message) =>
@@ -746,20 +755,10 @@ namespace v2rayN.Forms
                 // системный прокси на время обновления НЕ снимается.
                 results = await System.Threading.Tasks.Task.Run(async () =>
                     await updater.UpdateSubscriptionsAsync(config, subscriptionIds, true, includeDisabled, update));
-                foreach (UpdateHandle.SubscriptionUpdateResult result in results)
-                {
-                    _soraSubscriptionStatuses[result.SubscriptionId] = result.Success
-                        ? result.ServerCount + " серверов, обновлено"
-                        : result.Error;
-                }
             }
             catch (Exception exception)
             {
                 Utils.SaveLog("Subscription batch failed", exception);
-                foreach (string subscriptionId in subscriptionIds)
-                {
-                    _soraSubscriptionStatuses[subscriptionId] = exception.Message;
-                }
                 results = new List<UpdateHandle.SubscriptionUpdateResult>();
             }
             finally

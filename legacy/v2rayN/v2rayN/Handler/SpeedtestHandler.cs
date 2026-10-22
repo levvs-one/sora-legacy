@@ -283,7 +283,8 @@ namespace v2rayN.Handler
             };
             downloadHandle2.Error += (sender2, args) =>
             {
-                _updateFunc(testIndexId, args.GetException().Message);
+                Utils.SaveLog("Speedtest download failed", args.GetException());
+                _updateFunc(testIndexId, "Нет ответа");
             };
 
             var timeout = 8;
