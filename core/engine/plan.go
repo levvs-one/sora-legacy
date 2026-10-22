@@ -116,10 +116,6 @@ type Transport struct {
 	Host    string
 	Service string
 	Headers map[string]string
-	// Prefix is reserved: no renderer consumes it.
-	Prefix string
-	// IdleTimeout is reserved: no renderer consumes it.
-	IdleTimeout int
 	// Mode is the XHTTP mode: auto, packet-up, stream-up or stream-one.
 	Mode string
 	// DownloadAddress and DownloadPort split the XHTTP downlink onto a
@@ -251,17 +247,6 @@ type Outbound struct {
 	// Addresses lists WireGuard interface CIDRs, required for the tunnel to
 	// carry traffic.
 	Addresses []string
-
-	// Tags is reserved: no renderer or grouping code consumes it.
-	Tags []string
-	// CountryCode is reserved: the parser computes it on its own spec
-	// type; nothing copies it onto the plan.
-	CountryCode string
-	// ProviderID is reserved: no renderer consumes it.
-	ProviderID string
-	// OriginalLink is reserved: it appears only in the secret-candidate
-	// list of Outbound.Secrets and is never assigned.
-	OriginalLink string
 }
 
 // Group is a user-selectable set of outbounds.
@@ -276,10 +261,6 @@ type Group struct {
 	Hidden    bool
 	Icon      string
 	Provider  string
-	// Include is reserved: no renderer consumes it.
-	Include []string
-	// Exclude is reserved: no renderer consumes it.
-	Exclude []string
 }
 
 // RuleType is a rule matcher as named in the sora.core.v1 contract.
@@ -333,9 +314,7 @@ type DNSServer struct {
 	// Dialer names the outbound used to reach this resolver ("direct" or an
 	// outbound ID). Only the mihomo renderer honors it (dialer-proxy);
 	// nothing in the tree sets it.
-	Dialer string
-	// Suffixes is reserved: no renderer consumes it.
-	Suffixes  []string
+	Dialer    string
 	ProxyOnly bool
 }
 
@@ -432,21 +411,16 @@ type Fragment struct {
 
 // Options configures engine-wide plan settings.
 type Options struct {
-	LogLevel string
-	Mode     string // rule, global, direct
-	// UnifiedDelay is reserved: the mihomo renderer enables unified-delay
-	// unconditionally; nothing sets or reads this field.
-	UnifiedDelay bool
-	FindProcess  bool
-	GeoData      bool
-	AllowLAN     bool
-	IPv6         bool
-	// ProfileStorage is reserved: no renderer consumes it.
-	ProfileStorage bool
-	TestURL        string
-	GeoSiteURL     string
-	GeoIPURL       string
-	Fragment       Fragment
+	LogLevel    string
+	Mode        string // rule, global, direct
+	FindProcess bool
+	GeoData     bool
+	AllowLAN    bool
+	IPv6        bool
+	TestURL     string
+	GeoSiteURL  string
+	GeoIPURL    string
+	Fragment    Fragment
 }
 
 // LocalProxy opens a loopback HTTP/SOCKS5 listener only for system proxy mode
