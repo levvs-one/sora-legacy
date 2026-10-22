@@ -4,7 +4,10 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.net.ConnectivityManager
@@ -64,14 +67,23 @@ class SoraVpnService : VpnService(), PlatformInterface {
     private var tunFd: ParcelFileDescriptor? = null
     private var setupDone = false
 
+    // The String-name form of getSystemService, not the Class form:
+    // the Class overload only exists from API 23, so the Class form
+    // silently raised this client's real floor above its declared
+    // minSdk. The String form exists since API 1 and returns the
+    // same singleton on every version.
     private val connectivity: ConnectivityManager
-        get() = getSystemService(ConnectivityManager::class.java)
+        get() = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
     private val notifications: NotificationManager
-        get() = getSystemService(NotificationManager::class.java)
+        get() = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
     // Default-interface monitor state.
     private var monitorListener: InterfaceUpdateListener? = null
     private var monitorCallback: ConnectivityManager.NetworkCallback? = null
+    // Pre-API 21 monitor fallback (API 19-20 tier): ConnectivityManager
+    // has no callback API there; CONNECTIVITY_ACTION is the only
+    // connectivity-change signal the platform offers.
+    private var monitorReceiver: BroadcastReceiver? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -262,13 +274,23 @@ class SoraVpnService : VpnService(), PlatformInterface {
 
         plan.dnsServer?.let { builder.addDnsServer(it) }
 
-        for (pkg in plan.includePackage) {
-            try { builder.addAllowedApplication(pkg) }
-            catch (e: PackageManager.NameNotFoundException) { Log.w(TAG, "include package not installed: $pkg") }
-        }
-        for (pkg in plan.excludePackage) {
-            try { builder.addDisallowedApplication(pkg) }
-            catch (e: PackageManager.NameNotFoundException) { Log.w(TAG, "exclude package not installed: $pkg") }
+        // Per-app allow/disallow exists only from API 21
+        // (VpnService.Builder.addAllowedApplication /
+        // addDisallowedApplication). On the API 19-20 tier the filter
+        // cannot be expressed; say so in the log instead of crashing
+        // on a missing method — a documented degradation of the tier,
+        // named in the README.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            for (pkg in plan.includePackage) {
+                try { builder.addAllowedApplication(pkg) }
+                catch (e: PackageManager.NameNotFoundException) { Log.w(TAG, "include package not installed: $pkg") }
+            }
+            for (pkg in plan.excludePackage) {
+                try { builder.addDisallowedApplication(pkg) }
+                catch (e: PackageManager.NameNotFoundException) { Log.w(TAG, "exclude package not installed: $pkg") }
+            }
+        } else if (plan.includePackage.isNotEmpty() || plan.excludePackage.isNotEmpty()) {
+            Log.w(TAG, "per-app package filters require API 21+; ignored on API ${Build.VERSION.SDK_INT}")
         }
 
         if (plan.httpProxyEnabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -334,8 +356,25 @@ class SoraVpnService : VpnService(), PlatformInterface {
     // -- PlatformInterface: interface monitor ----------------------------
 
     override fun startDefaultInterfaceMonitor(listener: InterfaceUpdateListener) {
-        if (monitorCallback != null) return
+        if (monitorCallback != null || monitorReceiver != null) return
         monitorListener = listener
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) {
+            // API 19-20 tier: NetworkCallback / registerNetworkCallback
+            // do not exist before API 21. The only connectivity-change
+            // signal is the CONNECTIVITY_ACTION broadcast; the report
+            // itself is rebuilt from pre-21 APIs in
+            // notifyDefaultInterfaceLegacy(). Deprecated is not the
+            // same as removed: the broadcast is still delivered to
+            // manifest-less runtime receivers on 19/20.
+            val receiver = object : BroadcastReceiver() {
+                override fun onReceive(context: Context?, intent: Intent?) = notifyDefaultInterfaceLegacy()
+            }
+            monitorReceiver = receiver
+            @Suppress("DEPRECATION")
+            registerReceiver(receiver, IntentFilter(ConnectivityManager.CONNECTIVITY_ACTION))
+            notifyDefaultInterfaceLegacy()
+            return
+        }
         val callback = object : ConnectivityManager.NetworkCallback() {
             override fun onAvailable(network: Network) = notifyDefaultInterface()
             override fun onLost(network: Network) = notifyDefaultInterface()
@@ -354,7 +393,45 @@ class SoraVpnService : VpnService(), PlatformInterface {
     override fun closeDefaultInterfaceMonitor(listener: InterfaceUpdateListener) {
         monitorCallback?.let { runCatching { connectivity.unregisterNetworkCallback(it) } }
         monitorCallback = null
+        monitorReceiver?.let { runCatching { unregisterReceiver(it) } }
+        monitorReceiver = null
         monitorListener = null
+    }
+
+    /**
+     * Pre-API 21 default-interface report. Everything the callback
+     * path reads from Network / LinkProperties / NetworkCapabilities
+     * (all API 21+) is rebuilt from what API 19/20 actually has:
+     * [ConnectivityManager.getActiveNetworkInfo] for connected/type,
+     * [ConnectivityManager.isActiveNetworkMetered] (API 16+) for the
+     * metered flag, and the java.net interface list for the name and
+     * index of the first up, non-loopback interface. DNS servers and
+     * the exact default interface cannot be named by any pre-21 API;
+     * the listener gets the interface but no DNS (same "no honest
+     * answer" policy as the rest of this class).
+     */
+    @Suppress("DEPRECATION")
+    private fun notifyDefaultInterfaceLegacy() {
+        val listener = monitorListener ?: return
+        val info = connectivity.activeNetworkInfo
+        if (info == null || !info.isConnected) {
+            listener.updateDefaultInterface("", -1, false, false)
+            return
+        }
+        val interfaces = java.net.NetworkInterface.getNetworkInterfaces()
+        var chosen: java.net.NetworkInterface? = null
+        if (interfaces != null) {
+            for (netIf in interfaces) {
+                if (netIf.isUp && !netIf.isLoopback) { chosen = netIf; break }
+            }
+        }
+        val netIf = chosen
+        if (netIf == null) {
+            listener.updateDefaultInterface("", -1, false, false)
+            return
+        }
+        val index = runCatching { netIf.index }.getOrDefault(-1)
+        listener.updateDefaultInterface(netIf.name, index, connectivity.isActiveNetworkMetered, false)
     }
 
     private fun notifyDefaultInterface() {
@@ -376,7 +453,13 @@ class SoraVpnService : VpnService(), PlatformInterface {
 
     override fun getInterfaces(): NetworkInterfaceIterator {
         // Link/capability facts per interface name from ConnectivityManager.
+        // allNetworks / getLinkProperties(Network) /
+        // getNetworkCapabilities are API 21+; on the API 19-20 tier
+        // the enrichment is skipped and interfaces report type Other,
+        // no DNS servers and not-metered — the java.net enumeration
+        // below is unchanged and carries addresses and flags.
         val byName = HashMap<String, Triple<List<String>, Int, Boolean>>()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
         for (network in connectivity.allNetworks) {
             val props = connectivity.getLinkProperties(network) ?: continue
             val name = props.interfaceName ?: continue
@@ -394,6 +477,7 @@ class SoraVpnService : VpnService(), PlatformInterface {
             val dns = props.dnsServers.mapNotNull { it.zoneFreeHostAddress() }
             val metered = caps?.let { !it.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED) } ?: false
             byName[name] = Triple(dns, type, metered)
+        }
         }
 
         val result = ArrayList<LibboxInterface>()
@@ -434,7 +518,7 @@ class SoraVpnService : VpnService(), PlatformInterface {
     override fun includeAllNetworks(): Boolean = false
 
     override fun readWIFIState(): io.nekohasekai.libbox.WIFIState? {
-        val wifi = getSystemService(WifiManager::class.java) ?: return null
+        val wifi = getSystemService(Context.WIFI_SERVICE) as? WifiManager ?: return null
         @Suppress("DEPRECATION") val info = wifi.connectionInfo ?: return null
         val ssid = info.ssid?.removeSurrounding("\"") ?: return null
         if (ssid.isBlank() || ssid == "<unknown ssid>") return null

@@ -27,9 +27,18 @@ export LANG=C.UTF-8 LC_ALL=C.UTF-8
 SDK="$LEGPLAT/android-sdk"
 ANDROID_JAR="$SDK/platforms/android-34/android.jar"
 BUILD_TOOLS="$SDK/build-tools/34.0.0"
-AAR_DIR="$LEGPLAT/aar"
-WORK="$LEGPLAT/build-manual"
-OUT="$LEGPLAT/apk"
+# Variant knobs. Defaults reproduce the stock API 21 build exactly;
+# the API 19 tier (tools/bind-api19.sh) overrides all three:
+#   AAR_DIR=<dir with the -androidapi 19 AARs> MIN_SDK=19 OUT=<other dir>
+AAR_DIR="${AAR_DIR:-$LEGPLAT/aar}"
+MIN_SDK="${MIN_SDK:-21}"
+# aapt2 --min-sdk-version does NOT override a uses-sdk already in the
+# manifest, so a variant with a different floor needs its own manifest
+# file (for the API 19 tier: a copy with minSdkVersion 19, generated
+# outside the tree — see tools/bind-api19.sh header).
+MANIFEST="${MANIFEST:-$ANDROID_DIR/app/src/main/AndroidManifest.xml}"
+WORK="${WORK:-$LEGPLAT/build-manual}"
+OUT="${OUT:-$LEGPLAT/apk}"
 KEYSTORE="$LEGPLAT/debug.keystore"
 
 KOTLIN_VERSION="2.0.21"
@@ -82,9 +91,9 @@ MOBILE_JAR="$WORK/mobileapi-classes.jar"
 "$BUILD_TOOLS/aapt2" compile --dir "$ANDROID_DIR/app/src/main/res" -o "$WORK/res.zip"
 "$BUILD_TOOLS/aapt2" link \
     -I "$ANDROID_JAR" \
-    --manifest "$ANDROID_DIR/app/src/main/AndroidManifest.xml" \
+    --manifest "$MANIFEST" \
     --java "$WORK/gen" \
-    --min-sdk-version 21 --target-sdk-version 34 \
+    --min-sdk-version "$MIN_SDK" --target-sdk-version 34 \
     --version-code 1 --version-name 0.1.0 \
     -o "$WORK/base.apk" "$WORK/res.zip"
 
@@ -103,7 +112,7 @@ find "$WORK/gen" -name '*.java' >> "$WORK/sources.txt"
 # de-duplicated), and the Kotlin stdlib from the compiler zip.
 jar cf "$WORK/app-classes.jar" -C "$WORK/classes" .
 "$BUILD_TOOLS/d8" \
-    --min-api 21 \
+    --min-api "$MIN_SDK" \
     --lib "$ANDROID_JAR" \
     --output "$WORK/dex" \
     "$WORK/app-classes.jar" "$LIBBOX_JAR" "$MOBILE_JAR" \
@@ -114,7 +123,10 @@ cp "$WORK/base.apk" "$WORK/stage/app-unsigned.apk"
 cd "$WORK/stage"
 cp "$WORK/dex/classes.dex" .
 mkdir -p lib
-for abi in armeabi-v7a arm64-v8a x86 x86_64; do
+# ABIS defaults to every ABI the AARs ship; the API 19 AARs are
+# 32-bit only (64-bit Android starts at API 21), so the tier build
+# passes ABIS="armeabi-v7a x86".
+for abi in ${ABIS:-armeabi-v7a arm64-v8a x86 x86_64}; do
     mkdir -p "lib/$abi"
     cp "$WORK/aar-mobile/jni/$abi/libgojni.so" "lib/$abi/"
     cp "$WORK/aar-libbox/jni/$abi/libbox.so" "lib/$abi/"

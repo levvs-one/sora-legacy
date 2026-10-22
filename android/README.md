@@ -116,6 +116,51 @@ Facts, not taste:
   excluded routes (33+), notification permission (33+), the typed
   `startForeground` (34).
 
+## API 19 tier (Android 4.4, additive)
+
+The stock build above stays `minSdk 21`. Beside it there is an
+additive **API 19 tier** for KitKat devices, produced by a separate
+bind profile — `tools/bind-api19.sh` — plus a manual-pipeline
+variant (see "Building"). It exists because the floor was re-tested
+by building, not by arguing (full protocol:
+`reports/LEGACY-FULL-5-ANDROID.md`):
+
+- `gomobile` accepts `-androidapi` down to 16, but the NDK is the
+  real gate: NDK r27/r26 declare a floor of 21
+  (`meta/platforms.json` `"min": 21`) and gomobile refuses API 19
+  outright. **NDK r25c is the last NDK with floor 19**, so the
+  profile pins it (sha1-verified) — the stock build keeps r27.
+- Both AARs were genuinely rebuilt at `-androidapi 19`
+  (mobileapi with the official gomobile, libbox with the pin's own
+  sagernet gomobile v0.1.8, arguments mirrored from the pin's
+  `build_libbox`), and both resulting `.so` files pass a
+  symbol-level check against the NDK r25c **API 19 stub libraries**
+  (every undefined symbol is defined by an API 19 stub, arm + x86).
+  The API 21 `.so` files fail that check — `sigfillset` and friends
+  are libc symbols only from API 21 and header inlines below it —
+  which is why the tier is a rebuild, not a manifest edit.
+- **32-bit only.** 64-bit Android starts at API 21 (the r25c
+  sysroot has no aarch64/x86_64 stub directory for 19), so the tier
+  ships `armeabi-v7a` + `x86` and nothing else.
+- Client code carries explicit pre-21 degradations, all logged or
+  documented rather than silent: per-app package filters are
+  refused with a log line (Builder API is 21+); the
+  default-interface monitor falls back to the `CONNECTIVITY_ACTION`
+  broadcast and reports from `activeNetworkInfo` (no NetworkCallback
+  before 21); `getInterfaces` skips the ConnectivityManager
+  enrichment (type/DNS/metered stay at the honest defaults). Three
+  `getSystemService(Class)` call sites — an API 23 overload that
+  silently raised the client's real floor above 21 — now use the
+  String-name form, identical on every API level.
+- The pre-Conscrypt TLS caveat above still applies to the tier:
+  the Go core does its own TLS (uTLS fingerprints, REALITY), so the
+  tunnel protocols do not depend on the platform stack, but
+  anything platform-TLS-shaped on a 4.4 device is what it is.
+- Nothing about the tier is device-verified: no emulator or device
+  exists in the authoring sandbox (no `/dev/kvm`; see the report).
+  The tier's "Not verified" list is this file's list, plus first
+  launch on a real API 19/20 device.
+
 ## Why no AndroidX / Compose
 
 Dependencies are Kotlin stdlib + the framework Android API +
@@ -157,6 +202,29 @@ Could not receive a message from the daemon.
 
 Plugin resolution would be the next wall for the same reason (JVM
 HTTPS is intercepted), which is why the manual pipeline exists.
+
+### API 19 tier (sandbox, manual pipeline variant)
+
+```sh
+bash tools/bind-api19.sh   # NDK r25c + both AARs at -androidapi 19
+# aapt2 --min-sdk-version does not override the manifest's uses-sdk,
+# so the tier links a generated copy with minSdkVersion 19:
+sed 's/android:minSdkVersion="21"/android:minSdkVersion="19"/' \
+  app/src/main/AndroidManifest.xml > $LEGPLAT/ws5-api19/AndroidManifest-api19.xml
+LEGPLAT=$HOME/workspace/.legplat \
+AAR_DIR=$HOME/workspace/.legplat/ws5-api19/aar19 MIN_SDK=19 \
+MANIFEST=$HOME/workspace/.legplat/ws5-api19/AndroidManifest-api19.xml \
+ABIS="armeabi-v7a x86" WORK=$HOME/workspace/.legplat/build-manual19 \
+OUT=$HOME/workspace/.legplat/apk19 \
+bash tools/build-manual.sh
+```
+
+Verified output of exactly this recipe: `sdkVersion:'19'`,
+`native-code: 'armeabi-v7a' 'x86'`, apksigner v1/v2/v3 true
+(the v1 signature matters — pre-21 Android verifies nothing else).
+
+All overrides default to the stock API 21 values; with no overrides
+`tools/build-manual.sh` builds exactly the stock APK.
 
 ### This sandbox (manual pipeline)
 
@@ -241,4 +309,5 @@ app/src/main/java/one/levvs/sora/legacy/
   Ui.kt                framework-View builders (UI is code, no layouts)
 app/src/main/res/values/                  strings + framework theme
 tools/build-manual.sh                     the sandbox pipeline above
+tools/bind-api19.sh                       API 19 tier bind profile (above)
 ```
