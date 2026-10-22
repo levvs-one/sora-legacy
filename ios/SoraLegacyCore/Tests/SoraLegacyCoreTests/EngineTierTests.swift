@@ -161,7 +161,12 @@ final class EngineTierTests: XCTestCase {
 
     func testIOS12DNSTranslation() throws {
         let adapted = try TierConfigAdapter.adapt(configJSON: Self.hysteria2, for: .ios12)
-        XCTAssertTrue(adapted.degraded.isEmpty)
+        // The fixture's only degradation is the route resolver
+        // removal (pinned in detail by
+        // testIOS12RouteDefaultDomainResolverDegrades).
+        XCTAssertEqual(adapted.degraded,
+                       [TierDegradation(feature: "routeDefaultDomainResolver",
+                                        detail: "dns-1")])
         let root = parse(adapted.configJSON)
         let dns = root["dns"] as! [String: Any]
         let servers = dns["servers"] as! [[String: Any]]
@@ -244,9 +249,73 @@ final class EngineTierTests: XCTestCase {
         }
     }
 
+    func testIOS12RealityKeyShareRefused() throws {
+        // REALITY key_share is the lx fork's spelling (the
+        // renderer's "hybrid"/"classical" values); neither upstream
+        // pin carries it, so the adapter refuses rather than
+        // letting the engine fail on an unknown field.
+        let withKeyShare = Self.config(dns: Self.dnsNewFormat, outbounds: """
+            [{"type":"vless","tag":"proxy","server":"edge.example.com","server_port":443,
+              "uuid":"b831381d-6324-4d53-ad4f-8cda48b30811","flow":"xtls-rprx-vision",
+              "tls":{"enabled":true,"server_name":"www.example.com",
+                     "utls":{"enabled":true,"fingerprint":"chrome"},
+                     "reality":{"enabled":true,"public_key":"Z84J2IelR9ch3k8VtlVhhs5ycBUlXA7wHBWcBrjqnAw","short_id":"6ba85179e30d4fc2","key_share":"hybrid"}}},
+             {"type":"direct","tag":"direct"}]
+            """)
+        XCTAssertThrowsError(try TierConfigAdapter.adapt(configJSON: withKeyShare, for: .ios12)) { error in
+            XCTAssertEqual(error as? TierAdaptError,
+                           .mandatoryUnavailable(feature: "realityKeyShare", detail: "proxy"))
+        }
+        // The same config is untouched on the shipped tier (the
+        // adapter is the identity there).
+        XCTAssertNoThrow(try TierConfigAdapter.adapt(configJSON: withKeyShare, for: .ios13))
+        // Negative control: the identical config without key_share
+        // adapts — the gate fires on that field alone, and the
+        // REALITY block survives adaptation intact.
+        let withoutKeyShare = Self.config(dns: Self.dnsNewFormat, outbounds: """
+            [{"type":"vless","tag":"proxy","server":"edge.example.com","server_port":443,
+              "uuid":"b831381d-6324-4d53-ad4f-8cda48b30811","flow":"xtls-rprx-vision",
+              "tls":{"enabled":true,"server_name":"www.example.com",
+                     "utls":{"enabled":true,"fingerprint":"chrome"},
+                     "reality":{"enabled":true,"public_key":"Z84J2IelR9ch3k8VtlVhhs5ycBUlXA7wHBWcBrjqnAw","short_id":"6ba85179e30d4fc2"}}},
+             {"type":"direct","tag":"direct"}]
+            """)
+        let adapted = try TierConfigAdapter.adapt(configJSON: withoutKeyShare, for: .ios12)
+        let reality = (outbound(parse(adapted.configJSON))["tls"] as! [String: Any])["reality"] as! [String: Any]
+        XCTAssertEqual(reality["public_key"] as? String,
+                       "Z84J2IelR9ch3k8VtlVhhs5ycBUlXA7wHBWcBrjqnAw")
+        XCTAssertNil(reality["key_share"])
+    }
+
+    func testIOS12RouteDefaultDomainResolverDegrades() throws {
+        // The shared fixture carries route.default_domain_resolver
+        // {"server":"dns-1"}: 1.11 has no spelling for it, so the
+        // field is removed AND the removal is recorded in
+        // degraded — a programmatic consumer (UI/log) must see it,
+        // not only the docs.
+        let adapted = try TierConfigAdapter.adapt(configJSON: Self.hysteria2, for: .ios12)
+        XCTAssertEqual(adapted.degraded,
+                       [TierDegradation(feature: "routeDefaultDomainResolver",
+                                        detail: "dns-1")])
+        let route = parse(adapted.configJSON)["route"] as! [String: Any]
+        XCTAssertNil(route["default_domain_resolver"],
+                     "1.11 has no route.default_domain_resolver")
+        // Negative control: a config without the field records no
+        // such degradation (and nothing else degrades either).
+        let withoutResolver = """
+            {"dns":\(Self.dnsNewFormat),
+             "outbounds":[{"type":"direct","tag":"proxy"}],
+             "route":{"auto_detect_interface":true,"final":"proxy"}}
+            """
+        let clean = try TierConfigAdapter.adapt(configJSON: withoutResolver, for: .ios12)
+        XCTAssertTrue(clean.degraded.isEmpty)
+        XCTAssertNil((parse(clean.configJSON)["route"] as! [String: Any])["default_domain_resolver"])
+    }
+
     func testIOS12FragmentAndFingerprintDegrade() throws {
         let adapted = try TierConfigAdapter.adapt(configJSON: Self.vlessRealityFragment, for: .ios12)
-        XCTAssertEqual(Set(adapted.degraded.map(\.feature)), ["tlsFragment", "utlsFingerprint"])
+        XCTAssertEqual(Set(adapted.degraded.map(\.feature)),
+                       ["tlsFragment", "utlsFingerprint", "routeDefaultDomainResolver"])
         let tls = outbound(parse(adapted.configJSON))["tls"] as! [String: Any]
         XCTAssertNil(tls["fragment"], "1.11 refuses the fragment field at load")
         let utls = tls["utls"] as! [String: Any]
@@ -266,7 +335,9 @@ final class EngineTierTests: XCTestCase {
             """)
         let adapted = try TierConfigAdapter.adapt(configJSON: cfg, for: .ios12)
         XCTAssertEqual(adapted.degraded, [TierDegradation(feature: "utlsFingerprint",
-                                                         detail: "chrome_pq_psk")])
+                                                         detail: "chrome_pq_psk"),
+                                          TierDegradation(feature: "routeDefaultDomainResolver",
+                                                          detail: "dns-1")])
         let tls = outbound(parse(adapted.configJSON))["tls"] as! [String: Any]
         XCTAssertNil(tls["utls"], "plain TLS omits uTLS instead of emitting a refused name")
     }
@@ -280,7 +351,10 @@ final class EngineTierTests: XCTestCase {
              {"type":"direct","tag":"direct"}]
             """)
         let adapted = try TierConfigAdapter.adapt(configJSON: cfg, for: .ios12)
-        XCTAssertTrue(adapted.degraded.isEmpty)
+        XCTAssertEqual(adapted.degraded,
+                       [TierDegradation(feature: "routeDefaultDomainResolver",
+                                        detail: "dns-1")],
+                       "the in-set fingerprint itself is untouched; only the route resolver degrades")
         let tls = outbound(parse(adapted.configJSON))["tls"] as! [String: Any]
         XCTAssertEqual((tls["utls"] as! [String: Any])["fingerprint"] as? String, "chrome")
     }
@@ -295,14 +369,19 @@ final class EngineTierTests: XCTestCase {
             """)
         let adapted = try TierConfigAdapter.adapt(configJSON: cfg, for: .ios12)
         XCTAssertEqual(adapted.degraded, [TierDegradation(feature: "echQueryServerName",
-                                                         detail: "ech.example.com")])
+                                                         detail: "ech.example.com"),
+                                          TierDegradation(feature: "routeDefaultDomainResolver",
+                                                          detail: "dns-1")])
         let tls = outbound(parse(adapted.configJSON))["tls"] as! [String: Any]
         XCTAssertNil((tls["ech"] as! [String: Any])["query_server_name"])
     }
 
     func testIOS12WireGuardPlainPassesAWGGates() throws {
         let adapted = try TierConfigAdapter.adapt(configJSON: Self.wireguard, for: .ios12)
-        XCTAssertTrue(adapted.degraded.isEmpty)
+        XCTAssertEqual(adapted.degraded,
+                       [TierDegradation(feature: "routeDefaultDomainResolver",
+                                        detail: "dns-1")],
+                       "plain WireGuard itself degrades nothing; only the route resolver does")
         let awg = Self.config(dns: Self.dnsNewFormat, outbounds: "[{\"type\":\"direct\",\"tag\":\"direct\"}]",
                               endpoints: """
             [{"type":"wireguard","tag":"proxy","address":["10.7.0.2/32"],

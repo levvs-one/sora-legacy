@@ -8,10 +8,12 @@ import Foundation
 /// logs say so honestly instead of the drop being silent.
 public struct TierDegradation: Equatable {
     /// Technical feature name (e.g. "tlsFragment",
-    /// "utlsFingerprint", "echQueryServerName").
+    /// "utlsFingerprint", "echQueryServerName",
+    /// "routeDefaultDomainResolver").
     public var feature: String
     /// The concrete value where one exists (the fingerprint name,
-    /// the ECH query server name), else empty.
+    /// the ECH query server name, the removed resolver's server
+    /// tag), else empty.
     public var detail: String
     public init(feature: String, detail: String = "") {
         self.feature = feature
@@ -69,15 +71,15 @@ public enum TierAdaptError: Error, Equatable {
 ///     through);
 ///  4. removal of `route.default_domain_resolver` (no 1.11
 ///     spelling; outbound server names resolve through the DNS
-///     servers' `address_resolver` chain instead).
+///     servers' `address_resolver` chain instead), recorded in
+///     `degraded` like every other drop or substitution.
 ///
 /// The translation's honesty rule is the main tree's: every key
 /// must have a known counterpart or the adaptation throws —
 /// nothing is silently dropped except the four documented spots
 /// (the two TLS drops, the fingerprint substitution, and
-/// `default_domain_resolver`, each of which is either recorded in
-/// `degraded` or, for the resolver, a pure routing hint whose
-/// 1.11 mechanism is the address_resolver chain kept in step 3).
+/// `default_domain_resolver`), and every one of those four is
+/// recorded in `degraded`.
 public enum TierConfigAdapter {
     public static func adapt(configJSON: String, for tier: EngineTier) throws -> TierAdaptedConfig {
         guard tier != .ios13 else {
@@ -106,9 +108,26 @@ public enum TierConfigAdapter {
         }
 
         // 4. route.default_domain_resolver has no 1.11 spelling.
-        if var route = root["route"] as? [String: Any], route["default_domain_resolver"] != nil {
+        // The removal is a degradation like any other: the stored
+        // plan keeps the hint and outbound names still resolve
+        // through the address_resolver chain kept in step 3, but
+        // the tier's engine never sees this field, so the drop is
+        // recorded — never silent.
+        if var route = root["route"] as? [String: Any],
+           let resolver = route["default_domain_resolver"] {
             route.removeValue(forKey: "default_domain_resolver")
             root["route"] = route
+            let detail: String
+            if let resolverObject = resolver as? [String: Any],
+               let server = resolverObject["server"] as? String {
+                detail = server
+            } else if let server = resolver as? String {
+                detail = server
+            } else {
+                detail = ""
+            }
+            degraded.append(TierDegradation(feature: "routeDefaultDomainResolver",
+                                            detail: detail))
         }
 
         let out = try JSONSerialization.data(withJSONObject: root, options: [.sortedKeys])
