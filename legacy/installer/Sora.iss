@@ -28,10 +28,10 @@
 AppId={{8D33A351-982B-4E71-8216-4B7E4B75EBA8}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
-AppPublisher=Сообщество Sora
+AppPublisher=Sora
 AppPublisherURL=https://github.com/levvs-one/sora-legacy
 VersionInfoVersion={#MyAppVersion}.0
-VersionInfoCompany=Сообщество Sora
+VersionInfoCompany=Sora
 VersionInfoDescription=Sora — клиент подключений для {#WindowsDisplayName}
 DefaultDirName={localappdata}\Programs\Sora
 DefaultGroupName=Sora
@@ -46,6 +46,9 @@ UninstallDisplayIcon={app}\{#MyAppExeName}
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
+WizardBackImageFile=art\back-light.png,art\back-light@2x.png
+WizardImageFile=
+WizardSmallImageFile=
 CloseApplications=yes
 RestartApplications=no
 SetupLogging=yes
@@ -55,9 +58,21 @@ LicenseFile={#StageDir}\LICENSE
 Name: "russian"; MessagesFile: "compiler:Languages\Russian.isl"
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
+[CustomMessages]
+russian.DesktopIconTask=Создать ярлык на рабочем столе
+english.DesktopIconTask=Create a desktop shortcut
+russian.AutorunTask=Запускать в фоне при входе в Windows
+english.AutorunTask=Start in the background at Windows sign-in
+russian.ShortcutsGroup=Ярлыки:
+english.ShortcutsGroup=Shortcuts:
+russian.AutorunGroup=Автозапуск:
+english.AutorunGroup=Startup:
+russian.LaunchApp=Запустить Sora
+english.LaunchApp=Launch Sora
+
 [Tasks]
-Name: "desktopicon"; Description: "Создать ярлык на рабочем столе"; GroupDescription: "Ярлыки:"; Flags: unchecked
-Name: "autorun"; Description: "Запускать в фоне при входе в Windows"; GroupDescription: "Автозапуск:"; Flags: unchecked
+Name: "desktopicon"; Description: "{cm:DesktopIconTask}"; GroupDescription: "{cm:ShortcutsGroup}"; Flags: unchecked
+Name: "autorun"; Description: "{cm:AutorunTask}"; GroupDescription: "{cm:AutorunGroup}"; Flags: unchecked
 
 [Files]
 Source: "{#StageDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
@@ -85,7 +100,7 @@ Root: HKA; Subkey: "Software\Classes\sora\DefaultIcon"; ValueType: string; Value
 Root: HKA; Subkey: "Software\Classes\sora\shell\open\command"; ValueType: string; ValueData: """{app}\{#MyAppExeName}"" ""%1"""
 
 [Run]
-Filename: "{app}\{#MyAppExeName}"; Description: "Запустить Sora"; WorkingDir: "{app}"; Flags: nowait postinstall skipifsilent; Check: not WizardNoIcons
+Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchApp}"; WorkingDir: "{app}"; Flags: nowait postinstall skipifsilent; Check: not WizardNoIcons
 
 [UninstallRun]
 Filename: "{app}\{#MyAppExeName}"; Parameters: "--restore-proxy --silent"; WorkingDir: "{app}"; Flags: runhidden waituntilterminated skipifdoesntexist; RunOnceId: "RestoreSystemProxy"
