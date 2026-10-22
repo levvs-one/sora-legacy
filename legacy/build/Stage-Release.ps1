@@ -52,7 +52,7 @@ $icon = Join-Path $projectRoot 'v2rayN\v2rayN\Assets\Sora\sora.ico'
 Copy-Item -LiteralPath $icon -Destination (Join-Path $resolvedStage 'sora.ico')
 $xrayExecutable = Join-Path $CompatPayload 'core\xray.exe'
 $singBoxExecutable = Join-Path $CompatPayload 'tun\sing-box.exe'
-Assert-Sha256 $xrayExecutable '0F611E1DEB746BB295DE2344A3D1E668F39FDB1818515F631277B1425CE51AB1'
+Assert-Sha256 $xrayExecutable '5C221CC5C055BF4995F59038D864BC3D7C970BF975F3AF210AC5B7621701BB4F'
 Assert-Sha256 $singBoxExecutable 'E9FDD8B543D494B41923D5D4660E65AC380A14DDDD4D45E7379BE4CCED92D0E1'
 Copy-Item -LiteralPath $xrayExecutable -Destination $resolvedStage
 Copy-Item -LiteralPath $singBoxExecutable -Destination $resolvedStage
@@ -73,7 +73,7 @@ Copy-Item -LiteralPath $tunFiles -Destination $tunDirectory
 
 $extractDirectory = Join-Path $stageParent ("xray-extract-{0}" -f [Guid]::NewGuid().ToString('N'))
 try {
-    Assert-Sha256 $XrayArchive 'B23ACCCC3F9BD2591911C31EDB994C117F43C661F4A0CA06CBEEED4465D9C38A'
+    Assert-Sha256 $XrayArchive '33BC2686A77F6FE438616982B347F852EB7F9572DBE97ADC1459F8FB639AEA13'
     New-Item -ItemType Directory -Path $extractDirectory | Out-Null
     tar -xf (Resolve-Path -LiteralPath $XrayArchive).Path -C $extractDirectory
     if ($LASTEXITCODE -ne 0) {

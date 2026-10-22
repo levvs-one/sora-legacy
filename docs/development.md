@@ -112,7 +112,7 @@ packaging/engines/fetch.sh amd64 dist/engines
 
 `fetch.sh` скачивает архивы по HTTPS и останавливается, если сумма хоть одного не совпала; базы geoip/geosite берутся из архива Xray той же версии. После раскладки пишется `SHA256SUMS` с дайджестами извлечённых бинарей — по нему служба сверяет движки при запуске (fail-closed).
 
-Для Windows-комплекта движки берутся не из lock, а из compat payload, и `Stage-Release.ps1` сверяет `xray.exe`, `sing-box.exe` и файлы `tun2proxy` с SHA-256, закреплёнными прямо в скрипте. Windows-вариант sing-box в payload — lx-форк (см. `legacy/PLANS.md`); Linux-lock держит upstream 1.14.3. Возможности, существующие только в lx (например, REALITY KeyShare), ядро заявляет только при обнаружении lx-сборки.
+Для Windows-комплекта движки берутся не из lock, а из compat payload, и `Stage-Release.ps1` сверяет `xray.exe`, `sing-box.exe` и файлы `tun2proxy` с SHA-256, закреплёнными прямо в скрипте. Payload-Xray — тот же выпуск, что и пол каталога ядра: `Xray-win7-32` v26.3.27 (поднят с 25.9.11, который не несёт Hysteria-аутбаунд каталога; доказательства бинарями и Win7-PE — LEGACY-FULL-2-XRAY). Windows-вариант sing-box в payload — lx-форк (см. `legacy/PLANS.md`); Linux-lock держит upstream 1.14.3. Возможности, существующие только в lx (например, REALITY KeyShare), ядро заявляет только при обнаружении lx-сборки.
 
 ## Zapret (шаг сборки Linux-пакета)
 

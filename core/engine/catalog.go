@@ -84,7 +84,19 @@ var Catalog = map[Kind]Capabilities{
 	KindXray: {
 		Kind: KindXray,
 		// The minimum version is the shipped build verified for
-		// Hysteria2, XHTTP, and VLESS Encryption.
+		// Hysteria2, XHTTP, and VLESS Encryption. The floor is
+		// load-bearing, not ceremonial: Xray gained its Hysteria
+		// outbound and transport only in v26.1.23 (upstream PR
+		// 5508), and the previous Windows payload build 25.9.11
+		// refuses this renderer's Hy2 render at load ("unknown
+		// transport protocol: hysteria") while passing the rest of
+		// the claimed corpus — so lowering the floor to that build
+		// would route Hy2 plans to a binary that cannot carry
+		// them. The payload pin was therefore raised to the floor
+		// instead (Xray-win7-32 v26.3.27, LEGACY-FULL WS2; corpus
+		// and Win7 PE evidence in LEGACY-FULL-2-XRAY.md), and the
+		// floor is pinned by catalog_xray_floor_test.go plus the
+		// binary corpus test in engine/xray.
 		MinVersion: "26.3.27",
 		Protocols: map[Protocol]bool{
 			ProtocolVLESS: true, ProtocolVMess: true, ProtocolTrojan: true,
