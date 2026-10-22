@@ -185,3 +185,63 @@ open SoraLegacy.xcodeproj
        `$(AppIdentifierPrefix)` Xcode раскрывает только в
        entitlements), и на Linux эта цепочка не проверяется в
        принципе — тесты ходят через InMemorySecrets.
+
+## 8. Тир iOS 12 (аддитивный; LEGACY-FULL WS4)
+
+Отдельный тир на пине **sing-box 1.11.15** — §1–§7 выше относятся
+к тиру 13.0 и не меняются. Полные ноты тира (доказательства пола,
+дельты поверхности libbox, гейты конфигов, композиция, риски) —
+`Tiers/IOS12/TARGET-NOTES.md`; данные пина в коде —
+`EngineTier.ios12` (SoraLegacyCore). Здесь — только рецепт сборки.
+
+Почему пол 12.0 вообще возможен: `build_libbox` пина 1.11.15, как
+и 1.12.12, не передаёт `-iosversion`; его gomobile v0.1.4 держит
+дефолт 13.0, но для цели `ios` значения ниже дефолта не отрезает
+(единственная проверка ≥13 в gomobile — Mac Catalyst); значение
+уходит дословно в `-miphoneos-version-min`. Пол Go-рантайма —
+iOS 12 (go.dev/wiki/MinimumRequirements). Следствие для рецепта:
+**штатный `build_libbox` тиру не подходит** — он соберёт фреймворк
+с полом 13.0. Bind ниже повторяет команду `buildApple()` пина
+дословно, добавляя ровно один флаг `-iosversion 12.0`.
+
+Шаг 0 — тир-чек-аут: в `SoraLegacyCore/Package.swift` одна строка
+`.iOS(.v13)` → `.iOS(.v12)` (коммитнутый файл держит .v13 для тира
+13; правка живёт только в рабочей копии тира 12).
+
+Хост-Go для этого тира — **≥ 1.21** (не 1.20, несмотря на
+`go 1.20` в go.mod пина): измерено LEGACY-FULL WS3 на этом же
+пине — Go 1.20.14 сборку ломает гард `//go:build !go1.21` форка
+quic-go в ECH-пути, а `with_ech` — в собственных тегах пина;
+пин собран WS3 тулчейном Go 1.22.12 (macos/TIERS.md §3.3).
+
+```sh
+# исходники пина (sha256 97d58dd873d7cf9b5e4b4aca5516568f3b2e6f5c3dbc93241c82fff5e4a609fd)
+tar -xzf sing-box-1.11.15.tar.gz && cd sing-box-1.11.15
+# gomobile/gobind ИМЕННО v0.1.4 (go.mod пина):
+go install github.com/sagernet/gomobile/cmd/gomobile@v0.1.4
+go install github.com/sagernet/gomobile/cmd/gobind@v0.1.4
+# bind: команда buildApple() пина (target apple, platform ios) +
+# -iosversion 12.0; теги — sharedTags+iosTags пина дословно:
+gomobile bind -v -target ios -iosversion 12.0 -libname=box \
+  -trimpath -buildvcs=false \
+  -ldflags "-X github.com/sagernet/sing-box/constant.Version=v1.11.15 -s -w -buildid=" \
+  -tags with_gvisor,with_quic,with_wireguard,with_ech,with_utls,with_clash_api,with_dhcp,with_low_memory,with_conntrack \
+  ./experimental/libbox
+mkdir -p ~/…/sora-legacy/ios/Frameworks/IOS12
+cp -R Libbox.xcframework ~/…/sora-legacy/ios/Frameworks/IOS12/
+```
+
+Mobileapi для тира — тот же официальный gomobile, что в §2.2, но
+флаг пола — `-iosversion 12.0`; результат — в `Frameworks/IOS12/`:
+
+```sh
+gomobile bind -target ios -iosversion 12.0 \
+  -o ~/…/sora-legacy/ios/Frameworks/IOS12/Mobileapi.xcframework ./mobileapi
+```
+
+Проект тира: `xcodegen generate --spec project-ios12.yml` →
+`SoraLegacyIOS12.xcodeproj` (deployment target 12.0; App и
+PacketTunnel с файлами-заменами из `Tiers/IOS12/Replacements/` —
+см. шапку project-ios12.yml). Проверка пола собранных
+фреймворков и остальные verify-пункты тира —
+TARGET-NOTES §6.
