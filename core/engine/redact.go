@@ -628,18 +628,15 @@ var (
 	bearerPattern = regexp.MustCompile(`(?i)\b(bearer\s+)([A-Za-z0-9._~+/=-]{12,})`)
 )
 
-// keyGateWords are the substrings that gate keyValuePattern: every
-// alternative of its key alternation contains one of them (uuid/password/
-// passwd/secret/token/psk/spider/short literally; every *_key/*-key form
-// contains "key"; obfs_param contains "param"; auth and auth_str contain
-// "auth"; username contains "user"). A line with none of them cannot be
-// changed by keyValuePattern. Mirrors sora's redactor gate ([pass3-opt],
-// sora 8cdcb6d9); legacy previously ran all five regexp passes on every
-// line, clean ones included.
-var keyGateWords = []string{
-	"uuid", "password", "passwd", "secret", "token", "key", "param",
-	"auth", "psk", "user", "spider", "short",
-}
+// The substrings that gate keyValuePattern: every alternative of its
+// key alternation contains one of them (uuid/password/passwd/secret/
+// token/psk/spider/short literally; every *_key/*-key form contains
+// "key"; obfs_param contains "param"; auth and auth_str contain "auth";
+// username contains "user"). A line with none of them cannot be changed
+// by keyValuePattern. gateFlagsASCII tests them inline in its single
+// pass. Mirrors sora's redactor gate ([pass3-opt], sora 8cdcb6d9);
+// legacy previously ran all five regexp passes on every line, clean
+// ones included.
 
 // isASCII reports whether s is plain ASCII, where case folding is a
 // per-byte operation and the gate scan below is exact. Non-ASCII text
@@ -658,7 +655,7 @@ func isASCII(s string) bool {
 // line, computed by gateFlagsASCII in a single pass.
 type gateFlags struct {
 	scheme bool // "://" present: userInfoPattern/tokenLinkPattern may match
-	key    bool // a keyGateWords substring: keyValuePattern may match
+	key    bool // a key-gate substring: keyValuePattern may match
 	strict bool // a strict-ring substring ("user", "login", "key", "code", "session", "seed", "hwid", "device", "sni", "server", "service", "dest", "encryption", "host"): strictKeyValuePattern may match
 	uuid   bool // at least four dashes: uuidPattern may match
 	bearer bool // "bearer"/"authorization" present: authHeaderPattern/bearerPattern may match
@@ -845,7 +842,7 @@ func maskPatterns(s string) string {
 	// ASCII fast path: one gate per pattern, each a necessary condition
 	// for that pattern to match at all —
 	//   userInfo/tokenLink/subscriptionPath need a literal "://";
-	//   keyValue needs one of keyGateWords (see its comment);
+	//   keyValue needs one of the key-gate substrings (see gateFlags);
 	//   strictKeyValue needs one of its ring substrings (see
 	//   gateFlagsASCII: user/login/key/code/session/seed/hwid/
 	//   device/sni/server/service/dest/encryption/host);
