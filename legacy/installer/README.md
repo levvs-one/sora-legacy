@@ -11,7 +11,7 @@
 ## Профили и версия
 
 - Целевая система задаётся профилем сборки: `WindowsTarget` — `win7` (по умолчанию, отображение «Windows 7 SP1»), `win8`, `win10`, `win11`; вместе с ней меняются `WindowsDisplayName` и `MinimumWindowsVersion`.
-- Версия продукта задаётся одним местом: `#define MyAppVersion` в начале `Sora.iss`. Текущая версия — 0.2.3; та же версия стоит в корневом CHANGELOG и в примерах команд упаковки Linux.
+- Версия продукта задаётся одним местом: `#define MyAppVersion` в начале `Sora.iss`. Текущая версия — 0.2.3; то же значение стоит во всех build-источниках репозитория: корневой CHANGELOG, `v2rayN.csproj` (`Version`/`AssemblyVersion`/`FileVersion`), примеры команд упаковки Linux и CI Linux-пакетов (`.github/workflows/legacy.yml`, `SORA_VERSION`). Платформенные счётчики со своей конвенцией (Android `versionCode`/`versionName`, Apple `MARKETING_VERSION`) версией продукта не являются.
 - Иконка установщика — `sora.ico` из комплекта (семейный знак, 7 образов 16–256).
 
 ## Оформление мастера

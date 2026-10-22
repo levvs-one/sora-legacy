@@ -116,7 +116,7 @@ jobs:
       - name: Build deb, rpm and Arch packages
         run: |
           for packager in deb rpm archlinux; do
-            SORA_ARCH=amd64 SORA_VERSION=0.3.0 nfpm package --config packaging/linux/nfpm.yaml --packager "$packager" --target dist/
+            SORA_ARCH=amd64 SORA_VERSION=0.2.3 nfpm package --config packaging/linux/nfpm.yaml --packager "$packager" --target dist/
           done
       - name: Verify package contents
         run: |
