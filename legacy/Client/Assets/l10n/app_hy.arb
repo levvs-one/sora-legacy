@@ -41,7 +41,7 @@
   "export": "Պահել ֆայլում",
   "clear": "Պարզ",
   "logsEmpty": "Այստեղ ոչինչ",
-  "clearLogsConfirm": "Մաքրե՞լ բոլոր մատյանները:",
+  "clearLogsConfirm": "Մաքրե՞լ բոլոր մատյանները",
   "appVersion": "Տարբերակ {version}",
   "notInstalled": "Տեղադրված չէ",
   "sourceCode": "Աղբյուրի կոդը",

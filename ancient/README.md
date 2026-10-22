@@ -2,7 +2,6 @@
 
 > Part of [Sora Legacy](../README.md). This tree is the ancient-Windows track (XP SP3 / Vista SP2 / Windows 8.0); its honest status and floors are stated below and in [platforms](../legacy/docs/platforms.md). Full documentation index: [docs/README.md](../docs/README.md).
 
-
 A separate, **additive** track for Windows versions the main legacy
 stack cannot reach. It does not modify, reuse at runtime, or weaken the
 main client (`legacy/`), the Go core (`core/`), or the installer: those

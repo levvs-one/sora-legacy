@@ -30,7 +30,7 @@ func TestFingerprintCatalogParityPin(t *testing.T) {
 			t.Errorf("IsVersionedParrot(%q) = true, want false", name)
 		}
 	}
-	for _, name := range []string{"random", "randomized", "Randomized", "hellorandomizedalpn", "randomizednoalpn"} {
+	for _, name := range []string{"random", "randomized", "Randomized", "randomizednoalpn", "hellorandomized", "hellorandomizedalpn", "hellorandomizednoalpn"} {
 		if !IsRandomizedFingerprint(name) {
 			t.Errorf("IsRandomizedFingerprint(%q) = false, want true (reference set)", name)
 		}

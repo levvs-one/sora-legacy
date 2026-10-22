@@ -13,7 +13,8 @@ import (
 // plan passed validation and failed only late, at the engine
 // binary's config check (pinned as a negative control in
 // engine/xray/binary_floor_test.go). Validate now refuses such
-// names early, by name (see validateFingerprint in validate.go).
+// names early, by name (see ValidFingerprintName in this file
+// and its use in Outbound.Validate in validate.go).
 //
 // Scope, honestly: this file judges NAMES only. It makes no claim
 // about the ClientHello bytes a name resolves to on any engine

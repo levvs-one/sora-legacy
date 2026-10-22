@@ -2,7 +2,6 @@
 
 > Часть [Sora Legacy](../README.md). Полный указатель документации — [docs/README.md](../docs/README.md); платформы — [legacy/docs/platforms.md](../legacy/docs/platforms.md).
 
-
 **Честный статус: это скелет, а не приложение.** В дереве лежат только
 сгенерированный Dart-код контракта `sora.core.v1`
 (`lib/src/generated/`), `analysis_options.yaml` и спека Android-туннеля
