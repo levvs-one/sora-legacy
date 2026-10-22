@@ -19,17 +19,17 @@ func TestImportedHy2TUICTuningSurvivesTheVault(t *testing.T) {
 	}
 	plan, _ := importedPlan(t, hy2)
 	o := plan.Outbounds[0]
-	if o.UpMbps != 100 || o.DownMbps != 200 {
-		t.Errorf("bandwidth caps = %d/%d, want 100/200", o.UpMbps, o.DownMbps)
+	if o.QUICOrZero().UpMbps != 100 || o.QUICOrZero().DownMbps != 200 {
+		t.Errorf("bandwidth caps = %d/%d, want 100/200", o.QUICOrZero().UpMbps, o.QUICOrZero().DownMbps)
 	}
-	if o.HopPorts != "20000-30000,40000" || o.HopInterval != 45 || o.HopIntervalMax != 90 {
-		t.Errorf("hopping = %q/%d/%d, want 20000-30000,40000/45/90", o.HopPorts, o.HopInterval, o.HopIntervalMax)
+	if o.QUICOrZero().HopPorts != "20000-30000,40000" || o.QUICOrZero().HopInterval != 45 || o.QUICOrZero().HopIntervalMax != 90 {
+		t.Errorf("hopping = %q/%d/%d, want 20000-30000,40000/45/90", o.QUICOrZero().HopPorts, o.QUICOrZero().HopInterval, o.QUICOrZero().HopIntervalMax)
 	}
-	if o.BBRProfile != "aggressive" {
-		t.Errorf("bbr profile = %q, want aggressive", o.BBRProfile)
+	if o.QUICOrZero().BBRProfile != "aggressive" {
+		t.Errorf("bbr profile = %q, want aggressive", o.QUICOrZero().BBRProfile)
 	}
-	if o.Obfs != "salamander" || o.ObfsParam != "obfspw" {
-		t.Errorf("obfs = %q/%q, want salamander/obfspw", o.Obfs, o.ObfsParam)
+	if o.ObfsOrZero().Type != "salamander" || o.ObfsOrZero().Param != "obfspw" {
+		t.Errorf("obfs = %q/%q, want salamander/obfspw", o.ObfsOrZero().Type, o.ObfsOrZero().Param)
 	}
 
 	tuic, err := parser.LinkParser{}.Parse([]byte(
@@ -39,11 +39,11 @@ func TestImportedHy2TUICTuningSurvivesTheVault(t *testing.T) {
 	}
 	plan, _ = importedPlan(t, tuic)
 	o = plan.Outbounds[0]
-	if o.CongestionControl != "cubic" || o.UDPRelayMode != "quic" || o.TUICHeartbeat != 15 {
-		t.Errorf("tuic tuning = %q/%q/%d, want cubic/quic/15", o.CongestionControl, o.UDPRelayMode, o.TUICHeartbeat)
+	if o.QUICOrZero().CongestionControl != "cubic" || o.QUICOrZero().UDPRelayMode != "quic" || o.QUICOrZero().TUICHeartbeat != 15 {
+		t.Errorf("tuic tuning = %q/%q/%d, want cubic/quic/15", o.QUICOrZero().CongestionControl, o.QUICOrZero().UDPRelayMode, o.QUICOrZero().TUICHeartbeat)
 	}
-	if o.Token != "tok123" {
-		t.Errorf("tuic token = %q, want tok123", o.Token)
+	if o.QUICOrZero().Token != "tok123" {
+		t.Errorf("tuic token = %q, want tok123", o.QUICOrZero().Token)
 	}
 }
 
@@ -57,7 +57,7 @@ func TestImportedHy2MihomoPortsSpelling(t *testing.T) {
 	}
 	plan, _ := importedPlan(t, res)
 	o := plan.Outbounds[0]
-	if o.HopPorts != "20000-30000" || o.HopInterval != 30 || o.BBRProfile != "standard" {
-		t.Errorf("hopping = %q/%d profile=%q, want 20000-30000/30/standard", o.HopPorts, o.HopInterval, o.BBRProfile)
+	if o.QUICOrZero().HopPorts != "20000-30000" || o.QUICOrZero().HopInterval != 30 || o.QUICOrZero().BBRProfile != "standard" {
+		t.Errorf("hopping = %q/%d profile=%q, want 20000-30000/30/standard", o.QUICOrZero().HopPorts, o.QUICOrZero().HopInterval, o.QUICOrZero().BBRProfile)
 	}
 }

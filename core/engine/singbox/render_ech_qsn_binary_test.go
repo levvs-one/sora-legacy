@@ -39,7 +39,7 @@ func TestBinaryECHQueryServerNameMatchesGate(t *testing.T) {
 		t.Fatal(err)
 	}
 	p := enginetest.Plan(engine.ProtocolTrojan)
-	p.Outbounds[0].TLS.ECH = engine.ECHConfig{Enabled: true, QueryServerName: "ech-query.example.com"}
+	p.Outbounds[0].TLS.ECH = &engine.ECHConfig{Enabled: true, QueryServerName: "ech-query.example.com"}
 	raw, err := Render(p, testRuntime)
 	if err != nil {
 		t.Fatal(err)

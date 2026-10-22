@@ -17,6 +17,9 @@ import (
 func buildProxy(o engine.Outbound) (proxy, error) {
 	udp := o.Protocol != engine.ProtocolHTTP && (o.Protocol != engine.ProtocolSOCKS5 || o.SOCKSUDP)
 	px := proxy{Type: "ss", Tag: o.ID, UDP: &udp, IPVer: "dual"}
+	q := o.QUICOrZero()
+	ob := o.ObfsOrZero()
+	wg := o.WireGuardOrZero()
 	// WireGuard uses its peer's server address.
 	if o.Server == "" && o.Protocol != engine.ProtocolWireGuard {
 		return proxy{}, fmt.Errorf("mihomo: outbound %s has no server", o.ID)
@@ -29,7 +32,7 @@ func buildProxy(o engine.Outbound) (proxy, error) {
 		px.Type = "ss"
 		px.Cipher = orDefault(o.Cipher, "aes-256-gcm")
 		px.Password = o.Password
-		if o.Plugin != "" {
+		if ob.Plugin != "" {
 			// An explicit SIP002 plugin goes through mihomo's plugin
 			// path; the legacy Obfs mapping below stays for the native
 			// simple-obfs fields. The plugin NAME must be translated:
@@ -38,20 +41,20 @@ func buildProxy(o engine.Outbound) (proxy, error) {
 			// "restls-plugin") and silently ignores any other name —
 			// the outbound would run unobfuscated (SP3b, read from the
 			// pinned adapter/outbound/shadowsocks.go).
-			spec := engine.SSPluginByName(o.Plugin)
-			if spec == nil || !engine.SupportsSSPlugin(engine.KindMihomo, o.Plugin) {
-				return proxy{}, fmt.Errorf("mihomo: shadowsocks outbound %s uses plugin %q, which mihomo does not implement", o.ID, o.Plugin)
+			spec := engine.SSPluginByName(ob.Plugin)
+			if spec == nil || !engine.SupportsSSPlugin(engine.KindMihomo, ob.Plugin) {
+				return proxy{}, fmt.Errorf("mihomo: shadowsocks outbound %s uses plugin %q, which mihomo does not implement", o.ID, ob.Plugin)
 			}
 			px.SSPlugin = spec.MihomoName
 			if px.SSPlugin == "" {
 				px.SSPlugin = spec.Name
 			}
-			if opts := ssPluginOpts(o.Plugin, o.PluginOpts); len(opts) > 0 {
+			if opts := ssPluginOpts(ob.Plugin, ob.PluginOpts); len(opts) > 0 {
 				px.SSPluginOpts = opts
 			}
-		} else if o.Obfs != "" {
-			px.Obfs = o.Obfs
-			px.ObfsParam = o.ObfsParam
+		} else if ob.Type != "" {
+			px.Obfs = ob.Type
+			px.ObfsParam = ob.Param
 		}
 	case engine.ProtocolVMess:
 		px.Type = "vmess"
@@ -69,31 +72,31 @@ func buildProxy(o engine.Outbound) (proxy, error) {
 	case engine.ProtocolHysteria2:
 		px.Type = "hysteria2"
 		px.Password = o.Password
-		if o.Obfs != "" {
-			px.Obfs = o.Obfs
-			px.ObfsPassword = o.ObfsParam
+		if ob.Type != "" {
+			px.Obfs = ob.Type
+			px.ObfsPassword = ob.Param
 		}
 		// Bandwidth caps switch the engine from BBR to Brutal congestion
 		// control; zero means auto.
-		if o.UpMbps > 0 {
-			px.Up = strconv.Itoa(o.UpMbps) + " Mbps"
+		if q.UpMbps > 0 {
+			px.Up = strconv.Itoa(q.UpMbps) + " Mbps"
 		}
-		if o.DownMbps > 0 {
-			px.Down = strconv.Itoa(o.DownMbps) + " Mbps"
+		if q.DownMbps > 0 {
+			px.Down = strconv.Itoa(q.DownMbps) + " Mbps"
 		}
-		if o.HopPorts != "" {
-			px.Ports = o.HopPorts
+		if q.HopPorts != "" {
+			px.Ports = q.HopPorts
 		}
-		if o.HopInterval > 0 {
-			px.HopInterval = o.HopInterval
+		if q.HopInterval > 0 {
+			px.HopInterval = q.HopInterval
 		}
 	case engine.ProtocolTUIC:
 		px.Type = "tuic"
 		px.UUID = o.UUID
 		px.Password = o.Password
 		// v4 servers authenticate with a token instead of uuid+password.
-		if o.Token != "" {
-			px.Token = o.Token
+		if q.Token != "" {
+			px.Token = q.Token
 		}
 		// The effective congestion controller always renders (the
 		// plan value, or DefaultTUICCongestion): mihomo silently
@@ -101,8 +104,8 @@ func buildProxy(o engine.Outbound) (proxy, error) {
 		// to its own default, so spelling the effective value is
 		// what keeps a plan's controller identical across engines.
 		px.CongestionController = o.EffectiveTUICCongestion()
-		if o.UDPRelayMode != "" {
-			px.UDPRelayMode = o.UDPRelayMode
+		if q.UDPRelayMode != "" {
+			px.UDPRelayMode = q.UDPRelayMode
 		}
 		// TUIC heartbeat in mihomo's spelling: milliseconds.
 		px.HeartbeatInterval = o.EffectiveTUICHeartbeatSeconds() * 1000
@@ -120,9 +123,9 @@ func buildProxy(o engine.Outbound) (proxy, error) {
 		return px, nil
 	case engine.ProtocolWireGuard:
 		px.Type = "wireguard"
-		px.PrivateKey = o.PrivateKey
+		px.PrivateKey = wg.PrivateKey
 		px.MTU = 1420
-		for _, address := range o.Addresses {
+		for _, address := range wg.Addresses {
 			prefix, err := netip.ParsePrefix(address)
 			if err != nil {
 				return proxy{}, fmt.Errorf("mihomo: wireguard outbound %s: address %q: %w", o.ID, address, err)
@@ -182,6 +185,7 @@ func buildProxy(o engine.Outbound) (proxy, error) {
 
 // applyTransport writes the nested options of the stream transport.
 func applyTransport(px *proxy, t engine.Transport) error {
+	x := t.XHTTPOrZero()
 	headers := maps.Clone(t.Headers)
 	if t.Host != "" && t.Type != "h2" && t.Type != "xhttp" {
 		if headers == nil {
@@ -214,11 +218,11 @@ func applyTransport(px *proxy, t engine.Transport) error {
 		// Mode passes through verbatim: the pinned docs list "auto"
 		// among the available mode values, so a plan's explicit auto
 		// is legal here, not a leak (S5-SP4, ported from sora).
-		opts := &xhttpOpts{Path: t.Path, Host: t.Host, Mode: t.Mode, Headers: maps.Clone(t.Headers),
-			XPaddingBytes: t.XPaddingBytes, ReuseSettings: xhttpReuseSettings(t)}
-		if t.DownloadAddress != "" {
+		opts := &xhttpOpts{Path: t.Path, Host: t.Host, Mode: x.Mode, Headers: maps.Clone(t.Headers),
+			XPaddingBytes: x.XPaddingBytes, ReuseSettings: xhttpReuseSettings(t)}
+		if x.DownloadAddress != "" {
 			opts.DownloadSettings = &xhttpDownload{
-				Server: t.DownloadAddress, Port: int(t.DownloadPort),
+				Server: x.DownloadAddress, Port: int(x.DownloadPort),
 				ReuseSettings: xhttpReuseSettings(t),
 			}
 		}
@@ -243,18 +247,19 @@ func applyTransport(px *proxy, t engine.Transport) error {
 // default concurrency on top of its connections (S5-SP4, ported
 // from sora).
 func xhttpReuseSettings(t engine.Transport) *xhttpReuse {
+	x := t.XHTTPOrZero()
 	r := &xhttpReuse{}
-	if t.XmuxMaxConcurrency > 0 {
-		r.MaxConcurrency = strconv.Itoa(t.XmuxMaxConcurrency)
+	if x.XmuxMaxConcurrency > 0 {
+		r.MaxConcurrency = strconv.Itoa(x.XmuxMaxConcurrency)
 	}
-	if t.XmuxMaxConnections > 0 {
-		r.MaxConnections = strconv.Itoa(t.XmuxMaxConnections)
+	if x.XmuxMaxConnections > 0 {
+		r.MaxConnections = strconv.Itoa(x.XmuxMaxConnections)
 	}
-	if t.XmuxMaxReuseTimes > 0 {
-		r.CMaxReuseTimes = strconv.Itoa(t.XmuxMaxReuseTimes)
+	if x.XmuxMaxReuseTimes > 0 {
+		r.CMaxReuseTimes = strconv.Itoa(x.XmuxMaxReuseTimes)
 	}
-	if t.XmuxMaxRequestTimes > 0 {
-		r.HMaxRequestTimes = strconv.Itoa(t.XmuxMaxRequestTimes)
+	if x.XmuxMaxRequestTimes > 0 {
+		r.HMaxRequestTimes = strconv.Itoa(x.XmuxMaxRequestTimes)
 	}
 	if r.MaxConcurrency == "" && r.MaxConnections == "" && r.CMaxReuseTimes == "" && r.HMaxRequestTimes == "" {
 		r.MaxConcurrency = "16-32"
@@ -263,11 +268,12 @@ func xhttpReuseSettings(t engine.Transport) *xhttpReuse {
 }
 
 func wireguardPeers(o engine.Outbound) ([]wireguardPeer, error) {
-	if len(o.Peers) == 0 {
+	wg := o.WireGuardOrZero()
+	if len(wg.Peers) == 0 {
 		return nil, fmt.Errorf("mihomo: wireguard outbound %s has no peer", o.ID)
 	}
-	out := make([]wireguardPeer, 0, len(o.Peers))
-	for _, peer := range o.Peers {
+	out := make([]wireguardPeer, 0, len(wg.Peers))
+	for _, peer := range wg.Peers {
 		host, portText, err := net.SplitHostPort(peer.Endpoint)
 		if err != nil {
 			return nil, fmt.Errorf("mihomo: wireguard outbound %s: peer endpoint: %w", o.ID, err)
@@ -311,6 +317,8 @@ func amneziaOptions(a *engine.AmneziaWG) map[string]any {
 
 // applyTLS writes TLS, SNI, ALPN, uTLS fingerprint and Reality parameters.
 func applyTLS(px *proxy, o engine.Outbound) error {
+	rs := o.TLS.RealityOrZero()
+	ech := o.TLS.ECHOrZero()
 	if o.Protocol == engine.ProtocolWireGuard {
 		return nil
 	}
@@ -326,25 +334,25 @@ func applyTLS(px *proxy, o engine.Outbound) error {
 	if len(o.TLS.ALPN) > 0 {
 		px.ALPN = o.TLS.ALPN
 	}
-	if o.TLS.ECH.Enabled {
-		cfg, err := mihomoECHConfig(o.TLS.ECH.Config)
+	if ech.Enabled {
+		cfg, err := mihomoECHConfig(ech.Config)
 		if err != nil {
 			return err
 		}
-		px.ECH = &echOpts{Enable: true, Config: cfg, QueryServerName: o.TLS.ECH.QueryServerName}
+		px.ECH = &echOpts{Enable: true, Config: cfg, QueryServerName: ech.QueryServerName}
 	}
 	if o.TLS.Insecure {
 		skip := true
 		px.SkipCertVerify = &skip
 	}
-	if o.TLS.Reality {
-		if o.TLS.RealityPublicKey == "" {
+	if o.TLS.Reality != nil {
+		if rs.PublicKey == "" {
 			return fmt.Errorf("mihomo: outbound %s uses reality without a public key", o.ID)
 		}
 		// REALITY only works behind a uTLS fingerprint; default to chrome
 		// like the sing-box and Xray renderers do.
 		px.Fingerprint = orDefault(o.TLS.Fingerprint, "chrome")
-		px.Reality = &reality{PublicKey: o.TLS.RealityPublicKey, ShortID: o.TLS.RealityShortID}
+		px.Reality = &reality{PublicKey: rs.PublicKey, ShortID: rs.ShortID}
 		// PASS3 deep S2 in sora: the plan's REALITY key-share knob,
 		// third leg of PASS2 S3. hybrid -> support-x25519mlkem768:
 		// true, classical -> false explicitly; unset leaves the key
@@ -355,7 +363,7 @@ func applyTLS(px *proxy, o engine.Outbound) error {
 		// hybrid), so "" honestly means "mihomo's default, which
 		// offers no hybrid" (CENSOR-FP; ported SP5-render from sora
 		// snapshot 63faf1d3480d5429b6bcec3483c19c8e03defb85).
-		switch o.TLS.KeyShare {
+		switch rs.KeyShare {
 		case "hybrid":
 			v := true
 			px.Reality.SupportMLKEM768 = &v

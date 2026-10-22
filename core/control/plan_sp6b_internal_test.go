@@ -61,11 +61,11 @@ func TestImportedNumericShortIDSurvives(t *testing.T) {
 			}
 			plan, _ := importedPlan(t, result)
 			o := plan.Outbounds[0]
-			if !o.TLS.Reality || o.TLS.RealityPublicKey != sp6bPbk {
+			if (o.TLS.Reality == nil) || o.TLS.RealityOrZero().PublicKey != sp6bPbk {
 				t.Fatalf("REALITY lost on the way to the engine: %+v", o.TLS)
 			}
-			if o.TLS.RealityShortID != tc.want {
-				t.Errorf("short-id = %q, want %q", o.TLS.RealityShortID, tc.want)
+			if o.TLS.RealityOrZero().ShortID != tc.want {
+				t.Errorf("short-id = %q, want %q", o.TLS.RealityOrZero().ShortID, tc.want)
 			}
 		})
 	}
@@ -116,7 +116,7 @@ func TestImportedNullTLSIsAbsent(t *testing.T) {
 				t.Errorf("wire security = %q, want no TLS claim for an absent tls value", wire.Security)
 			}
 			o := plan.Outbounds[0]
-			if o.TLS.Reality {
+			if o.TLS.Reality != nil {
 				t.Errorf("an absent tls value must not invent REALITY: %+v", o.TLS)
 			}
 			if o.Transport.Type != "ws" || o.Transport.Path != "/ws" {

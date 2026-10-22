@@ -27,13 +27,13 @@ func TestHy2SingBox114Gates(t *testing.T) {
 		mut     func(*Outbound)
 	}{
 		{"hop_interval_max", FeatureHy2HopIntervalMax, func(o *Outbound) {
-			o.HopPorts, o.HopInterval, o.HopIntervalMax = "20000-30000", 30, 90
+			o.QUICBox().HopPorts, o.QUICBox().HopInterval, o.QUICBox().HopIntervalMax = "20000-30000", 30, 90
 		}},
 		{"bbr_profile", FeatureHy2BBRProfile, func(o *Outbound) {
-			o.BBRProfile = "conservative"
+			o.QUICBox().BBRProfile = "conservative"
 		}},
 		{"gecko obfs", FeatureHy2ObfsGecko, func(o *Outbound) {
-			o.Obfs, o.ObfsParam = "gecko", "gecko-secret"
+			o.ObfsBox().Type, o.ObfsBox().Param = "gecko", "gecko-secret"
 		}},
 	}
 	for _, c := range cases {
@@ -88,8 +88,8 @@ func TestHy2SingBox114Gates(t *testing.T) {
 // a general Hysteria2 refusal.
 func TestHy2SingBox114GateIsNarrow(t *testing.T) {
 	o := hy2Outbound()
-	o.Obfs, o.ObfsParam = "salamander", "obfs-secret"
-	o.HopPorts, o.HopInterval = "20000-30000,40000", 30
+	o.ObfsBox().Type, o.ObfsBox().Param = "salamander", "obfs-secret"
+	o.QUICBox().HopPorts, o.QUICBox().HopInterval = "20000-30000,40000", 30
 	p := &Plan{SessionID: "s1", Outbounds: []Outbound{o}}
 	for _, version := range []string{"1.12.0", "1.12.12", "1.13.21", "1.14.3"} {
 		caps := BuildCapabilities(KindSingBox, mustVersion(t, version), nil)
@@ -108,9 +108,9 @@ func TestHy2SingBox114GateIsNarrow(t *testing.T) {
 // build, so the refusal reaches the client before any render.
 func TestHy2SingBox114SelectEngine(t *testing.T) {
 	o := hy2Outbound()
-	o.HopPorts, o.HopInterval, o.HopIntervalMax = "20000-30000", 30, 90
-	o.BBRProfile = "conservative"
-	o.Obfs, o.ObfsParam = "gecko", "gecko-secret"
+	o.QUICBox().HopPorts, o.QUICBox().HopInterval, o.QUICBox().HopIntervalMax = "20000-30000", 30, 90
+	o.QUICBox().BBRProfile = "conservative"
+	o.ObfsBox().Type, o.ObfsBox().Param = "gecko", "gecko-secret"
 	p := &Plan{SessionID: "s1", Outbounds: []Outbound{o}}
 
 	old := []Availability{{Kind: KindSingBox, Usable: true, Version: mustVersion(t, "1.13.21")}}

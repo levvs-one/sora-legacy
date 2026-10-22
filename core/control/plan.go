@@ -1368,23 +1368,38 @@ func applyCredential(outbound *engine.Outbound, values map[string]string) error 
 	outbound.Cipher = values["method"]
 	outbound.UserID = values["user"]
 	outbound.Flow = values["flow"]
-	outbound.Obfs = values["obfs"]
-	outbound.ObfsParam = values["obfs_param"]
-	outbound.Plugin = values["ss_plugin"]
-	outbound.PluginOpts = values["ss_plugin_opts"]
+	// Obfuscation settings, boxed only when the document carries
+	// any (or a box already exists), like the QUIC group below.
+	obfs := engine.ObfsSettings{
+		Type:       values["obfs"],
+		Param:      values["obfs_param"],
+		Plugin:     values["ss_plugin"],
+		PluginOpts: values["ss_plugin_opts"],
+	}
+	if outbound.Obfs != nil || obfs != (engine.ObfsSettings{}) {
+		*outbound.ObfsBox() = obfs
+	}
 	// Hysteria2/TUIC tuning restored from the credential document;
 	// atoiNonNegative keeps a forged document from smuggling negative
 	// tuning into the plan (hard validation is Outbound.Validate).
-	outbound.UpMbps = atoiNonNegative(values["upmbps"])
-	outbound.DownMbps = atoiNonNegative(values["downmbps"])
-	outbound.HopPorts = values["hop_ports"]
-	outbound.HopInterval = atoiNonNegative(values["hop_interval"])
-	outbound.HopIntervalMax = atoiNonNegative(values["hop_interval_max"])
-	outbound.BBRProfile = values["bbr_profile"]
-	outbound.CongestionControl = values["congestion_control"]
-	outbound.UDPRelayMode = values["udp_relay_mode"]
-	outbound.TUICHeartbeat = atoiNonNegative(values["heartbeat"])
-	outbound.Token = values["token"]
+	// The QUIC box is allocated only when the document actually
+	// carries tuning (or one is already boxed): a TCP outbound's
+	// credential must not pay for a group it never fills.
+	quic := engine.QUICSettings{
+		UpMbps:            atoiNonNegative(values["upmbps"]),
+		DownMbps:          atoiNonNegative(values["downmbps"]),
+		HopPorts:          values["hop_ports"],
+		HopInterval:       atoiNonNegative(values["hop_interval"]),
+		HopIntervalMax:    atoiNonNegative(values["hop_interval_max"]),
+		BBRProfile:        values["bbr_profile"],
+		CongestionControl: values["congestion_control"],
+		UDPRelayMode:      values["udp_relay_mode"],
+		TUICHeartbeat:     atoiNonNegative(values["heartbeat"]),
+		Token:             values["token"],
+	}
+	if outbound.QUIC != nil || quic != (engine.QUICSettings{}) {
+		*outbound.QUICBox() = quic
+	}
 	outbound.PublicKey = values["public_key"]
 	outbound.ShortID = values["short_id"]
 	outbound.Encryption = values["encryption"]
@@ -1400,30 +1415,37 @@ func applyCredential(outbound *engine.Outbound, values map[string]string) error 
 	// block.
 	if strings.EqualFold(values["security"], "reality") {
 		outbound.TLS.Enabled = true
-		outbound.TLS.Reality = true
-		outbound.TLS.RealityPublicKey = values["public_key"]
-		outbound.TLS.RealityShortID = values["short_id"]
-		outbound.TLS.SpiderX = values["spider_x"]
+		outbound.TLS.Reality = &engine.RealitySettings{
+			PublicKey: values["public_key"],
+			ShortID:   values["short_id"],
+			SpiderX:   values["spider_x"],
+		}
 	}
 	outbound.Transport.Path = values["path"]
 	outbound.Transport.Host = values["host_header"]
 	outbound.Transport.Service = values["service_name"]
-	outbound.Transport.Mode = values["mode"]
+	// The XHTTP box is allocated only when the document carries
+	// XHTTP data (or one is already boxed), for the same reason as
+	// the QUIC box above.
+	xhttp := engine.XHTTPSettings{Mode: values["mode"]}
 	// XHTTP up/down split from the link's extra= JSON (S5-SP4): the
 	// address rides the credential document; the port is bounded again
 	// here so a forged document cannot smuggle an invalid one.
-	outbound.Transport.DownloadAddress = values["download_address"]
+	xhttp.DownloadAddress = values["download_address"]
 	if port := atoiNonNegative(values["download_port"]); port <= 65535 {
-		outbound.Transport.DownloadPort = uint16(port)
+		xhttp.DownloadPort = uint16(port)
 	}
 	// XHTTP padding and xmux tuning from the same extra= data;
 	// atoiNonNegative keeps a forged document from smuggling negative
 	// tuning into the plan.
-	outbound.Transport.XPaddingBytes = values["x_padding_bytes"]
-	outbound.Transport.XmuxMaxConcurrency = atoiNonNegative(values["xmux_max_concurrency"])
-	outbound.Transport.XmuxMaxConnections = atoiNonNegative(values["xmux_max_connections"])
-	outbound.Transport.XmuxMaxRequestTimes = atoiNonNegative(values["xmux_max_request_times"])
-	outbound.Transport.XmuxMaxReuseTimes = atoiNonNegative(values["xmux_max_reuse_times"])
+	xhttp.XPaddingBytes = values["x_padding_bytes"]
+	xhttp.XmuxMaxConcurrency = atoiNonNegative(values["xmux_max_concurrency"])
+	xhttp.XmuxMaxConnections = atoiNonNegative(values["xmux_max_connections"])
+	xhttp.XmuxMaxRequestTimes = atoiNonNegative(values["xmux_max_request_times"])
+	xhttp.XmuxMaxReuseTimes = atoiNonNegative(values["xmux_max_reuse_times"])
+	if outbound.Transport.XHTTP != nil || xhttp != (engine.XHTTPSettings{}) {
+		*outbound.Transport.XHTTPBox() = xhttp
+	}
 	if raw := values["headers"]; raw != "" {
 		// A broken headers document fails closed like the peers
 		// document below: silently dropping headers would change
@@ -1432,16 +1454,20 @@ func applyCredential(outbound *engine.Outbound, values map[string]string) error 
 			return fmt.Errorf("control: a stored transport headers document is unreadable: %v", err)
 		}
 	}
-	outbound.PrivateKey = values["private_key"]
-	if addresses := values["addresses"]; addresses != "" {
-		outbound.Addresses = strings.Split(addresses, ",")
-	}
-	if peers := values["peers"]; peers != "" {
-		// A broken peers document fails closed like xray_profile and
-		// amneziawg above: silently dropping peers would leave the
-		// WireGuard outbound without its endpoints.
-		if err := json.Unmarshal([]byte(peers), &outbound.Peers); err != nil {
-			return fmt.Errorf("control: a stored peers document is unreadable: %v", err)
+	// WireGuard material, boxed only when the document carries any
+	// (or a box already exists), like the QUIC/XHTTP groups above.
+	if outbound.WireGuard != nil || values["private_key"] != "" || values["addresses"] != "" || values["peers"] != "" {
+		outbound.WireGuardBox().PrivateKey = values["private_key"]
+		if addresses := values["addresses"]; addresses != "" {
+			outbound.WireGuardBox().Addresses = strings.Split(addresses, ",")
+		}
+		if peers := values["peers"]; peers != "" {
+			// A broken peers document fails closed like xray_profile and
+			// amneziawg above: silently dropping peers would leave the
+			// WireGuard outbound without its endpoints.
+			if err := json.Unmarshal([]byte(peers), &outbound.WireGuardBox().Peers); err != nil {
+				return fmt.Errorf("control: a stored peers document is unreadable: %v", err)
+			}
 		}
 	}
 	if packed := values["xray_profile"]; packed != "" {
@@ -1449,7 +1475,7 @@ func applyCredential(outbound *engine.Outbound, values map[string]string) error 
 		if err != nil {
 			return err
 		}
-		outbound.Profile = profile
+		outbound.Profile = &profile
 	}
 	if raw := values["amneziawg"]; raw != "" {
 		awg, err := amneziaFrom(raw)

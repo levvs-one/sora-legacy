@@ -25,32 +25,32 @@ func ssPluginOutbound(t *testing.T, cfg map[string]any) map[string]any {
 // emit an empty obfs-host anymore.
 func TestRenderShadowsocksPlugin(t *testing.T) {
 	p := enginetest.Plan(engine.ProtocolShadowsocks)
-	p.Outbounds[0].Plugin = "v2ray-plugin"
-	p.Outbounds[0].PluginOpts = "tls;host=example.com"
-	p.Outbounds[0].Obfs = "tls"
+	p.Outbounds[0].ObfsBox().Plugin = "v2ray-plugin"
+	p.Outbounds[0].ObfsBox().PluginOpts = "tls;host=example.com"
+	p.Outbounds[0].ObfsBox().Type = "tls"
 	ob := ssPluginOutbound(t, render(t, p))
 	if ob["plugin"] != "v2ray-plugin" || ob["plugin_opts"] != "tls;host=example.com" {
 		t.Fatalf("plugin must render verbatim, got %v", ob)
 	}
 
 	p = enginetest.Plan(engine.ProtocolShadowsocks)
-	p.Outbounds[0].Obfs = "tls"
+	p.Outbounds[0].ObfsBox().Type = "tls"
 	ob = ssPluginOutbound(t, render(t, p))
 	if ob["plugin"] != "obfs-local" || ob["plugin_opts"] != "obfs=tls" {
 		t.Fatalf("legacy obfs must not emit an empty obfs-host, got %v", ob)
 	}
 
 	p = enginetest.Plan(engine.ProtocolShadowsocks)
-	p.Outbounds[0].Obfs = "http"
-	p.Outbounds[0].ObfsParam = "example.com"
+	p.Outbounds[0].ObfsBox().Type = "http"
+	p.Outbounds[0].ObfsBox().Param = "example.com"
 	ob = ssPluginOutbound(t, render(t, p))
 	if ob["plugin_opts"] != "obfs=http;obfs-host=example.com" {
 		t.Fatalf("obfs-host must survive when set, got %v", ob)
 	}
 
 	p = enginetest.Plan(engine.ProtocolShadowsocks)
-	p.Outbounds[0].Plugin = "obfs-local"
-	p.Outbounds[0].PluginOpts = "obfs=tls;obfs-host=example.com"
+	p.Outbounds[0].ObfsBox().Plugin = "obfs-local"
+	p.Outbounds[0].ObfsBox().PluginOpts = "obfs=tls;obfs-host=example.com"
 	ob = ssPluginOutbound(t, render(t, p))
 	if ob["plugin"] != "obfs-local" || ob["plugin_opts"] != "obfs=tls;obfs-host=example.com" {
 		t.Fatalf("explicit obfs-local plugin must render verbatim, got %v", ob)
@@ -74,8 +74,8 @@ func TestRenderShadowsocksPluginFailClosed(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			p := enginetest.Plan(engine.ProtocolShadowsocks)
-			p.Outbounds[0].Plugin = tc.plugin
-			p.Outbounds[0].PluginOpts = tc.opts
+			p.Outbounds[0].ObfsBox().Plugin = tc.plugin
+			p.Outbounds[0].ObfsBox().PluginOpts = tc.opts
 			if _, err := Render(p, testRuntime); err == nil || !strings.Contains(err.Error(), "plugin binary sora does not ship") {
 				t.Fatalf("Render = %v, want fail-closed error naming the unshipped plugin binary", err)
 			}
@@ -88,8 +88,8 @@ func TestRenderShadowsocksPluginFailClosed(t *testing.T) {
 // because sing-box renders CanonicalSSPluginOpts (schema order).
 func TestRenderPluginOptsCanonicalOrder(t *testing.T) {
 	p := enginetest.Plan(engine.ProtocolShadowsocks)
-	p.Outbounds[0].Plugin = "v2ray-plugin"
-	p.Outbounds[0].PluginOpts = "path=/ws;host=example.com;tls"
+	p.Outbounds[0].ObfsBox().Plugin = "v2ray-plugin"
+	p.Outbounds[0].ObfsBox().PluginOpts = "path=/ws;host=example.com;tls"
 	ob := ssPluginOutbound(t, render(t, p))
 	if ob["plugin_opts"] != "tls;host=example.com;path=/ws" {
 		t.Fatalf("plugin_opts = %v, want canonical schema order", ob["plugin_opts"])

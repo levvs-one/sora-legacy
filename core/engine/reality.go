@@ -44,7 +44,7 @@ func (o Outbound) HasVLESSEncryption() bool {
 // outbound. Empty means nothing to warn about. The codes are stable UI
 // contract: the app maps each to a localized message.
 func (o Outbound) RealityWarnings() []string {
-	if !o.TLS.Reality {
+	if o.TLS.Reality == nil {
 		return nil
 	}
 	var out []string
@@ -67,7 +67,7 @@ func (o Outbound) RealityWarnings() []string {
 		// flow is legal on any transport, so no warning.
 		out = append(out, "reality-xhttp-vision")
 	}
-	if o.TLS.SpiderX != "" {
+	if o.TLS.RealityOrZero().SpiderX != "" {
 		// SpiderX is rendered only by Xray. sing-box's client REALITY
 		// schema has no spider field and mihomo's reality-opts has none
 		// either, so on those paths the parameter would vanish
@@ -91,16 +91,16 @@ func (o Outbound) RealityWarnings() []string {
 // nil error means the cryptographic parameters are well-formed; it
 // says nothing about whether the dest is a good decoy.
 func (o Outbound) ValidateReality() error {
-	if !o.TLS.Reality {
+	if o.TLS.Reality == nil {
 		return nil
 	}
-	if o.TLS.RealityPublicKey == "" {
+	if o.TLS.RealityOrZero().PublicKey == "" {
 		return fmt.Errorf("outbound %s: REALITY requires a public key", o.ID)
 	}
-	if !isX25519PublicKey(o.TLS.RealityPublicKey) {
+	if !isX25519PublicKey(o.TLS.RealityOrZero().PublicKey) {
 		return fmt.Errorf("outbound %s: REALITY public key is not a 32-byte base64url X25519 key", o.ID)
 	}
-	if id := o.TLS.RealityShortID; id != "" && !isHexID(id, 8) {
+	if id := o.TLS.RealityOrZero().ShortID; id != "" && !isHexID(id, 8) {
 		return fmt.Errorf("outbound %s: REALITY shortId must be hex, at most 8 bytes", o.ID)
 	}
 	return nil

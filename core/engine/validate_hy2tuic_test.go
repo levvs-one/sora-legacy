@@ -15,9 +15,9 @@ func hy2Outbound() Outbound {
 
 func TestValidateAcceptsHysteria2Tuning(t *testing.T) {
 	o := hy2Outbound()
-	o.UpMbps, o.DownMbps = 20, 100
-	o.HopPorts = "20000-30000,40000"
-	o.HopInterval = 30
+	o.QUICBox().UpMbps, o.QUICBox().DownMbps = 20, 100
+	o.QUICBox().HopPorts = "20000-30000,40000"
+	o.QUICBox().HopInterval = 30
 	if err := o.Validate(); err != nil {
 		t.Fatalf("Validate = %v, want nil", err)
 	}
@@ -27,9 +27,9 @@ func TestValidateHysteria21_14Tuning(t *testing.T) {
 	// S4: sing-box 1.14 fields — randomized hop interval and BBR
 	// profile — validate like the base tuning does.
 	ok := hy2Outbound()
-	ok.HopPorts = "20000-30000"
-	ok.HopInterval, ok.HopIntervalMax = 30, 90
-	ok.BBRProfile = "conservative"
+	ok.QUICBox().HopPorts = "20000-30000"
+	ok.QUICBox().HopInterval, ok.QUICBox().HopIntervalMax = 30, 90
+	ok.QUICBox().BBRProfile = "conservative"
 	if err := ok.Validate(); err != nil {
 		t.Fatalf("Validate = %v, want nil", err)
 	}
@@ -37,13 +37,13 @@ func TestValidateHysteria21_14Tuning(t *testing.T) {
 		name string
 		mut  func(*Outbound)
 	}{
-		{"negative hop max", func(o *Outbound) { o.HopIntervalMax = -1 }},
-		{"hop max without ports", func(o *Outbound) { o.HopIntervalMax = 60 }},
+		{"negative hop max", func(o *Outbound) { o.QUICBox().HopIntervalMax = -1 }},
+		{"hop max without ports", func(o *Outbound) { o.QUICBox().HopIntervalMax = 60 }},
 		{"hop max below interval", func(o *Outbound) {
-			o.HopPorts = "20000"
-			o.HopInterval, o.HopIntervalMax = 90, 30
+			o.QUICBox().HopPorts = "20000"
+			o.QUICBox().HopInterval, o.QUICBox().HopIntervalMax = 90, 30
 		}},
-		{"unknown bbr profile", func(o *Outbound) { o.BBRProfile = "turbo" }},
+		{"unknown bbr profile", func(o *Outbound) { o.QUICBox().BBRProfile = "turbo" }},
 	}
 	for _, c := range bad {
 		t.Run(c.name, func(t *testing.T) {
@@ -61,14 +61,14 @@ func TestValidateRejectsBadHysteria2Tuning(t *testing.T) {
 		name string
 		mut  func(*Outbound)
 	}{
-		{"negative up", func(o *Outbound) { o.UpMbps = -1 }},
-		{"negative down", func(o *Outbound) { o.DownMbps = -1 }},
-		{"negative hop interval", func(o *Outbound) { o.HopInterval = -1 }},
-		{"hop interval below minimum", func(o *Outbound) { o.HopPorts = "20000"; o.HopInterval = 4 }},
-		{"hop interval without ports", func(o *Outbound) { o.HopInterval = 30 }},
-		{"bad hop ports", func(o *Outbound) { o.HopPorts = "abc" }},
-		{"reversed hop range", func(o *Outbound) { o.HopPorts = "30000-20000" }},
-		{"port zero in hop range", func(o *Outbound) { o.HopPorts = "0-100" }},
+		{"negative up", func(o *Outbound) { o.QUICBox().UpMbps = -1 }},
+		{"negative down", func(o *Outbound) { o.QUICBox().DownMbps = -1 }},
+		{"negative hop interval", func(o *Outbound) { o.QUICBox().HopInterval = -1 }},
+		{"hop interval below minimum", func(o *Outbound) { o.QUICBox().HopPorts = "20000"; o.QUICBox().HopInterval = 4 }},
+		{"hop interval without ports", func(o *Outbound) { o.QUICBox().HopInterval = 30 }},
+		{"bad hop ports", func(o *Outbound) { o.QUICBox().HopPorts = "abc" }},
+		{"reversed hop range", func(o *Outbound) { o.QUICBox().HopPorts = "30000-20000" }},
+		{"port zero in hop range", func(o *Outbound) { o.QUICBox().HopPorts = "0-100" }},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -94,7 +94,7 @@ func TestValidateAcceptsTUICTuning(t *testing.T) {
 	for _, cc := range []string{"", "bbr", "cubic", "new_reno"} {
 		for _, mode := range []string{"", "native", "quic"} {
 			o := tuicOutbound()
-			o.CongestionControl, o.UDPRelayMode = cc, mode
+			o.QUICBox().CongestionControl, o.QUICBox().UDPRelayMode = cc, mode
 			if err := o.Validate(); err != nil {
 				t.Fatalf("Validate(%q, %q) = %v, want nil", cc, mode, err)
 			}
@@ -104,12 +104,12 @@ func TestValidateAcceptsTUICTuning(t *testing.T) {
 
 func TestValidateRejectsBadTUICTuning(t *testing.T) {
 	o := tuicOutbound()
-	o.CongestionControl = "brutal"
+	o.QUICBox().CongestionControl = "brutal"
 	if err := o.Validate(); err == nil {
 		t.Fatal("Validate = nil for unknown tuic congestion control, want error")
 	}
 	o = tuicOutbound()
-	o.UDPRelayMode = "stream"
+	o.QUICBox().UDPRelayMode = "stream"
 	if err := o.Validate(); err == nil {
 		t.Fatal("Validate = nil for unknown tuic udp relay mode, want error")
 	}
@@ -117,7 +117,7 @@ func TestValidateRejectsBadTUICTuning(t *testing.T) {
 
 func TestSecretsIncludesTUICToken(t *testing.T) {
 	o := tuicOutbound()
-	o.Token = "v4-token-secret"
+	o.QUICBox().Token = "v4-token-secret"
 	for _, s := range o.Secrets() {
 		if s == "v4-token-secret" {
 			return
@@ -133,7 +133,7 @@ func TestValidateHysteria2ObfsGate(t *testing.T) {
 	// config load (verified on the pins with `sing-box check` and
 	// `mihomo -t` — config acceptance, not live traffic).
 	ok := hy2Outbound()
-	ok.Obfs, ok.ObfsParam = "gecko", "gecko-secret"
+	ok.ObfsBox().Type, ok.ObfsBox().Param = "gecko", "gecko-secret"
 	if err := ok.Validate(); err != nil {
 		t.Fatalf("Validate(gecko) = %v, want nil", err)
 	}
@@ -141,15 +141,15 @@ func TestValidateHysteria2ObfsGate(t *testing.T) {
 		name string
 		mut  func(*Outbound)
 	}{
-		{"unknown obfs", func(o *Outbound) { o.Obfs, o.ObfsParam = "bogus", "x" }},
-		{"obfs without password", func(o *Outbound) { o.Obfs, o.ObfsParam = "salamander", "" }},
-		{"password without type", func(o *Outbound) { o.Obfs, o.ObfsParam = "", "orphan" }},
-		{"cap above ceiling", func(o *Outbound) { o.DownMbps = MaxHy2BandwidthMbps + 1 }},
+		{"unknown obfs", func(o *Outbound) { o.ObfsBox().Type, o.ObfsBox().Param = "bogus", "x" }},
+		{"obfs without password", func(o *Outbound) { o.ObfsBox().Type, o.ObfsBox().Param = "salamander", "" }},
+		{"password without type", func(o *Outbound) { o.ObfsBox().Type, o.ObfsBox().Param = "", "orphan" }},
+		{"cap above ceiling", func(o *Outbound) { o.QUICBox().DownMbps = MaxHy2BandwidthMbps + 1 }},
 	}
 	for _, c := range bad {
 		t.Run(c.name, func(t *testing.T) {
 			o := hy2Outbound()
-			o.Obfs, o.ObfsParam = "", ""
+			o.ObfsBox().Type, o.ObfsBox().Param = "", ""
 			c.mut(&o)
 			if err := o.Validate(); err == nil {
 				t.Fatalf("Validate = nil, want error")
@@ -161,14 +161,14 @@ func TestValidateHysteria2ObfsGate(t *testing.T) {
 func TestValidateTUICHeartbeat(t *testing.T) {
 	for _, hb := range []int{0, 1, 10, MaxTUICHeartbeatSeconds} {
 		o := tuicOutbound()
-		o.TUICHeartbeat = hb
+		o.QUICBox().TUICHeartbeat = hb
 		if err := o.Validate(); err != nil {
 			t.Fatalf("Validate(heartbeat=%d) = %v, want nil", hb, err)
 		}
 	}
 	for _, hb := range []int{-1, MaxTUICHeartbeatSeconds + 1} {
 		o := tuicOutbound()
-		o.TUICHeartbeat = hb
+		o.QUICBox().TUICHeartbeat = hb
 		if err := o.Validate(); err == nil {
 			t.Fatalf("Validate(heartbeat=%d) = nil, want error", hb)
 		}
@@ -183,7 +183,7 @@ func TestHy2ObfsRequiresFeatureGate(t *testing.T) {
 	if p.RequiredFeatures()[FeatureHy2Obfs] {
 		t.Fatal("plain hy2 plan must not require the obfs feature")
 	}
-	p.Outbounds[0].Obfs, p.Outbounds[0].ObfsParam = "salamander", "secret"
+	p.Outbounds[0].ObfsBox().Type, p.Outbounds[0].ObfsBox().Param = "salamander", "secret"
 	if !p.RequiredFeatures()[FeatureHy2Obfs] {
 		t.Fatal("obfuscated hy2 plan must require FeatureHy2Obfs")
 	}
@@ -225,7 +225,7 @@ func TestEffectiveTUICDefaults(t *testing.T) {
 	if o.EffectiveTUICHeartbeatSeconds() != DefaultTUICHeartbeatSeconds {
 		t.Fatalf("heartbeat = %d, want %d", o.EffectiveTUICHeartbeatSeconds(), DefaultTUICHeartbeatSeconds)
 	}
-	o.CongestionControl, o.TUICHeartbeat = "new_reno", 42
+	o.QUICBox().CongestionControl, o.QUICBox().TUICHeartbeat = "new_reno", 42
 	if o.EffectiveTUICCongestion() != "new_reno" || o.EffectiveTUICHeartbeatSeconds() != 42 {
 		t.Fatal("pinned values must win over defaults")
 	}
@@ -241,29 +241,31 @@ func TestValidateHy2TUICBoundaries(t *testing.T) {
 		mut     func(*Outbound)
 		wantErr bool
 	}{
-		{"caps zero = bbr", func(o *Outbound) { o.UpMbps, o.DownMbps = 0, 0 }, false},
-		{"caps at ceiling", func(o *Outbound) { o.UpMbps, o.DownMbps = MaxHy2BandwidthMbps, MaxHy2BandwidthMbps }, false},
-		{"up one past ceiling", func(o *Outbound) { o.UpMbps = MaxHy2BandwidthMbps + 1 }, true},
-		{"down one past ceiling", func(o *Outbound) { o.DownMbps = MaxHy2BandwidthMbps + 1 }, true},
-		{"hop empty", func(o *Outbound) { o.HopPorts = "" }, false},
-		{"hop single port", func(o *Outbound) { o.HopPorts = "443" }, false},
-		{"hop port 1", func(o *Outbound) { o.HopPorts = "1" }, false},
-		{"hop port 65535", func(o *Outbound) { o.HopPorts = "65535" }, false},
-		{"hop port 0", func(o *Outbound) { o.HopPorts = "0" }, true},
-		{"hop port 65536", func(o *Outbound) { o.HopPorts = "65536" }, true},
-		{"hop full range", func(o *Outbound) { o.HopPorts = "1-65535" }, false},
-		{"hop degenerate range", func(o *Outbound) { o.HopPorts = "5000-5000" }, false},
-		{"hop reversed range", func(o *Outbound) { o.HopPorts = "5000-4999" }, true},
-		{"hop empty element", func(o *Outbound) { o.HopPorts = "20000,,30000" }, true},
-		{"hop trailing comma", func(o *Outbound) { o.HopPorts = "20000," }, true},
-		{"hop interval at minimum", func(o *Outbound) { o.HopPorts, o.HopInterval = "20000", MinHy2HopIntervalSeconds }, false},
-		{"hop interval below minimum", func(o *Outbound) { o.HopPorts, o.HopInterval = "20000", MinHy2HopIntervalSeconds-1 }, true},
-		{"hop interval max equals interval", func(o *Outbound) { o.HopPorts, o.HopInterval, o.HopIntervalMax = "20000", 30, 30 }, false},
+		{"caps zero = bbr", func(o *Outbound) { o.QUICBox().UpMbps, o.QUICBox().DownMbps = 0, 0 }, false},
+		{"caps at ceiling", func(o *Outbound) { o.QUICBox().UpMbps, o.QUICBox().DownMbps = MaxHy2BandwidthMbps, MaxHy2BandwidthMbps }, false},
+		{"up one past ceiling", func(o *Outbound) { o.QUICBox().UpMbps = MaxHy2BandwidthMbps + 1 }, true},
+		{"down one past ceiling", func(o *Outbound) { o.QUICBox().DownMbps = MaxHy2BandwidthMbps + 1 }, true},
+		{"hop empty", func(o *Outbound) { o.QUICBox().HopPorts = "" }, false},
+		{"hop single port", func(o *Outbound) { o.QUICBox().HopPorts = "443" }, false},
+		{"hop port 1", func(o *Outbound) { o.QUICBox().HopPorts = "1" }, false},
+		{"hop port 65535", func(o *Outbound) { o.QUICBox().HopPorts = "65535" }, false},
+		{"hop port 0", func(o *Outbound) { o.QUICBox().HopPorts = "0" }, true},
+		{"hop port 65536", func(o *Outbound) { o.QUICBox().HopPorts = "65536" }, true},
+		{"hop full range", func(o *Outbound) { o.QUICBox().HopPorts = "1-65535" }, false},
+		{"hop degenerate range", func(o *Outbound) { o.QUICBox().HopPorts = "5000-5000" }, false},
+		{"hop reversed range", func(o *Outbound) { o.QUICBox().HopPorts = "5000-4999" }, true},
+		{"hop empty element", func(o *Outbound) { o.QUICBox().HopPorts = "20000,,30000" }, true},
+		{"hop trailing comma", func(o *Outbound) { o.QUICBox().HopPorts = "20000," }, true},
+		{"hop interval at minimum", func(o *Outbound) { o.QUICBox().HopPorts, o.QUICBox().HopInterval = "20000", MinHy2HopIntervalSeconds }, false},
+		{"hop interval below minimum", func(o *Outbound) { o.QUICBox().HopPorts, o.QUICBox().HopInterval = "20000", MinHy2HopIntervalSeconds-1 }, true},
+		{"hop interval max equals interval", func(o *Outbound) {
+			o.QUICBox().HopPorts, o.QUICBox().HopInterval, o.QUICBox().HopIntervalMax = "20000", 30, 30
+		}, false},
 	}
 	for _, c := range hy2Cases {
 		t.Run("hy2/"+c.name, func(t *testing.T) {
 			o := hy2Outbound()
-			o.Obfs, o.ObfsParam = "", ""
+			o.ObfsBox().Type, o.ObfsBox().Param = "", ""
 			c.mut(&o)
 			err := o.Validate()
 			if (err != nil) != c.wantErr {
@@ -286,7 +288,7 @@ func TestValidateHy2TUICBoundaries(t *testing.T) {
 	for _, c := range tuicCases {
 		t.Run("tuic/"+c.name, func(t *testing.T) {
 			o := tuicOutbound()
-			o.TUICHeartbeat = c.hb
+			o.QUICBox().TUICHeartbeat = c.hb
 			err := o.Validate()
 			if (err != nil) != c.wantErr {
 				t.Fatalf("Validate(heartbeat=%d) = %v, wantErr %v", c.hb, err, c.wantErr)
@@ -301,7 +303,7 @@ func TestValidateHy2TUICBoundaries(t *testing.T) {
 // defence, not an excuse to leak at the source (CENSOR-P3 "мелочи").
 func TestHy2ObfsValidationNeverEchoesPassword(t *testing.T) {
 	o := hy2Outbound()
-	o.Obfs, o.ObfsParam = "bogus-type", "obfs-secret-value"
+	o.ObfsBox().Type, o.ObfsBox().Param = "bogus-type", "obfs-secret-value"
 	err := o.Validate()
 	if err == nil {
 		t.Fatal("Validate = nil for unknown obfs, want error")

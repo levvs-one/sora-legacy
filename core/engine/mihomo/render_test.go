@@ -276,7 +276,7 @@ func TestEngineAcceptsRenderedPlans(t *testing.T) {
 	all.Outbounds = append(all.Outbounds, enginetest.AmneziaWG())
 	xhttp := enginetest.Plan(engine.ProtocolVLESS)
 	xhttp.Outbounds[0].Flow = ""
-	xhttp.Outbounds[0].Transport = engine.Transport{Type: "xhttp", Path: "/x", Host: "cdn.example.com", Mode: "stream-one"}
+	xhttp.Outbounds[0].Transport = engine.Transport{Type: "xhttp", Path: "/x", Host: "cdn.example.com", XHTTP: &engine.XHTTPSettings{Mode: "stream-one"}}
 	for name, p := range map[string]*engine.Plan{"all protocols and amneziawg": all, "xhttp": xhttp} {
 		t.Run(name, func(t *testing.T) {
 			rendered, err := Render(p, Runtime{ControllerAddr: "127.0.0.1:9090", Secret: "s", MixedPort: 7890})
@@ -336,7 +336,7 @@ func TestRenderRealityForcesAClientFingerprint(t *testing.T) {
 			ID: "srv-1", Name: "Reality 01", Protocol: engine.ProtocolVLESS,
 			Server: "re.example.com", Port: 443, UUID: "11111111-2222-3333-4444-555555555555",
 			TLS: engine.TLS{Enabled: true, ServerName: "www.example.com", Fingerprint: fp,
-				Reality: true, RealityPublicKey: "Z84J2IelR9ch3k8VtlVhhs5ycBUlXA7wHBWcBrjqnAw"},
+				Reality: &engine.RealitySettings{PublicKey: "Z84J2IelR9ch3k8VtlVhhs5ycBUlXA7wHBWcBrjqnAw"}},
 		}
 		p.Groups = []engine.Group{{Name: "sel", Type: engine.GroupSelect, Outbounds: []string{"srv-1"}}}
 		p.Rules = []engine.Rule{{Type: engine.RuleMatchAll, Target: "srv-1"}}
@@ -381,7 +381,7 @@ func TestRenderRealityForcesAClientFingerprint(t *testing.T) {
 	// Negative: plain TLS without REALITY and without a fingerprint stays
 	// fingerprint-free.
 	p := reality("")
-	p.Outbounds[0].TLS.Reality = false
+	p.Outbounds[0].TLS.Reality = nil
 	out, err = Render(p, testRuntime(t))
 	if err != nil {
 		t.Fatal(err)

@@ -24,7 +24,7 @@ var testRuntime = supervise.Runtime{LocalPort: 7890, ControlAddr: "127.0.0.1:909
 func hysteriaWithoutObfs(p *engine.Plan) *engine.Plan {
 	for i := range p.Outbounds {
 		if p.Outbounds[i].Protocol == engine.ProtocolHysteria2 {
-			p.Outbounds[i].Obfs, p.Outbounds[i].ObfsParam = "", ""
+			p.Outbounds[i].ObfsBox().Type, p.Outbounds[i].ObfsBox().Param = "", ""
 		}
 	}
 	return p
@@ -93,7 +93,7 @@ func TestRenderRefusesUnsupportedTLSVerificationSetting(t *testing.T) {
 			t.Errorf("%s silently dropped disabled certificate verification", protocol)
 		}
 	}
-	for _, tls := range []engine.TLS{{Insecure: true}, {Enabled: true, Reality: true, Insecure: true, RealityPublicKey: "public-key"}} {
+	for _, tls := range []engine.TLS{{Insecure: true}, {Enabled: true, Reality: &engine.RealitySettings{PublicKey: "public-key"}, Insecure: true}} {
 		p := enginetest.Plan(engine.ProtocolVLESS)
 		p.Outbounds[0].TLS = tls
 		raw, err := Render(p, testRuntime, nil)
@@ -136,7 +136,7 @@ func TestEngineAcceptsRenderedPlans(t *testing.T) {
 	b := binary(t)
 	xhttp := enginetest.Plan(engine.ProtocolVLESS)
 	xhttp.Outbounds[0].Flow = ""
-	xhttp.Outbounds[0].Transport = engine.Transport{Type: "xhttp", Path: "/x", Mode: "stream-one"}
+	xhttp.Outbounds[0].Transport = engine.Transport{Type: "xhttp", Path: "/x", XHTTP: &engine.XHTTPSettings{Mode: "stream-one"}}
 	fragment := hysteriaWithoutObfs(enginetest.Plan(allProtocols...))
 	fragment.Options.Fragment.Enabled = true
 	for name, p := range map[string]*engine.Plan{
@@ -276,7 +276,7 @@ func TestRenderRealityDefaultsToAutoFingerprint(t *testing.T) {
 			ID: "srv-1", Name: "Reality 01", Protocol: engine.ProtocolVLESS,
 			Server: "re.example.com", Port: 443, UUID: "11111111-2222-3333-4444-555555555555",
 			TLS: engine.TLS{Enabled: true, ServerName: "www.example.com", Fingerprint: fp,
-				Reality: true, RealityPublicKey: "Z84J2IelR9ch3k8VtlVhhs5ycBUlXA7wHBWcBrjqnAw"},
+				Reality: &engine.RealitySettings{PublicKey: "Z84J2IelR9ch3k8VtlVhhs5ycBUlXA7wHBWcBrjqnAw"}},
 		}}}
 		raw, err := Render(p, testRuntime, nil)
 		if err != nil {

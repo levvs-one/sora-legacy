@@ -64,8 +64,8 @@ func TestWireGuardImportBuildsPlanAndRenders(t *testing.T) {
 			if o.Protocol != engine.ProtocolWireGuard || o.Transport.Type != "" {
 				t.Fatalf("outbound = protocol %q transport %q, want wireguard with no stream transport", o.Protocol, o.Transport.Type)
 			}
-			if o.PrivateKey == "" || len(o.Peers) != 1 || len(o.Addresses) == 0 {
-				t.Fatalf("wireguard material lost on the way to the plan: key %q peers %d addresses %v", o.PrivateKey, len(o.Peers), o.Addresses)
+			if o.WireGuardOrZero().PrivateKey == "" || len(o.WireGuardOrZero().Peers) != 1 || len(o.WireGuardOrZero().Addresses) == 0 {
+				t.Fatalf("wireguard material lost on the way to the plan: key %q peers %d addresses %v", o.WireGuardOrZero().PrivateKey, len(o.WireGuardOrZero().Peers), o.WireGuardOrZero().Addresses)
 			}
 
 			rt := supervise.Runtime{LocalPort: 7890, ControlAddr: "127.0.0.1:9090", ProbeURL: engine.TestURLProduction}

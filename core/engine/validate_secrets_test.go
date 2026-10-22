@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"encoding/json"
 	"slices"
 	"strings"
 	"testing"
@@ -103,9 +104,11 @@ func TestRedactorMasksTransportSeeds(t *testing.T) {
 // listed (token, uuid, access_token) are extracted, and the
 // profile's own server identifiers join Identifiers.
 func TestProfileSeedsCoverVariantSpellingsAndIdentifiers(t *testing.T) {
-	o := Outbound{ID: "p", Protocol: ProtocolXrayProfile, Profile: []byte(
+	o := Outbound{ID: "p", Protocol: ProtocolXrayProfile}
+	profile := json.RawMessage(
 		`{"outbounds":[{"settings":{"vnext":[{"address":"profile-edge.example.com","users":[{"id":"9f1c2d3e-aaaa-bbbb-cccc-0123456789ab","access_token":"profile-token-value"}]}]},` +
-			`"streamSettings":{"security":"reality","realitySettings":{"dest":"profile-dest.example.com:443","serverNames":["profile-sni.example.com"]}}}]}`)}
+			`"streamSettings":{"security":"reality","realitySettings":{"dest":"profile-dest.example.com:443","serverNames":["profile-sni.example.com"]}}}]}`)
+	o.Profile = &profile
 	secrets := o.Secrets()
 	for _, want := range []string{"9f1c2d3e-aaaa-bbbb-cccc-0123456789ab", "profile-token-value"} {
 		if !slices.Contains(secrets, want) {

@@ -33,7 +33,7 @@ func TestXHTTPTuningSurvivesTheVault(t *testing.T) {
 		t.Fatal(err)
 	}
 	tr := o.Transport
-	if tr.XmuxMaxConcurrency != 16 || tr.XmuxMaxReuseTimes != 10 || tr.XPaddingBytes != "100-1000" {
+	if tr.XHTTPOrZero().XmuxMaxConcurrency != 16 || tr.XHTTPOrZero().XmuxMaxReuseTimes != 10 || tr.XHTTPOrZero().XPaddingBytes != "100-1000" {
 		t.Errorf("XHTTP tuning lost on the way to the engine: %+v", tr)
 	}
 }
@@ -62,7 +62,7 @@ func TestXHTTPDownloadSplitSurvivesTheVault(t *testing.T) {
 		t.Fatal(err)
 	}
 	tr := o.Transport
-	if tr.DownloadAddress != "down.example.com" || tr.DownloadPort != 8443 {
+	if tr.XHTTPOrZero().DownloadAddress != "down.example.com" || tr.XHTTPOrZero().DownloadPort != 8443 {
 		t.Errorf("XHTTP download split lost on the way to the engine: %+v", tr)
 	}
 }

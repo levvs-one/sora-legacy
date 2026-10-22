@@ -101,8 +101,9 @@ var ValidTUICUDPRelayMode = map[string]bool{"native": true, "quic": true}
 // the controller the engines will run: the pinned value, or
 // DefaultTUICCongestion when unset.
 func (o Outbound) EffectiveTUICCongestion() string {
-	if o.CongestionControl != "" {
-		return o.CongestionControl
+	if o.QUICOrZero().CongestionControl != "" {
+
+		return o.QUICOrZero().CongestionControl
 	}
 	return DefaultTUICCongestion
 }
@@ -110,8 +111,8 @@ func (o Outbound) EffectiveTUICCongestion() string {
 // EffectiveTUICHeartbeatSeconds resolves a plan's TUIC heartbeat
 // field to the interval the engines will run, in seconds.
 func (o Outbound) EffectiveTUICHeartbeatSeconds() int {
-	if o.TUICHeartbeat > 0 {
-		return o.TUICHeartbeat
+	if h := o.QUICOrZero().TUICHeartbeat; h > 0 {
+		return h
 	}
 	return DefaultTUICHeartbeatSeconds
 }

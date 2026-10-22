@@ -42,10 +42,10 @@ func TestRenderXHTTPReuseSettings(t *testing.T) {
 	}
 
 	out = render(xhttpPlan(func(tr *engine.Transport) {
-		tr.XmuxMaxConnections = 4
-		tr.XmuxMaxReuseTimes = 10
-		tr.XmuxMaxRequestTimes = 600
-		tr.XPaddingBytes = "100-1000"
+		tr.XHTTPBox().XmuxMaxConnections = 4
+		tr.XHTTPBox().XmuxMaxReuseTimes = 10
+		tr.XHTTPBox().XmuxMaxRequestTimes = 600
+		tr.XHTTPBox().XPaddingBytes = "100-1000"
 	}))
 	for _, want := range []string{"max-connections:", "c-max-reuse-times:", "h-max-request-times:", "x-padding-bytes: 100-1000"} {
 		if !strings.Contains(out, want) {
@@ -58,7 +58,7 @@ func TestRenderXHTTPReuseSettings(t *testing.T) {
 
 	// mode: auto is a documented mihomo mode value and must pass
 	// through verbatim.
-	out = render(xhttpPlan(func(tr *engine.Transport) { tr.Mode = "auto" }))
+	out = render(xhttpPlan(func(tr *engine.Transport) { tr.XHTTPBox().Mode = "auto" }))
 	if !strings.Contains(out, "mode: auto") {
 		t.Fatalf("mode auto must render verbatim:\n%s", out)
 	}
@@ -71,8 +71,8 @@ func TestRenderXHTTPDownloadSettings(t *testing.T) {
 	p := enginetest.Plan(engine.ProtocolVLESS)
 	p.Outbounds[0].Flow = ""
 	p.Outbounds[0].Transport = engine.Transport{
-		Type: "xhttp", Path: "/x", Host: "cdn.example.com", Mode: "stream-up",
-		DownloadAddress: "dl.example.com", DownloadPort: 8443,
+		Type: "xhttp", Path: "/x", Host: "cdn.example.com",
+		XHTTP: &engine.XHTTPSettings{Mode: "stream-up", DownloadAddress: "dl.example.com", DownloadPort: 8443},
 	}
 	out, err := Render(p, testRuntime(t))
 	if err != nil {

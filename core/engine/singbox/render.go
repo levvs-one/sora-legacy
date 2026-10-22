@@ -186,6 +186,8 @@ func (r *renderer) outbounds() (outbounds, endpoints []obj, err error) {
 
 func (r *renderer) outbound(o engine.Outbound) (obj, error) {
 	out := obj{"tag": r.tags[o.ID]}
+	q := o.QUICOrZero()
+	ob := o.ObfsOrZero()
 	if o.Protocol != engine.ProtocolDirect && o.Protocol != engine.ProtocolWireGuard {
 		out.set("server", o.Server).set("server_port", int(o.Port))
 	}
@@ -211,26 +213,26 @@ func (r *renderer) outbound(o engine.Outbound) (obj, error) {
 		// here with the plan context instead of as a bare engine
 		// FATAL at start. Selection refuses the same facts earlier
 		// (catalog.go).
-		if o.Plugin != "" && !engine.SupportsSSPlugin(engine.KindSingBox, o.Plugin) {
-			return nil, fmt.Errorf("singbox: shadowsocks outbound %s uses plugin %q, which needs a plugin binary sora does not ship: refusing to render", o.ID, o.Plugin)
+		if ob.Plugin != "" && !engine.SupportsSSPlugin(engine.KindSingBox, ob.Plugin) {
+			return nil, fmt.Errorf("singbox: shadowsocks outbound %s uses plugin %q, which needs a plugin binary sora does not ship: refusing to render", o.ID, ob.Plugin)
 		}
 		out.set("type", "shadowsocks").set("method", orDefault(o.Cipher, "aes-256-gcm")).set("password", o.Password)
 		// An explicit SIP002 plugin wins over the legacy obfs-local
 		// mapping; sing-box passes plugin/plugin_opts to the plugin
 		// binary verbatim.
 		switch {
-		case o.Plugin != "":
-			out.set("plugin", o.Plugin)
-			if o.PluginOpts != "" {
+		case ob.Plugin != "":
+			out.set("plugin", ob.Plugin)
+			if ob.PluginOpts != "" {
 				// Canonical schema order: the same option set
 				// renders byte-identically however the import
 				// link spelled it (SP3b).
-				out.set("plugin_opts", engine.CanonicalSSPluginOpts(o.Plugin, o.PluginOpts))
+				out.set("plugin_opts", engine.CanonicalSSPluginOpts(ob.Plugin, ob.PluginOpts))
 			}
-		case o.Obfs != "":
-			opts := "obfs=" + o.Obfs
-			if o.ObfsParam != "" {
-				opts += ";obfs-host=" + o.ObfsParam
+		case ob.Type != "":
+			opts := "obfs=" + ob.Type
+			if ob.Param != "" {
+				opts += ";obfs-host=" + ob.Param
 			}
 			out.set("plugin", "obfs-local").set("plugin_opts", opts)
 		}
@@ -238,11 +240,11 @@ func (r *renderer) outbound(o engine.Outbound) (obj, error) {
 		out.set("type", "hysteria2").set("password", o.Password)
 		// Bandwidth caps switch the engine from BBR to Hysteria (Brutal)
 		// congestion control; zero means auto (BBR).
-		if o.UpMbps > 0 {
-			out["up_mbps"] = o.UpMbps
+		if q.UpMbps > 0 {
+			out["up_mbps"] = q.UpMbps
 		}
-		if o.DownMbps > 0 {
-			out["down_mbps"] = o.DownMbps
+		if q.DownMbps > 0 {
+			out["down_mbps"] = q.DownMbps
 		}
 		// Port hopping: server_ports overrides server_port (sing-box
 		// >= 1.11 ignores server_port when server_ports is set). The
@@ -251,15 +253,15 @@ func (r *renderer) outbound(o engine.Outbound) (obj, error) {
 		// ("20000:30000", "40000:40000") and rejects the plan
 		// spelling at config load. SingBoxHopPorts is the single
 		// translation.
-		if o.HopPorts != "" {
-			ports, err := engine.SingBoxHopPorts(o.HopPorts)
+		if q.HopPorts != "" {
+			ports, err := engine.SingBoxHopPorts(q.HopPorts)
 			if err != nil {
 				return nil, fmt.Errorf("singbox: outbound %s: %w", o.ID, err)
 			}
 			out["server_ports"] = ports
 		}
-		if o.HopInterval > 0 {
-			out["hop_interval"] = strconv.Itoa(o.HopInterval) + "s"
+		if q.HopInterval > 0 {
+			out["hop_interval"] = strconv.Itoa(q.HopInterval) + "s"
 		}
 		// Randomized hop interval (sing-box 1.14, Hysteria 2.8 server
 		// side): hop_interval_max >= hop_interval is enforced by plan
@@ -272,18 +274,18 @@ func (r *renderer) outbound(o engine.Outbound) (obj, error) {
 		// (FeatureHy2HopIntervalMax in BuildCapabilities); a bare
 		// Render that bypasses selection still emits the field,
 		// and a pre-1.14 build refuses it.
-		if o.HopIntervalMax > 0 {
-			out["hop_interval_max"] = strconv.Itoa(o.HopIntervalMax) + "s"
+		if q.HopIntervalMax > 0 {
+			out["hop_interval_max"] = strconv.Itoa(q.HopIntervalMax) + "s"
 		}
 		// BBR congestion profile (sing-box 1.14 bbr_profile, gated
 		// exactly like hop_interval_max above —
 		// FeatureHy2BBRProfile). Emitted only when BBR is actually
 		// in charge: with bandwidth caps the client runs Brutal
 		// instead and the profile would be dead text.
-		if o.BBRProfile != "" && o.UpMbps == 0 && o.DownMbps == 0 {
-			out["bbr_profile"] = o.BBRProfile
+		if q.BBRProfile != "" && q.UpMbps == 0 && q.DownMbps == 0 {
+			out["bbr_profile"] = q.BBRProfile
 		}
-		if o.Obfs != "" {
+		if ob.Type != "" {
 			// Hysteria2 obfs types: salamander (the Hysteria2
 			// standard, spelled by every sing-box build in the
 			// catalog) and gecko (sing-box 1.14 only — older
@@ -292,7 +294,7 @@ func (r *renderer) outbound(o engine.Outbound) (obj, error) {
 			// are gated to >= 1.14 builds at selection
 			// (FeatureHy2ObfsGecko); a bare Render still emits
 			// the type, and a pre-1.14 build refuses it.
-			out["obfs"] = obj{"type": o.Obfs, "password": o.ObfsParam}
+			out["obfs"] = obj{"type": ob.Type, "password": ob.Param}
 		}
 		needsTLS = true
 	case engine.ProtocolTUIC:
@@ -302,8 +304,8 @@ func (r *renderer) outbound(o engine.Outbound) (obj, error) {
 		// sing-box and mihomo then run the same controller for the
 		// same plan instead of each falling back to its own default.
 		tuic.set("congestion_control", o.EffectiveTUICCongestion())
-		if o.UDPRelayMode != "" {
-			tuic.set("udp_relay_mode", o.UDPRelayMode)
+		if q.UDPRelayMode != "" {
+			tuic.set("udp_relay_mode", q.UDPRelayMode)
 		}
 		// Heartbeat (TUIC keepalive): sing-box spells it as a
 		// duration string; the effective seconds come from the plan
@@ -339,13 +341,15 @@ func (r *renderer) outbound(o engine.Outbound) (obj, error) {
 
 func (r *renderer) tls(o engine.Outbound) (obj, error) {
 	t := obj{"enabled": true}
+	rs := o.TLS.RealityOrZero()
+	ech := o.TLS.ECHOrZero()
 	t.set("server_name", o.TLS.ServerName).set("insecure", o.TLS.Insecure).set("alpn", o.TLS.ALPN)
 	fingerprint := o.TLS.Fingerprint
-	if o.TLS.Reality {
+	if o.TLS.Reality != nil {
 		// REALITY only works behind a uTLS fingerprint.
 		fingerprint = orDefault(fingerprint, "chrome")
-		reality := obj{"enabled": true, "public_key": o.TLS.RealityPublicKey}.set("short_id", o.TLS.RealityShortID)
-		if o.TLS.KeyShare != "" {
+		reality := obj{"enabled": true, "public_key": rs.PublicKey}.set("short_id", rs.ShortID)
+		if rs.KeyShare != "" {
 			// tls.reality.key_share of the lx fork (PASS2 S3 in
 			// sora), probed on the pinned lx.22 binary: "hybrid"/
 			// "classical" are accepted, anything else is refused
@@ -353,14 +357,14 @@ func (r *renderer) tls(o engine.Outbound) (obj, error) {
 			// the X25519MLKEM768 group from the ClientHello
 			// (CENSOR-FP; ported SP5-render from sora snapshot
 			// 63faf1d3480d5429b6bcec3483c19c8e03defb85).
-			reality["key_share"] = o.TLS.KeyShare
+			reality["key_share"] = rs.KeyShare
 		}
 		t["reality"] = reality
 	}
 	if fingerprint != "" {
 		t["utls"] = obj{"enabled": true, "fingerprint": fingerprint}
 	}
-	if o.TLS.ECH.Enabled {
+	if ech.Enabled {
 		// Without a pinned config the engine fetches the ECHConfigList
 		// from the server's HTTPS DNS record. query_server_name exists
 		// since sing-box 1.13, above the catalog's 1.12.0 floor: the
@@ -371,19 +375,19 @@ func (r *renderer) tls(o engine.Outbound) (obj, error) {
 		// BuildCapabilities); a bare Render that bypasses selection
 		// still emits the field, and a 1.12.x build refuses it.
 		ech := obj{"enabled": true}
-		if len(o.TLS.ECH.Config) > 0 {
+		if len(ech.Config) > 0 {
 			// The pinned list is canonicalized to the PEM label the
 			// binary actually accepts — "ECH CONFIGS", probed on
 			// lx.22: the historical "ECHCONFIG" label makes the
 			// binary refuse the whole config at startup ("invalid
 			// ECH configs pem", CENSOR-FP).
-			pem, err := engine.ECHConfigPEM(o.TLS.ECH.Config)
+			pem, err := engine.ECHConfigPEM(ech.Config)
 			if err != nil {
 				return nil, fmt.Errorf("singbox: outbound %s: %w", o.ID, err)
 			}
 			ech["config"] = pem
 		}
-		ech.set("query_server_name", o.TLS.ECH.QueryServerName)
+		ech.set("query_server_name", ech.QueryServerName)
 		t["ech"] = ech
 	}
 	if r.plan.Options.Fragment.Enabled && o.Protocol != engine.ProtocolHysteria2 && o.Protocol != engine.ProtocolTUIC {
@@ -394,6 +398,7 @@ func (r *renderer) tls(o engine.Outbound) (obj, error) {
 }
 
 func transport(t engine.Transport) (obj, error) {
+	x := t.XHTTPOrZero()
 	host := func() obj {
 		if t.Host == "" {
 			return nil
@@ -416,7 +421,7 @@ func transport(t engine.Transport) (obj, error) {
 	case "httpupgrade":
 		return obj{"type": "httpupgrade"}.set("host", t.Host).set("path", t.Path), nil
 	case "xhttp":
-		out := obj{"type": "xhttp", "mode": orDefault(t.Mode, "auto")}.set("host", t.Host).set("path", t.Path)
+		out := obj{"type": "xhttp", "mode": orDefault(x.Mode, "auto")}.set("host", t.Host).set("path", t.Path)
 		if len(t.Headers) > 0 {
 			out["headers"] = t.Headers
 		}
@@ -428,7 +433,7 @@ func transport(t engine.Transport) (obj, error) {
 		// while validation accepted them. The download split has no
 		// sing-box spelling at all; FeatureXHTTPDownloadSplit keeps
 		// such plans off this engine.
-		out.set("x_padding_bytes", t.XPaddingBytes)
+		out.set("x_padding_bytes", x.XPaddingBytes)
 		if xmux := xhttpXmux(t); len(xmux) > 0 {
 			out["xmux"] = xmux
 		}
@@ -442,19 +447,21 @@ func transport(t engine.Transport) (obj, error) {
 // int is the single-value range. An untuned plan renders no block at
 // all.
 func xhttpXmux(t engine.Transport) obj {
+	x := t.XHTTPOrZero()
 	return obj{}.
-		set("max_concurrency", t.XmuxMaxConcurrency).
-		set("max_connections", t.XmuxMaxConnections).
-		set("c_max_reuse_times", t.XmuxMaxReuseTimes).
-		set("h_max_request_times", t.XmuxMaxRequestTimes)
+		set("max_concurrency", x.XmuxMaxConcurrency).
+		set("max_connections", x.XmuxMaxConnections).
+		set("c_max_reuse_times", x.XmuxMaxReuseTimes).
+		set("h_max_request_times", x.XmuxMaxRequestTimes)
 }
 
 // wireguard renders an endpoint: sing-box 1.13 removed the WireGuard outbound.
 func wireguard(out obj, o engine.Outbound) (obj, error) {
-	if len(o.Addresses) == 0 {
+	wg := o.WireGuardOrZero()
+	if len(wg.Addresses) == 0 {
 		return nil, fmt.Errorf("singbox: wireguard outbound %s has no interface address", o.ID)
 	}
-	out.set("type", "wireguard").set("address", o.Addresses).set("private_key", o.PrivateKey).set("mtu", 1420)
+	out.set("type", "wireguard").set("address", wg.Addresses).set("private_key", wg.PrivateKey).set("mtu", 1420)
 	if a := o.Amnezia; a != nil {
 		if a.J1 != "" || a.J2 != "" || a.J3 != "" || a.Itime != 0 {
 			return nil, fmt.Errorf("singbox: AmneziaWG J1/J2/J3/Itime require another engine")
@@ -465,8 +472,8 @@ func wireguard(out obj, o engine.Outbound) (obj, error) {
 			set("h1", a.H1).set("h2", a.H2).set("h3", a.H3).set("h4", a.H4).
 			set("i1", a.I1).set("i2", a.I2).set("i3", a.I3).set("i4", a.I4).set("i5", a.I5)
 	}
-	peers := make([]obj, 0, len(o.Peers))
-	for _, peer := range o.Peers {
+	peers := make([]obj, 0, len(wg.Peers))
+	for _, peer := range wg.Peers {
 		host, portText, err := net.SplitHostPort(peer.Endpoint)
 		if err != nil {
 			return nil, fmt.Errorf("singbox: wireguard outbound %s: peer endpoint: %w", o.ID, err)

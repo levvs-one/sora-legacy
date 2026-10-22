@@ -18,9 +18,15 @@ func TestRenderShadowsocksPluginFailClosed(t *testing.T) {
 		name   string
 		mutate func(*engine.Outbound)
 	}{
-		{"plugin", func(o *engine.Outbound) { o.Plugin = "v2ray-plugin"; o.PluginOpts = "tls;host=example.com" }},
-		{"obfs-local plugin", func(o *engine.Outbound) { o.Plugin = "obfs-local"; o.PluginOpts = "obfs=tls;obfs-host=example.com" }},
-		{"legacy obfs", func(o *engine.Outbound) { o.Obfs = "tls"; o.ObfsParam = "example.com" }},
+		{"plugin", func(o *engine.Outbound) {
+			o.ObfsBox().Plugin = "v2ray-plugin"
+			o.ObfsBox().PluginOpts = "tls;host=example.com"
+		}},
+		{"obfs-local plugin", func(o *engine.Outbound) {
+			o.ObfsBox().Plugin = "obfs-local"
+			o.ObfsBox().PluginOpts = "obfs=tls;obfs-host=example.com"
+		}},
+		{"legacy obfs", func(o *engine.Outbound) { o.ObfsBox().Type = "tls"; o.ObfsBox().Param = "example.com" }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			p := enginetest.Plan(engine.ProtocolShadowsocks)

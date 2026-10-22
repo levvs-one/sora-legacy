@@ -29,7 +29,7 @@ func echOutbound() Outbound {
 		TLS: TLS{
 			Enabled:    true,
 			ServerName: "example.com",
-			ECH:        ECHConfig{Enabled: true},
+			ECH:        &ECHConfig{Enabled: true},
 		},
 	}
 }
@@ -44,7 +44,7 @@ func TestValidateRejectsECHWithoutTLS(t *testing.T) {
 
 func TestValidateRejectsECHWithReality(t *testing.T) {
 	o := echOutbound()
-	o.TLS.Reality = true
+	o.TLS.Reality = &RealitySettings{}
 	if err := o.Validate(); err == nil || !strings.Contains(err.Error(), "incompatible") {
 		t.Errorf("Validate = %v, want ECH+REALITY incompatibility error", err)
 	}
@@ -54,7 +54,7 @@ func TestValidateRejectsGarbagePinnedECHConfig(t *testing.T) {
 	// A pinned list validation cannot decode must fail here, not as
 	// an engine startup refusal or a silently unparseable config.
 	o := echOutbound()
-	o.TLS.ECH.Config = []string{"!!! not a config !!!"}
+	o.TLS.ECHBox().Config = []string{"!!! not a config !!!"}
 	if err := o.Validate(); err == nil || !strings.Contains(err.Error(), "ech:") {
 		t.Errorf("Validate = %v, want an ech decode error", err)
 	}
@@ -65,7 +65,7 @@ func TestValidateAcceptsECHQueryServerName(t *testing.T) {
 	// DNS query. What keeps an ECH plan off engines that cannot
 	// honour it is the FeatureECH gate below, not validation.
 	o := echOutbound()
-	o.TLS.ECH.QueryServerName = "ech.example.com"
+	o.TLS.ECHBox().QueryServerName = "ech.example.com"
 	if err := o.Validate(); err != nil {
 		t.Errorf("Validate = %v, want nil for a query_server_name", err)
 	}
@@ -130,7 +130,7 @@ func TestValidateAcceptsECHWithPinnedConfig(t *testing.T) {
 	// A complete (if tiny) pinned list: armor plus a base64 body.
 	// Validation decodes the pin, so a bare BEGIN line is honestly
 	// rejected as undecodable (see TestValidateRejectsGarbagePinnedECHConfig).
-	o.TLS.ECH.Config = []string{"-----BEGIN ECHCONFIG-----", "QUJD", "-----END ECHCONFIG-----"}
+	o.TLS.ECHBox().Config = []string{"-----BEGIN ECHCONFIG-----", "QUJD", "-----END ECHCONFIG-----"}
 	p := &Plan{
 		SessionID: "s1",
 		Outbounds: []Outbound{o},
@@ -146,7 +146,7 @@ func TestValidateAcceptsECHWithPinnedConfig(t *testing.T) {
 
 func TestValidateAcceptsDisabledECH(t *testing.T) {
 	o := echOutbound()
-	o.TLS.ECH = ECHConfig{}
+	o.TLS.ECH = &ECHConfig{}
 	p := &Plan{
 		SessionID: "s1",
 		Outbounds: []Outbound{o},
@@ -166,9 +166,9 @@ func TestValidateAcceptsDisabledECH(t *testing.T) {
 func keyShareRealityOutbound() Outbound {
 	o := Outbound{ID: "r1", Protocol: ProtocolVLESS, Server: "r.example.com", Port: 443}
 	o.TLS.Enabled = true
-	o.TLS.Reality = true
-	o.TLS.RealityPublicKey = "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"
-	o.TLS.RealityShortID = "ab12"
+	o.TLS.Reality = &RealitySettings{}
+	o.TLS.RealityBox().PublicKey = "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"
+	o.TLS.RealityBox().ShortID = "ab12"
 	o.TLS.ServerName = "cdn.example.com"
 	o.Transport.Type = "tcp"
 	return o
@@ -179,19 +179,19 @@ func keyShareRealityOutbound() Outbound {
 func TestValidateKeyShare(t *testing.T) {
 	for _, ks := range []string{"", "classical", "hybrid"} {
 		o := keyShareRealityOutbound()
-		o.TLS.KeyShare = ks
+		o.TLS.RealityBox().KeyShare = ks
 		if err := o.Validate(); err != nil {
 			t.Errorf("KeyShare %q on REALITY: Validate = %v, want nil", ks, err)
 		}
 	}
 	o := keyShareRealityOutbound()
-	o.TLS.KeyShare = "post-quantum-ish"
+	o.TLS.RealityBox().KeyShare = "post-quantum-ish"
 	if err := o.Validate(); err == nil || !strings.Contains(err.Error(), "key_share") {
 		t.Errorf("unknown KeyShare: Validate = %v, want a key_share error", err)
 	}
 	o = keyShareRealityOutbound()
-	o.TLS.Reality = false
-	o.TLS.KeyShare = "hybrid"
+	o.TLS.Reality = nil
+	o.TLS.RealityBox().KeyShare = "hybrid"
 	if err := o.Validate(); err == nil || !strings.Contains(err.Error(), "key_share needs REALITY") {
 		t.Errorf("KeyShare without REALITY: Validate = %v, want a key_share error", err)
 	}
@@ -205,7 +205,7 @@ func TestValidateKeyShare(t *testing.T) {
 	// claims it. (The reference claims it statically because its
 	// shipped sing-box pin IS the lx fork.)
 	p := &Plan{SessionID: "s1", Outbounds: []Outbound{keyShareRealityOutbound()}}
-	p.Outbounds[0].TLS.KeyShare = "hybrid"
+	p.Outbounds[0].TLS.RealityBox().KeyShare = "hybrid"
 	if !p.RequiredFeatures()[FeatureRealityKeyShare] {
 		t.Fatal("a KeyShare plan must require feature reality-key-share")
 	}

@@ -21,7 +21,7 @@ import (
 func TestRenderRefusesRealityKeyShare(t *testing.T) {
 	for _, ks := range []string{"hybrid", "classical"} {
 		p := enginetest.Plan(engine.ProtocolVLESS)
-		p.Outbounds[0].TLS.KeyShare = ks
+		p.Outbounds[0].TLS.RealityBox().KeyShare = ks
 		_, err := Render(p, testRuntime, nil)
 		if err == nil {
 			t.Fatalf("KeyShare %q: a bare Render must refuse the pin instead of dropping it", ks)

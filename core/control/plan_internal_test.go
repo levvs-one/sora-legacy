@@ -40,10 +40,10 @@ func TestRealityAndTransportSurviveTheVault(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if !o.TLS.Reality || o.TLS.RealityPublicKey != "Z84J2IelR9ch3k8VtlVhhs5ycBUlXA7wHBWcBrjqnAw" || o.TLS.RealityShortID != "6ba85179e30d4fc2" {
+	if (o.TLS.Reality == nil) || o.TLS.RealityOrZero().PublicKey != "Z84J2IelR9ch3k8VtlVhhs5ycBUlXA7wHBWcBrjqnAw" || o.TLS.RealityOrZero().ShortID != "6ba85179e30d4fc2" {
 		t.Errorf("REALITY lost on the way to the engine: %+v", o.TLS)
 	}
-	if o.Transport.Path != "/x" || o.Transport.Host != "cdn.example.com" || o.Transport.Mode != "stream-one" {
+	if o.Transport.Path != "/x" || o.Transport.Host != "cdn.example.com" || o.Transport.XHTTPOrZero().Mode != "stream-one" {
 		t.Errorf("transport lost on the way to the engine: %+v", o.Transport)
 	}
 	if len(o.TLS.ALPN) != 2 || o.Encryption != "none" {
@@ -72,8 +72,8 @@ func TestShadowsocksPluginSurvivesTheVault(t *testing.T) {
 	if err := applyCredential(&o, values); err != nil {
 		t.Fatal(err)
 	}
-	if o.Plugin != "v2ray-plugin" || o.PluginOpts != "tls;host=example.com" {
-		t.Errorf("SIP002 plugin lost on the way to the engine: plugin=%q opts=%q", o.Plugin, o.PluginOpts)
+	if o.ObfsOrZero().Plugin != "v2ray-plugin" || o.ObfsOrZero().PluginOpts != "tls;host=example.com" {
+		t.Errorf("SIP002 plugin lost on the way to the engine: plugin=%q opts=%q", o.ObfsOrZero().Plugin, o.ObfsOrZero().PluginOpts)
 	}
 }
 
@@ -107,8 +107,8 @@ func TestShadowsocksPluginSurvivesTheVaultFromSingBoxJSON(t *testing.T) {
 	if err := applyCredential(&o, values); err != nil {
 		t.Fatal(err)
 	}
-	if o.Plugin != "obfs-local" || o.PluginOpts != "obfs=tls;obfs-host=example.com" {
-		t.Errorf("sing-box JSON plugin lost on the way to the engine: plugin=%q opts=%q", o.Plugin, o.PluginOpts)
+	if o.ObfsOrZero().Plugin != "obfs-local" || o.ObfsOrZero().PluginOpts != "obfs=tls;obfs-host=example.com" {
+		t.Errorf("sing-box JSON plugin lost on the way to the engine: plugin=%q opts=%q", o.ObfsOrZero().Plugin, o.ObfsOrZero().PluginOpts)
 	}
 }
 
@@ -156,7 +156,7 @@ func TestImportedBlobsSurviveToThePlan(t *testing.T) {
 		if wire.Transport != "ws" || wire.Security != "reality" {
 			t.Errorf("wire transport/security = %q/%q, want ws/reality", wire.Transport, wire.Security)
 		}
-		if !o.TLS.Reality || o.TLS.RealityPublicKey != pbk || o.TLS.RealityShortID != sid {
+		if (o.TLS.Reality == nil) || o.TLS.RealityOrZero().PublicKey != pbk || o.TLS.RealityOrZero().ShortID != sid {
 			t.Errorf("REALITY lost on the way to the engine: %+v", o.TLS)
 		}
 		if o.TLS.ServerName != "www.example.com" {
@@ -207,7 +207,7 @@ func TestImportedBlobsSurviveToThePlan(t *testing.T) {
 				if o.Transport.Type != "grpc" || o.Transport.Service != "grpc-service" {
 					t.Errorf("grpc transport lost on the way to the engine: %+v", o.Transport)
 				}
-				if !o.TLS.Enabled || o.TLS.Reality || o.TLS.ServerName != "grpc.example.com" {
+				if !o.TLS.Enabled || o.TLS.Reality != nil || o.TLS.ServerName != "grpc.example.com" {
 					t.Errorf("tls = %+v, want plain TLS for grpc.example.com", o.TLS)
 				}
 			},
@@ -404,14 +404,14 @@ func TestWireGuardSurvivesTheVault(t *testing.T) {
 			if err := applyCredential(&o, values); err != nil {
 				t.Fatal(err)
 			}
-			if o.PrivateKey != "cKE7LmCF61IhqqABGhvJ44jWXp8fKymcMAEVAzLDYVk=" {
-				t.Errorf("private key = %q", o.PrivateKey)
+			if o.WireGuardOrZero().PrivateKey != "cKE7LmCF61IhqqABGhvJ44jWXp8fKymcMAEVAzLDYVk=" {
+				t.Errorf("private key = %q", o.WireGuardOrZero().PrivateKey)
 			}
-			if len(o.Addresses) != 2 || o.Addresses[0] != "10.7.0.2/32" {
-				t.Errorf("addresses = %v", o.Addresses)
+			if len(o.WireGuardOrZero().Addresses) != 2 || o.WireGuardOrZero().Addresses[0] != "10.7.0.2/32" {
+				t.Errorf("addresses = %v", o.WireGuardOrZero().Addresses)
 			}
-			if len(o.Peers) != 1 || o.Peers[0].Endpoint != "198.51.100.7:51820" || o.Peers[0].PublicKey == "" {
-				t.Errorf("peers = %+v", o.Peers)
+			if len(o.WireGuardOrZero().Peers) != 1 || o.WireGuardOrZero().Peers[0].Endpoint != "198.51.100.7:51820" || o.WireGuardOrZero().Peers[0].PublicKey == "" {
+				t.Errorf("peers = %+v", o.WireGuardOrZero().Peers)
 			}
 		})
 	}
@@ -772,8 +772,8 @@ func TestBrokenPeersFailClosed(t *testing.T) {
 	if err := applyCredential(&o, map[string]string{"peers": `[{"PublicKey":"x"}]`}); err != nil {
 		t.Fatalf("a valid peers document must be accepted: %v", err)
 	}
-	if len(o.Peers) != 1 || o.Peers[0].PublicKey != "x" {
-		t.Fatalf("peers = %+v, want the one peer", o.Peers)
+	if len(o.WireGuardOrZero().Peers) != 1 || o.WireGuardOrZero().Peers[0].PublicKey != "x" {
+		t.Fatalf("peers = %+v, want the one peer", o.WireGuardOrZero().Peers)
 	}
 }
 

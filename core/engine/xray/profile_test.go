@@ -27,9 +27,10 @@ const profile = `{"remarks":"Авто","log":{"loglevel":"debug"},
  "observatory":{"subjectSelector":["auto-"],"probeUrl":"https://www.gstatic.com/generate_204","probeInterval":"10s"}}`
 
 func profilePlan(tun bool) *engine.Plan {
+	rawProfile := json.RawMessage(profile)
 	return &engine.Plan{
 		SessionID: "s",
-		Outbounds: []engine.Outbound{{ID: "p", Name: "Авто", Protocol: engine.ProtocolXrayProfile, Server: "192.0.2.10", Port: 443, Profile: json.RawMessage(profile)}},
+		Outbounds: []engine.Outbound{{ID: "p", Name: "Авто", Protocol: engine.ProtocolXrayProfile, Server: "192.0.2.10", Port: 443, Profile: &rawProfile}},
 		Rules: []engine.Rule{
 			{Type: engine.RuleGeoSite, Value: "category-ads-all", Target: "reject"},
 			{Type: engine.RuleDomainSuffix, Value: "ru", Target: "direct"},
@@ -116,7 +117,7 @@ func TestAProfileIsMeasuredThroughItsFirstOutbound(t *testing.T) {
 func TestAProfileCannotReachBackOrTouchFiles(t *testing.T) {
 	plan := profilePlan(false)
 	var cfg map[string]any
-	if err := json.Unmarshal(plan.Outbounds[0].Profile, &cfg); err != nil {
+	if err := json.Unmarshal(plan.Outbounds[0].ProfileBytes(), &cfg); err != nil {
 		t.Fatal(err)
 	}
 	cfg["reverse"] = map[string]any{"bridges": []any{map[string]any{"tag": "b", "domain": "r.example"}}}
@@ -130,7 +131,8 @@ func TestAProfileCannotReachBackOrTouchFiles(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	plan.Outbounds[0].Profile = raw
+	profileDoc := json.RawMessage(raw)
+	plan.Outbounds[0].Profile = &profileDoc
 	out, err := Render(plan, supervise.Runtime{LocalPort: 4000}, nil)
 	if err != nil {
 		t.Fatal(err)

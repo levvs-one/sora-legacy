@@ -23,8 +23,8 @@ func TestRenderECH(t *testing.T) {
 	mk := func(ech engine.ECHConfig) *engine.Plan {
 		p := enginetest.Plan(engine.ProtocolVLESS)
 		o := &p.Outbounds[0]
-		o.Flow, o.TLS.Reality = "", false
-		o.TLS = engine.TLS{Enabled: true, ServerName: "cdn.example.com", ECH: ech}
+		o.Flow, o.TLS.Reality = "", nil
+		o.TLS = engine.TLS{Enabled: true, ServerName: "cdn.example.com", ECH: &ech}
 		return p
 	}
 	tlsSettings := func(t *testing.T, raw []byte) map[string]any {

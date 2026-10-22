@@ -109,7 +109,8 @@ func TestEveryEngineStartsTun(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				plan.Outbounds = []engine.Outbound{{ID: "out", Protocol: engine.ProtocolXrayProfile, Profile: raw,
+				profileDoc := json.RawMessage(raw)
+				plan.Outbounds = []engine.Outbound{{ID: "out", Protocol: engine.ProtocolXrayProfile, Profile: &profileDoc,
 					Server: "127.0.0.1", Port: uint16(serverPort)}}
 			}
 			if kind == engine.KindXray && tc.stack != "gvisor" {

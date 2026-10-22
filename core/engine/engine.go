@@ -70,7 +70,7 @@ const (
 	// while promising it hidden (S5-SP5).
 	FeatureECH Feature = "ech"
 	// FeatureECHQueryServerName marks engines whose ECH spelling
-	// carries a query_server_name override (TLS.ECH.QueryServerName):
+	// carries a query_server_name override (ECHConfig.QueryServerName):
 	// sing-box since 1.13 (tls.ech.query_server_name — probed absent
 	// on the shipped payload sing-box 1.12.12: the rendered config
 	// fails its check with `unknown field "query_server_name"`,
@@ -82,7 +82,7 @@ const (
 	// renderer, whose refusal stays as a backstop.
 	FeatureECHQueryServerName Feature = "ech-query-server-name"
 	// FeatureRealityKeyShare marks engines whose renderer can spell
-	// the plan's REALITY key-share choice (TLS.KeyShare): mihomo
+	// the plan's REALITY key-share choice (RealitySettings.KeyShare): mihomo
 	// (support-x25519mlkem768) and the sing-box lx fork
 	// (tls.reality.key_share, claimed in BuildCapabilities — legacy
 	// ships upstream sing-box, which has no such field). Xray claims
@@ -107,7 +107,7 @@ const (
 	FeatureHy2Obfs Feature = "hy2-obfs"
 	// FeatureHy2HopIntervalMax marks engines whose Hysteria2 spelling
 	// carries a randomized hop interval upper bound
-	// (Outbound.HopIntervalMax): sing-box renders hop_interval_max
+	// (QUICSettings.HopIntervalMax): sing-box renders hop_interval_max
 	// only since 1.14 — the option structs of 1.12.25 and 1.13.21 have
 	// no such field, and their binaries refuse the rendered config at
 	// load (`unknown field "hop_interval_max"`), while 1.14.3 accepts
@@ -119,7 +119,7 @@ const (
 	// silently collapsing to a fixed hop interval.
 	FeatureHy2HopIntervalMax Feature = "hy2-hop-interval-max"
 	// FeatureHy2BBRProfile marks engines whose Hysteria2 spelling
-	// carries a BBR congestion profile (Outbound.BBRProfile):
+	// carries a BBR congestion profile (QUICSettings.BBRProfile):
 	// sing-box renders bbr_profile only since 1.14 — absent from the
 	// 1.12.25/1.13.21 option structs, refused by their binaries at
 	// load (`unknown field "bbr_profile"`), accepted by 1.14.3
@@ -130,7 +130,7 @@ const (
 	// default.
 	FeatureHy2BBRProfile Feature = "hy2-bbr-profile"
 	// FeatureHy2ObfsGecko marks engines whose Hysteria2 obfs
-	// implements the gecko type (Outbound.Obfs == "gecko"), the
+	// implements the gecko type (ObfsSettings.Type == "gecko"), the
 	// Hysteria 2.9.2 obfuscation sing-box spells only since 1.14:
 	// older sing-box builds accept the obfs block at decode (the
 	// type is a free string there) and then refuse it when the

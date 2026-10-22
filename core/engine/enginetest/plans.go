@@ -25,8 +25,8 @@ func Outbound(p engine.Protocol) engine.Outbound {
 	switch p {
 	case engine.ProtocolVLESS:
 		o.UUID, o.Flow = uuid, "xtls-rprx-vision"
-		o.TLS = engine.TLS{Enabled: true, Reality: true, ServerName: "www.example.com", Fingerprint: "chrome",
-			RealityPublicKey: pubKey, RealityShortID: "6ba85179e30d4fc2"}
+		o.TLS = engine.TLS{Enabled: true, ServerName: "www.example.com", Fingerprint: "chrome",
+			Reality: &engine.RealitySettings{PublicKey: pubKey, ShortID: "6ba85179e30d4fc2"}}
 	case engine.ProtocolVMess:
 		o.UUID = uuid
 		o.Transport = engine.Transport{Type: "ws", Path: "/ws", Host: "cdn.example.com"}
@@ -38,7 +38,7 @@ func Outbound(p engine.Protocol) engine.Outbound {
 	case engine.ProtocolShadowsocks:
 		o.Cipher, o.Password = "2022-blake3-aes-128-gcm", "MTIzNDU2Nzg5MDEyMzQ1Ng=="
 	case engine.ProtocolHysteria2:
-		o.Password, o.Obfs, o.ObfsParam = "hy2-test-password", "salamander", "obfs-test-password"
+		o.Password, o.ObfsBox().Type, o.ObfsBox().Param = "hy2-test-password", "salamander", "obfs-test-password"
 		o.TLS = engine.TLS{Enabled: true, ServerName: "edge.example.com"}
 	case engine.ProtocolTUIC:
 		o.UUID, o.Password = uuid, "tuic-test-password"
@@ -48,8 +48,8 @@ func Outbound(p engine.Protocol) engine.Outbound {
 		o.TLS = engine.TLS{Enabled: true, ServerName: "edge.example.com"}
 	case engine.ProtocolWireGuard:
 		o.Server, o.Port = "198.51.100.7", 51820
-		o.PrivateKey, o.Addresses = privKey, []string{"10.7.0.2/32"}
-		o.Peers = []engine.WireGuardPeer{{PublicKey: wgPeer, Endpoint: "198.51.100.7:51820", PersistentKeepalive: 25}}
+		o.WireGuardBox().PrivateKey, o.WireGuardBox().Addresses = privKey, []string{"10.7.0.2/32"}
+		o.WireGuardBox().Peers = []engine.WireGuardPeer{{PublicKey: wgPeer, Endpoint: "198.51.100.7:51820", PersistentKeepalive: 25}}
 	case engine.ProtocolSOCKS5, engine.ProtocolHTTP:
 		o.UserID, o.Password = "user", "proxy-test-password"
 	case engine.ProtocolDirect:

@@ -455,37 +455,38 @@ func validateSSPluginOptValue(plugin, key string, kind ssPluginOptKind, v string
 // configuration bug every renderer would silently drop.
 func validateShadowsocksPlugin(o Outbound) []error {
 	var errs []error
+	ob := o.ObfsOrZero()
 	bad := func(format string, args ...any) {
 		args = append([]any{o.ID}, args...)
 		errs = append(errs, fmt.Errorf("outbound %s: "+format, args...))
 	}
 	if o.Protocol != ProtocolShadowsocks {
-		if o.Plugin != "" || o.PluginOpts != "" {
-			bad("shadowsocks plugin %q is set on a %s outbound; plugins belong to shadowsocks", o.Plugin, o.Protocol)
+		if ob.Plugin != "" || ob.PluginOpts != "" {
+			bad("shadowsocks plugin %q is set on a %s outbound; plugins belong to shadowsocks", ob.Plugin, o.Protocol)
 		}
 		return errs
 	}
-	if o.PluginOpts != "" && o.Plugin == "" {
+	if ob.PluginOpts != "" && ob.Plugin == "" {
 		bad("shadowsocks plugin_opts is set without a plugin")
 	}
-	if o.Plugin != "" {
-		spec := SSPluginByName(o.Plugin)
+	if ob.Plugin != "" {
+		spec := SSPluginByName(ob.Plugin)
 		if spec == nil {
-			bad("unknown shadowsocks plugin %q (known: %s)", o.Plugin, strings.Join(SSPluginNames(), ", "))
+			bad("unknown shadowsocks plugin %q (known: %s)", ob.Plugin, strings.Join(SSPluginNames(), ", "))
 			return errs
 		}
-		pairs, err := parseSSPluginOpts(o.PluginOpts)
+		pairs, err := parseSSPluginOpts(ob.PluginOpts)
 		if err != nil {
-			bad("shadowsocks plugin %s: plugin_opts: %v", o.Plugin, err)
+			bad("shadowsocks plugin %s: plugin_opts: %v", ob.Plugin, err)
 			return errs
 		}
 		for _, kv := range pairs {
 			kind, ok := spec.optKind(kv.key)
 			if !ok {
-				bad("shadowsocks plugin %s: unknown option %q", o.Plugin, kv.key)
+				bad("shadowsocks plugin %s: unknown option %q", ob.Plugin, kv.key)
 				continue
 			}
-			if err := validateSSPluginOptValue(o.Plugin, kv.key, kind, kv.val); err != nil {
+			if err := validateSSPluginOptValue(ob.Plugin, kv.key, kind, kv.val); err != nil {
 				bad("shadowsocks %v", err)
 			}
 		}
@@ -495,18 +496,18 @@ func validateShadowsocksPlugin(o Outbound) []error {
 	// modes, and ObfsParam is the obfs-host — it is interpolated into
 	// sing-box's plugin_opts string, so a ';' in it would inject
 	// extra plugin options the plan never named.
-	if o.Plugin == "" && o.Obfs != "" {
-		if o.Obfs != "http" && o.Obfs != "tls" {
-			bad("shadowsocks obfs %q is not a simple-obfs mode (http or tls); name a SIP002 plugin instead", o.Obfs)
+	if ob.Plugin == "" && ob.Type != "" {
+		if ob.Type != "http" && ob.Type != "tls" {
+			bad("shadowsocks obfs %q is not a simple-obfs mode (http or tls); name a SIP002 plugin instead", ob.Type)
 		}
-		if o.ObfsParam != "" && net.ParseIP(o.ObfsParam) == nil && !isDomain(o.ObfsParam) {
-			bad("obfs host %q is not valid", o.ObfsParam)
+		if ob.Param != "" && net.ParseIP(ob.Param) == nil && !isDomain(ob.Param) {
+			bad("obfs host %q is not valid", ob.Param)
 		}
 	}
-	if strings.ContainsAny(o.ObfsParam, ";\r\n\t\x00") {
+	if strings.ContainsAny(ob.Param, ";\r\n\t\x00") {
 		bad("shadowsocks obfs-host contains a separator or control character")
 	}
-	if o.Plugin == "" && o.Obfs == "" && o.ObfsParam != "" {
+	if ob.Plugin == "" && ob.Type == "" && ob.Param != "" {
 		// An obfs-host with no obfs mode renders nowhere: sing-box
 		// only emits it alongside a plugin, mihomo only as the native
 		// obfs pair. Refuse the dead field instead of dropping it.

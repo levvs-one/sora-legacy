@@ -77,7 +77,7 @@ func services(t *testing.T) []service {
 	add("vless-httpupgrade", vless(map[string]any{"network": "httpupgrade", "httpupgradeSettings": map[string]any{"path": "/up"}}),
 		engine.Outbound{Protocol: engine.ProtocolVLESS, UUID: uuid, Transport: engine.Transport{Type: "httpupgrade", Path: "/up"}})
 	add("vless-xhttp", vless(map[string]any{"network": "xhttp", "xhttpSettings": map[string]any{"path": "/x", "mode": "packet-up"}}),
-		engine.Outbound{Protocol: engine.ProtocolVLESS, UUID: uuid, Transport: engine.Transport{Type: "xhttp", Path: "/x", Mode: "packet-up"}})
+		engine.Outbound{Protocol: engine.ProtocolVLESS, UUID: uuid, Transport: engine.Transport{Type: "xhttp", Path: "/x", XHTTP: &engine.XHTTPSettings{Mode: "packet-up"}}})
 	encryptionKey, err := ecdh.X25519().GenerateKey(rand.Reader)
 	if err != nil {
 		t.Fatal(err)
@@ -88,7 +88,7 @@ func services(t *testing.T) []service {
 			Encryption: "mlkem768x25519plus.native.0rtt." + base64.RawURLEncoding.EncodeToString(encryptionKey.PublicKey().Bytes())}
 		if transport == "xhttp" {
 			stream["xhttpSettings"] = map[string]any{"path": "/encrypted", "mode": "packet-up"}
-			o.Transport = engine.Transport{Type: "xhttp", Path: "/encrypted", Mode: "packet-up"}
+			o.Transport = engine.Transport{Type: "xhttp", Path: "/encrypted", XHTTP: &engine.XHTTPSettings{Mode: "packet-up"}}
 		}
 		inbound := vless(stream)
 		inbound["settings"].(map[string]any)["decryption"] = "mlkem768x25519plus.native.600s." + base64.RawURLEncoding.EncodeToString(encryptionKey.Bytes())
@@ -117,7 +117,7 @@ func services(t *testing.T) []service {
 			"xhttpSettings": map[string]any{"path": "/x", "mode": mode},
 		}), engine.Outbound{Protocol: engine.ProtocolVLESS, UUID: uuid,
 			TLS:       engine.TLS{Enabled: true, ServerName: "example.com", ALPN: []string{"h2"}},
-			Transport: engine.Transport{Type: "xhttp", Path: "/x", Mode: mode}})
+			Transport: engine.Transport{Type: "xhttp", Path: "/x", XHTTP: &engine.XHTTPSettings{Mode: mode}}})
 	}
 	add("vmess-ws", map[string]any{"protocol": "vmess", "settings": map[string]any{"clients": []any{map[string]any{"id": uuid}}},
 		"streamSettings": map[string]any{"network": "ws", "wsSettings": map[string]any{"path": "/vm"}}},

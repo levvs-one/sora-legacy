@@ -13,9 +13,9 @@ import (
 
 func TestRenderHysteria2BandwidthAndHopping(t *testing.T) {
 	p := testPlan()
-	p.Outbounds[1].UpMbps, p.Outbounds[1].DownMbps = 20, 100
-	p.Outbounds[1].HopPorts = "20000-30000"
-	p.Outbounds[1].HopInterval = 30
+	p.Outbounds[1].QUICBox().UpMbps, p.Outbounds[1].QUICBox().DownMbps = 20, 100
+	p.Outbounds[1].QUICBox().HopPorts = "20000-30000"
+	p.Outbounds[1].QUICBox().HopInterval = 30
 	out, err := Render(p, testRuntime(t))
 	if err != nil {
 		t.Fatal(err)
@@ -33,8 +33,8 @@ func TestRenderTUICTuning(t *testing.T) {
 		ID: "srv-3", Name: "TUIC", Protocol: engine.ProtocolTUIC,
 		Server: "tu.example.com", Port: 443,
 		UUID: "11111111-2222-3333-4444-555555555555", Password: "tuic-test-password",
-		CongestionControl: "cubic", UDPRelayMode: "quic", Token: "v4-token", TUICHeartbeat: 25,
-		TLS: engine.TLS{Enabled: true, ServerName: "tu.example.com"},
+		QUIC: &engine.QUICSettings{CongestionControl: "cubic", UDPRelayMode: "quic", Token: "v4-token", TUICHeartbeat: 25},
+		TLS:  engine.TLS{Enabled: true, ServerName: "tu.example.com"},
 	})
 	out, err := Render(p, testRuntime(t))
 	if err != nil {
@@ -76,9 +76,9 @@ func TestRenderHy2TUICDeterministic(t *testing.T) {
 	for _, proto := range []engine.Protocol{engine.ProtocolHysteria2, engine.ProtocolTUIC} {
 		p := enginetest.Plan(proto)
 		o := &p.Outbounds[0]
-		o.HopPorts, o.HopInterval = "20000-30000,40000", 30
-		o.UpMbps, o.DownMbps = 20, 100
-		o.CongestionControl, o.UDPRelayMode, o.TUICHeartbeat = "cubic", "quic", 25
+		o.QUICBox().HopPorts, o.QUICBox().HopInterval = "20000-30000,40000", 30
+		o.QUICBox().UpMbps, o.QUICBox().DownMbps = 20, 100
+		o.QUICBox().CongestionControl, o.QUICBox().UDPRelayMode, o.QUICBox().TUICHeartbeat = "cubic", "quic", 25
 		first, err := Render(p, testRuntime(t))
 		if err != nil {
 			t.Fatal(err)

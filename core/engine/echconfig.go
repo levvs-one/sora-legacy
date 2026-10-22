@@ -9,7 +9,7 @@ import (
 // ECHConfigList handling as data (S5-SP5 decoder; SP5-render helpers,
 // ported from sora snapshot 63faf1d3480d5429b6bcec3483c19c8e03defb85).
 //
-// A plan pins ECH as PEM lines (TLS.ECH.Config) — the shape sing-box
+// A plan pins ECH as PEM lines (ECHConfig.Config) — the shape sing-box
 // takes. The three engines spell the same list three ways, all probed
 // on the pinned binaries (2026-10-20, wire captures in
 // reports/CENSOR-FP.md):

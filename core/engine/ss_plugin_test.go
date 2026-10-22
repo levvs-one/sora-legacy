@@ -15,7 +15,7 @@ func ssPluginPlan(plugin, opts string) *Plan {
 	p := &Plan{SessionID: "sp3b", Outbounds: []Outbound{
 		{ID: "ss", Name: "ss", Protocol: ProtocolShadowsocks,
 			Server: "ss.example.com", Port: 4433, Cipher: "aes-256-gcm",
-			Password: "a-long-enough-password", Plugin: plugin, PluginOpts: opts},
+			Password: "a-long-enough-password", Obfs: &ObfsSettings{Plugin: plugin, PluginOpts: opts}},
 	}}
 	return p
 }
@@ -49,7 +49,7 @@ func TestSSPluginSelectionMatrix(t *testing.T) {
 	}
 	// Legacy obfs: Xray must report it missing; the carriers must not.
 	p := ssPluginPlan("", "")
-	p.Outbounds[0].Obfs, p.Outbounds[0].ObfsParam = "tls", "example.com"
+	p.Outbounds[0].ObfsBox().Type, p.Outbounds[0].ObfsBox().Param = "tls", "example.com"
 	if m := Catalog[KindXray].Missing(p); !strings.Contains(strings.Join(m, ","), "shadowsocks obfs") {
 		t.Errorf("xray must miss legacy SS obfs, missing=%v", m)
 	}
@@ -69,22 +69,28 @@ func TestValidateShadowsocksPluginFailsClosed(t *testing.T) {
 		mutate func(*Outbound)
 		want   string // substring; "" means valid
 	}{
-		{"known plugin ok", func(o *Outbound) { o.Plugin, o.PluginOpts = "v2ray-plugin", "tls;host=example.com;path=/ws" }, ""},
-		{"obfs-local ok", func(o *Outbound) { o.Plugin, o.PluginOpts = "obfs-local", "obfs=tls;obfs-host=example.com" }, ""},
-		{"unknown plugin", func(o *Outbound) { o.Plugin = "nosuch-plugin" }, "unknown shadowsocks plugin"},
-		{"opts without plugin", func(o *Outbound) { o.PluginOpts = "tls" }, "without a plugin"},
-		{"unknown option", func(o *Outbound) { o.Plugin, o.PluginOpts = "v2ray-plugin", "bogus=1" }, "unknown option"},
-		{"duplicate option", func(o *Outbound) { o.Plugin, o.PluginOpts = "v2ray-plugin", "host=a.com;host=b.com" }, "set twice"},
-		{"bad flag", func(o *Outbound) { o.Plugin, o.PluginOpts = "v2ray-plugin", "tls=maybe" }, "boolean"},
-		{"bad host", func(o *Outbound) { o.Plugin, o.PluginOpts = "v2ray-plugin", "host=exa mple.com" }, "not a valid host"},
-		{"bad path", func(o *Outbound) { o.Plugin, o.PluginOpts = "v2ray-plugin", "path=ws" }, "absolute path"},
-		{"bad obfs mode", func(o *Outbound) { o.Plugin, o.PluginOpts = "obfs-local", "obfs=salamander" }, "http or tls"},
-		{"stray segment", func(o *Outbound) { o.Plugin, o.PluginOpts = "v2ray-plugin", "tls;;host=a.com" }, "empty option segment"},
-		{"legacy obfs ok", func(o *Outbound) { o.Obfs, o.ObfsParam = "tls", "example.com" }, ""},
-		{"legacy obfs bad mode", func(o *Outbound) { o.Obfs = "salamander" }, "simple-obfs mode"},
-		{"legacy obfs bad host", func(o *Outbound) { o.Obfs, o.ObfsParam = "http", "not a host" }, "not valid"},
-		{"obfs-host injection", func(o *Outbound) { o.Obfs, o.ObfsParam = "tls", "a.com;obfs=http" }, "separator"},
-		{"dead obfs-host", func(o *Outbound) { o.ObfsParam = "example.com" }, "without an obfs mode"},
+		{"known plugin ok", func(o *Outbound) {
+			o.ObfsBox().Plugin, o.ObfsBox().PluginOpts = "v2ray-plugin", "tls;host=example.com;path=/ws"
+		}, ""},
+		{"obfs-local ok", func(o *Outbound) {
+			o.ObfsBox().Plugin, o.ObfsBox().PluginOpts = "obfs-local", "obfs=tls;obfs-host=example.com"
+		}, ""},
+		{"unknown plugin", func(o *Outbound) { o.ObfsBox().Plugin = "nosuch-plugin" }, "unknown shadowsocks plugin"},
+		{"opts without plugin", func(o *Outbound) { o.ObfsBox().PluginOpts = "tls" }, "without a plugin"},
+		{"unknown option", func(o *Outbound) { o.ObfsBox().Plugin, o.ObfsBox().PluginOpts = "v2ray-plugin", "bogus=1" }, "unknown option"},
+		{"duplicate option", func(o *Outbound) {
+			o.ObfsBox().Plugin, o.ObfsBox().PluginOpts = "v2ray-plugin", "host=a.com;host=b.com"
+		}, "set twice"},
+		{"bad flag", func(o *Outbound) { o.ObfsBox().Plugin, o.ObfsBox().PluginOpts = "v2ray-plugin", "tls=maybe" }, "boolean"},
+		{"bad host", func(o *Outbound) { o.ObfsBox().Plugin, o.ObfsBox().PluginOpts = "v2ray-plugin", "host=exa mple.com" }, "not a valid host"},
+		{"bad path", func(o *Outbound) { o.ObfsBox().Plugin, o.ObfsBox().PluginOpts = "v2ray-plugin", "path=ws" }, "absolute path"},
+		{"bad obfs mode", func(o *Outbound) { o.ObfsBox().Plugin, o.ObfsBox().PluginOpts = "obfs-local", "obfs=salamander" }, "http or tls"},
+		{"stray segment", func(o *Outbound) { o.ObfsBox().Plugin, o.ObfsBox().PluginOpts = "v2ray-plugin", "tls;;host=a.com" }, "empty option segment"},
+		{"legacy obfs ok", func(o *Outbound) { o.ObfsBox().Type, o.ObfsBox().Param = "tls", "example.com" }, ""},
+		{"legacy obfs bad mode", func(o *Outbound) { o.ObfsBox().Type = "salamander" }, "simple-obfs mode"},
+		{"legacy obfs bad host", func(o *Outbound) { o.ObfsBox().Type, o.ObfsBox().Param = "http", "not a host" }, "not valid"},
+		{"obfs-host injection", func(o *Outbound) { o.ObfsBox().Type, o.ObfsBox().Param = "tls", "a.com;obfs=http" }, "separator"},
+		{"dead obfs-host", func(o *Outbound) { o.ObfsBox().Param = "example.com" }, "without an obfs mode"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			o := mk()
@@ -103,7 +109,7 @@ func TestValidateShadowsocksPluginFailsClosed(t *testing.T) {
 	}
 	// Plugin fields on a non-Shadowsocks outbound are refused, not dropped.
 	o := Outbound{ID: "v", Name: "v", Protocol: ProtocolVLESS, Server: "v.example.com", Port: 443,
-		UUID: "b831381d-6324-4d53-ad4f-8cda48b30811", Plugin: "v2ray-plugin"}
+		UUID: "b831381d-6324-4d53-ad4f-8cda48b30811", Obfs: &ObfsSettings{Plugin: "v2ray-plugin"}}
 	if err := o.Validate(); err == nil || !strings.Contains(err.Error(), "plugins belong to shadowsocks") {
 		t.Fatalf("plugin on vless: Validate = %v", err)
 	}
@@ -134,9 +140,9 @@ func TestSecretsCoverPluginSecretValues(t *testing.T) {
 	o := Outbound{ID: "ss", Name: "ss", Protocol: ProtocolShadowsocks,
 		Server: "ss.example.com", Port: 4433, Cipher: "aes-256-gcm",
 		Password: "a-long-enough-password",
-		Plugin:   "shadow-tls", PluginOpts: "host=example.com;password=" + "plugin-secret-value"}
+		Obfs:     &ObfsSettings{Plugin: "shadow-tls", PluginOpts: "host=example.com;password=" + "plugin-secret-value"}}
 	secrets := o.Secrets()
-	for _, want := range []string{"plugin-secret-value", o.PluginOpts} {
+	for _, want := range []string{"plugin-secret-value", o.ObfsOrZero().PluginOpts} {
 		found := false
 		for _, s := range secrets {
 			if s == want {

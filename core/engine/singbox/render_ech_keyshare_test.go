@@ -30,7 +30,7 @@ func trojanOutbound(t *testing.T, cfg map[string]any) map[string]any {
 
 func TestRenderECHOutboundTLS(t *testing.T) {
 	p := enginetest.Plan(engine.ProtocolTrojan)
-	p.Outbounds[0].TLS.ECH = engine.ECHConfig{
+	p.Outbounds[0].TLS.ECH = &engine.ECHConfig{
 		Enabled: true,
 		Config:  []string{"AE7+DQA8NwAgACBwaW5uZWQtZWNoLXRlc3QtY29uZmln"},
 	}
@@ -82,7 +82,7 @@ func TestRenderOmitsECHByDefault(t *testing.T) {
 // override must reach the engine, an empty one must stay unset.
 func TestRenderECHQueryServerName(t *testing.T) {
 	p := enginetest.Plan(engine.ProtocolTrojan)
-	p.Outbounds[0].TLS.ECH = engine.ECHConfig{Enabled: true, QueryServerName: "ech-query.example.com"}
+	p.Outbounds[0].TLS.ECH = &engine.ECHConfig{Enabled: true, QueryServerName: "ech-query.example.com"}
 	ech, ok := trojanOutbound(t, render(t, p))["tls"].(map[string]any)["ech"].(map[string]any)
 	if !ok {
 		t.Fatal("tls block must carry ech when ECH is enabled")
@@ -91,7 +91,7 @@ func TestRenderECHQueryServerName(t *testing.T) {
 		t.Fatalf("ech.query_server_name = %v, want the configured override", ech["query_server_name"])
 	}
 
-	p.Outbounds[0].TLS.ECH = engine.ECHConfig{Enabled: true}
+	p.Outbounds[0].TLS.ECH = &engine.ECHConfig{Enabled: true}
 	ech, ok = trojanOutbound(t, render(t, p))["tls"].(map[string]any)["ech"].(map[string]any)
 	if !ok {
 		t.Fatal("tls block must carry ech when ECH is enabled")
@@ -108,7 +108,7 @@ func TestRenderECHQueryServerName(t *testing.T) {
 // emitting an undecodable config.
 func TestRenderECHRejectsBadPin(t *testing.T) {
 	p := enginetest.Plan(engine.ProtocolTrojan)
-	p.Outbounds[0].TLS.ECH = engine.ECHConfig{
+	p.Outbounds[0].TLS.ECH = &engine.ECHConfig{
 		Enabled: true,
 		Config:  []string{"!!! not a config !!!"},
 	}
@@ -124,7 +124,7 @@ func TestRenderECHRejectsBadPin(t *testing.T) {
 func TestCensorP1RenderKeyShare(t *testing.T) {
 	for _, ks := range []string{"hybrid", "classical"} {
 		p := enginetest.Plan(engine.ProtocolVLESS)
-		p.Outbounds[0].TLS.KeyShare = ks
+		p.Outbounds[0].TLS.RealityBox().KeyShare = ks
 		raw, err := Render(p, testRuntime)
 		if err != nil {
 			t.Fatal(err)
@@ -158,7 +158,7 @@ func TestCensorP1BinaryAcceptsKeyShareRender(t *testing.T) {
 		bin = filepath.Join(dir, "sing-box")
 	}
 	p := enginetest.Plan(engine.ProtocolVLESS)
-	p.Outbounds[0].TLS.KeyShare = "hybrid"
+	p.Outbounds[0].TLS.RealityBox().KeyShare = "hybrid"
 	raw, err := Render(p, testRuntime)
 	if err != nil {
 		t.Fatal(err)

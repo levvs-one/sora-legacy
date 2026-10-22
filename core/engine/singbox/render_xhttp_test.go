@@ -18,9 +18,10 @@ func xhttpPlan() *engine.Plan {
 	p := enginetest.Plan(engine.ProtocolVLESS)
 	p.Outbounds[0].Flow = "" // XHTTP cannot carry Vision; REALITY stays
 	p.Outbounds[0].Transport = engine.Transport{
-		Type: "xhttp", Mode: "stream-up", Path: "/xh",
-		XmuxMaxConcurrency: 16, XmuxMaxReuseTimes: 10,
-		XPaddingBytes: "100-1000",
+		Type: "xhttp", Path: "/xh",
+		XHTTP: &engine.XHTTPSettings{Mode: "stream-up",
+			XmuxMaxConcurrency: 16, XmuxMaxReuseTimes: 10,
+			XPaddingBytes: "100-1000"},
 	}
 	return p
 }

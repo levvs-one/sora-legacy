@@ -15,7 +15,7 @@ import (
 // by the FeatureHy2PortHop/FeatureHy2Obfs gates instead.
 func TestRenderPassesHysteria2BandwidthToBrutal(t *testing.T) {
 	p := hysteriaWithoutObfs(enginetest.Plan(engine.ProtocolHysteria2))
-	p.Outbounds[0].UpMbps, p.Outbounds[0].DownMbps = 100, 500
+	p.Outbounds[0].QUICBox().UpMbps, p.Outbounds[0].QUICBox().DownMbps = 100, 500
 	raw, err := Render(p, testRuntime, nil)
 	if err != nil {
 		t.Fatal(err)

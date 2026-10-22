@@ -289,7 +289,7 @@ func (c Capabilities) Missing(p *Plan) []string {
 	}
 	if c.Kind == KindXray {
 		for _, o := range p.Outbounds {
-			if o.TLS.Insecure && !o.TLS.Reality && (o.TLS.Enabled || o.Protocol == ProtocolTrojan || o.Protocol == ProtocolHysteria2) {
+			if o.TLS.Insecure && (o.TLS.Reality == nil) && (o.TLS.Enabled || o.Protocol == ProtocolTrojan || o.Protocol == ProtocolHysteria2) {
 				missing = append(missing, "TLS verification disabled (removed by Xray)")
 				break
 			}
@@ -307,7 +307,7 @@ func (c Capabilities) Missing(p *Plan) []string {
 		// Only Xray implements REALITY spider_x; the other engines have
 		// no such option and would silently drop it.
 		for _, o := range p.Outbounds {
-			if o.TLS.SpiderX != "" {
+			if o.TLS.RealityOrZero().SpiderX != "" {
 				missing = append(missing, "REALITY spider_x")
 				break
 			}
@@ -322,11 +322,11 @@ func (c Capabilities) Missing(p *Plan) []string {
 		if o.Protocol != ProtocolShadowsocks {
 			continue
 		}
-		if o.Plugin != "" && !SupportsSSPlugin(c.Kind, o.Plugin) {
-			missing = append(missing, "shadowsocks plugin "+o.Plugin)
+		if o.ObfsOrZero().Plugin != "" && !SupportsSSPlugin(c.Kind, o.ObfsOrZero().Plugin) {
+			missing = append(missing, "shadowsocks plugin "+o.ObfsOrZero().Plugin)
 			break
 		}
-		if o.Plugin == "" && o.Obfs != "" && !SupportsSSPlugin(c.Kind, "") {
+		if o.ObfsOrZero().Plugin == "" && o.ObfsOrZero().Type != "" && !SupportsSSPlugin(c.Kind, "") {
 			missing = append(missing, "shadowsocks obfs (simple-obfs)")
 			break
 		}

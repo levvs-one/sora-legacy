@@ -74,9 +74,10 @@ func mirrorPlan(t *testing.T, kind engine.Kind, proto engine.Protocol) *engine.P
 	t.Helper()
 	if proto == engine.ProtocolXrayProfile {
 		profile := `{"outbounds":[{"tag":"proxy","protocol":"vless","settings":{"vnext":[{"address":"192.0.2.10","port":443,"users":[{"id":"123e4567-e89b-12d3-a456-426614174000","encryption":"none"}]}]}},{"tag":"direct","protocol":"freedom"}]}`
+		rawProfile := json.RawMessage(profile)
 		return &engine.Plan{
 			SessionID:  "catalog-mirror",
-			Outbounds:  []engine.Outbound{{ID: "p", Name: "profile", Protocol: engine.ProtocolXrayProfile, Server: "192.0.2.10", Port: 443, Profile: json.RawMessage(profile)}},
+			Outbounds:  []engine.Outbound{{ID: "p", Name: "profile", Protocol: engine.ProtocolXrayProfile, Server: "192.0.2.10", Port: 443, Profile: &rawProfile}},
 			LocalProxy: engine.LocalProxy{Enabled: true},
 			Options:    engine.Options{LogLevel: "warning", TestURL: engine.TestURLProduction},
 		}
@@ -84,7 +85,7 @@ func mirrorPlan(t *testing.T, kind engine.Kind, proto engine.Protocol) *engine.P
 	p := enginetest.Plan(proto)
 	if caps := engine.Catalog[kind]; !caps.Features[engine.FeatureHy2Obfs] {
 		for i := range p.Outbounds {
-			p.Outbounds[i].Obfs, p.Outbounds[i].ObfsParam = "", ""
+			p.Outbounds[i].ObfsBox().Type, p.Outbounds[i].ObfsBox().Param = "", ""
 		}
 	}
 	return p
@@ -167,7 +168,7 @@ func TestCatalogMirrorECHClaimRenders(t *testing.T) {
 		}
 		t.Run(string(kind), func(t *testing.T) {
 			p := enginetest.Plan(engine.ProtocolTrojan)
-			p.Outbounds[0].TLS.ECH = engine.ECHConfig{
+			p.Outbounds[0].TLS.ECH = &engine.ECHConfig{
 				Enabled: true,
 				Config:  []string{"AE7+DQA8NwAgACBwaW5uZWQtZWNoLXRlc3QtY29uZmln"},
 			}

@@ -23,9 +23,10 @@ func xhttpTuningPlan(t *testing.T) *engine.Plan {
 	o := &p.Outbounds[0]
 	o.Flow = "" // XHTTP cannot carry Vision; REALITY stays
 	o.Transport = engine.Transport{
-		Type: "xhttp", Mode: "stream-up", Path: "/xh",
-		XmuxMaxConcurrency: 16, XmuxMaxReuseTimes: 10,
-		XPaddingBytes: "100-1000",
+		Type: "xhttp", Path: "/xh",
+		XHTTP: &engine.XHTTPSettings{Mode: "stream-up",
+			XmuxMaxConcurrency: 16, XmuxMaxReuseTimes: 10,
+			XPaddingBytes: "100-1000"},
 	}
 	return p
 }
@@ -49,7 +50,7 @@ func TestRenderXHTTPTuning(t *testing.T) {
 	}
 	p := enginetest.Plan(engine.ProtocolVLESS)
 	p.Outbounds[0].Flow = "" // XHTTP cannot carry Vision; REALITY stays
-	p.Outbounds[0].Transport = engine.Transport{Type: "xhttp", Mode: "stream-up", Path: "/xh"}
+	p.Outbounds[0].Transport = engine.Transport{Type: "xhttp", XHTTP: &engine.XHTTPSettings{Mode: "stream-up"}, Path: "/xh"}
 	raw, err = Render(p, testRuntime, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -62,7 +63,7 @@ func TestRenderXHTTPTuning(t *testing.T) {
 	if !strings.Contains(string(raw), `"mode":"stream-up"`) {
 		t.Errorf("explicit mode must pass through:\n%s", raw)
 	}
-	p.Outbounds[0].Transport.Mode = ""
+	p.Outbounds[0].Transport.XHTTPBox().Mode = ""
 	raw, err = Render(p, testRuntime, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -95,8 +96,8 @@ func xhttpVLESS() *engine.Plan {
 	o := &p.Outbounds[0]
 	o.Flow = "" // XTLS Vision is TCP-only; it would (correctly) refuse xhttp.
 	o.Transport = engine.Transport{
-		Type: "xhttp", Path: "/up", Mode: "stream-up",
-		DownloadAddress: "down.example.com", DownloadPort: 8443,
+		Type: "xhttp", Path: "/up",
+		XHTTP: &engine.XHTTPSettings{Mode: "stream-up", DownloadAddress: "down.example.com", DownloadPort: 8443},
 	}
 	return p
 }
@@ -147,9 +148,9 @@ func TestRenderPassesXHTTPDownloadSettings(t *testing.T) {
 
 func TestRenderRefusesBrokenXHTTPDownloadSettings(t *testing.T) {
 	cases := map[string]func(*engine.Transport){
-		"address without port": func(tr *engine.Transport) { tr.DownloadPort = 0 },
-		"port without address": func(tr *engine.Transport) { tr.DownloadAddress = "" },
-		"stream-one mode":      func(tr *engine.Transport) { tr.Mode = "stream-one" },
+		"address without port": func(tr *engine.Transport) { tr.XHTTPBox().DownloadPort = 0 },
+		"port without address": func(tr *engine.Transport) { tr.XHTTPBox().DownloadAddress = "" },
+		"stream-one mode":      func(tr *engine.Transport) { tr.XHTTPBox().Mode = "stream-one" },
 	}
 	for name, mutate := range cases {
 		p := xhttpVLESS()

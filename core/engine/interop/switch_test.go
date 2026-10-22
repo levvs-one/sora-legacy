@@ -2,6 +2,7 @@ package interop_test
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net"
@@ -132,7 +133,9 @@ func TestRealEngineSwitchesKeepTCPAndUDPAndReleaseTun(t *testing.T) {
 		// Provider Xray profiles are refused before touching the working tunnel.
 		bad := *p
 		bad.SessionID, bad.Engines, bad.PrivateControl = "unsupported", []engine.Kind{engine.KindSingBox}, false
-		bad.Outbounds = []engine.Outbound{{ID: "provider", Protocol: engine.ProtocolXrayProfile, Profile: []byte(`{"outbounds":[{"protocol":"freedom"}]}`)}}
+		rawProfile := []byte(`{"outbounds":[{"protocol":"freedom"}]}`)
+		profileDoc := json.RawMessage(rawProfile)
+		bad.Outbounds = []engine.Outbound{{ID: "provider", Protocol: engine.ProtocolXrayProfile, Profile: &profileDoc}}
 		bad.Rules = []engine.Rule{{Type: engine.RuleMatchAll, Target: "provider"}}
 		if _, err := manager.Connect(t.Context(), &bad, session.Settings{}); err == nil {
 			t.Fatal("unsupported provider profile was accepted")

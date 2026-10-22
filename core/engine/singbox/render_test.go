@@ -132,7 +132,7 @@ func TestEngineAcceptsRenderedPlans(t *testing.T) {
 		for _, mode := range []string{"auto", "packet-up", "stream-up", "stream-one"} {
 			p := enginetest.Plan(engine.ProtocolVLESS)
 			p.Outbounds[0].Flow = ""
-			p.Outbounds[0].Transport = engine.Transport{Type: "xhttp", Path: "/x?provider=1", Host: "cdn.example.com", Mode: mode, Headers: map[string]string{"User-Agent": "Sora-interop"}}
+			p.Outbounds[0].Transport = engine.Transport{Type: "xhttp", Path: "/x?provider=1", Host: "cdn.example.com", XHTTP: &engine.XHTTPSettings{Mode: mode}, Headers: map[string]string{"User-Agent": "Sora-interop"}}
 			plans["xhttp-"+mode] = p
 		}
 		p := enginetest.Plan(engine.ProtocolVLESS)

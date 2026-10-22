@@ -32,21 +32,21 @@ func TestValidateXHTTP(t *testing.T) {
 	}{
 		{"plain transport without xhttp fields", plain(nil), false},
 		{"downloadSettings on tcp is rejected", plain(func(o *Outbound) {
-			o.Transport.DownloadAddress = "dl.example.com"
-			o.Transport.DownloadPort = 443
+			o.Transport.XHTTPBox().DownloadAddress = "dl.example.com"
+			o.Transport.XHTTPBox().DownloadPort = 443
 		}), true},
 		{"xmux tuning on tcp is rejected", plain(func(o *Outbound) {
-			o.Transport.XmuxMaxConcurrency = 8
+			o.Transport.XHTTPBox().XmuxMaxConcurrency = 8
 		}), true},
 		{"xPaddingBytes on tcp is rejected", plain(func(o *Outbound) {
-			o.Transport.XPaddingBytes = "100-1000"
+			o.Transport.XHTTPBox().XPaddingBytes = "100-1000"
 		}), true},
 		{"xhttp minimal", xhttp(nil), false},
 		{"xhttp unknown mode", xhttp(func(o *Outbound) {
-			o.Transport.Mode = "stream-sideways"
+			o.Transport.XHTTPBox().Mode = "stream-sideways"
 		}), true},
 		{"xhttp packet-up mode", xhttp(func(o *Outbound) {
-			o.Transport.Mode = "packet-up"
+			o.Transport.XHTTPBox().Mode = "packet-up"
 		}), false},
 		{"xhttp with vision flow", xhttp(func(o *Outbound) {
 			o.Flow = "xtls-rprx-vision"
@@ -70,52 +70,52 @@ func TestValidateXHTTP(t *testing.T) {
 			// REALITY is not VLESS Encryption: the exception must
 			// not leak to it.
 			o.Flow = "xtls-rprx-vision"
-			o.TLS.Reality = true
+			o.TLS.Reality = &RealitySettings{}
 		}), true},
 		{"download address without port", xhttp(func(o *Outbound) {
-			o.Transport.Mode = "stream-up"
-			o.Transport.DownloadAddress = "dl.example.com"
+			o.Transport.XHTTPBox().Mode = "stream-up"
+			o.Transport.XHTTPBox().DownloadAddress = "dl.example.com"
 		}), true},
 		{"download port without address", xhttp(func(o *Outbound) {
-			o.Transport.Mode = "stream-up"
-			o.Transport.DownloadPort = 443
+			o.Transport.XHTTPBox().Mode = "stream-up"
+			o.Transport.XHTTPBox().DownloadPort = 443
 		}), true},
 		{"downloadSettings with stream-one", xhttp(func(o *Outbound) {
-			o.Transport.Mode = "stream-one"
-			o.Transport.DownloadAddress = "dl.example.com"
-			o.Transport.DownloadPort = 443
+			o.Transport.XHTTPBox().Mode = "stream-one"
+			o.Transport.XHTTPBox().DownloadAddress = "dl.example.com"
+			o.Transport.XHTTPBox().DownloadPort = 443
 		}), true},
 		{"downloadSettings valid pair on stream-up", xhttp(func(o *Outbound) {
-			o.Transport.Mode = "stream-up"
-			o.Transport.DownloadAddress = "dl.example.com"
-			o.Transport.DownloadPort = 443
+			o.Transport.XHTTPBox().Mode = "stream-up"
+			o.Transport.XHTTPBox().DownloadAddress = "dl.example.com"
+			o.Transport.XHTTPBox().DownloadPort = 443
 		}), false},
 		{"download address is not a host", xhttp(func(o *Outbound) {
-			o.Transport.Mode = "stream-up"
-			o.Transport.DownloadAddress = "https://dl.example.com/path"
-			o.Transport.DownloadPort = 443
+			o.Transport.XHTTPBox().Mode = "stream-up"
+			o.Transport.XHTTPBox().DownloadAddress = "https://dl.example.com/path"
+			o.Transport.XHTTPBox().DownloadPort = 443
 		}), true},
 		{"xmux negative value", xhttp(func(o *Outbound) {
-			o.Transport.XmuxMaxReuseTimes = -1
+			o.Transport.XHTTPBox().XmuxMaxReuseTimes = -1
 		}), true},
 		{"xmux concurrency and connections are exclusive", xhttp(func(o *Outbound) {
-			o.Transport.XmuxMaxConcurrency = 8
-			o.Transport.XmuxMaxConnections = 4
+			o.Transport.XHTTPBox().XmuxMaxConcurrency = 8
+			o.Transport.XHTTPBox().XmuxMaxConnections = 4
 		}), true},
 		{"xmux concurrency alone", xhttp(func(o *Outbound) {
-			o.Transport.XmuxMaxConcurrency = 8
+			o.Transport.XHTTPBox().XmuxMaxConcurrency = 8
 		}), false},
 		{"xPaddingBytes not a range", xhttp(func(o *Outbound) {
-			o.Transport.XPaddingBytes = "lots"
+			o.Transport.XHTTPBox().XPaddingBytes = "lots"
 		}), true},
 		{"xPaddingBytes inverted range", xhttp(func(o *Outbound) {
-			o.Transport.XPaddingBytes = "1000-100"
+			o.Transport.XHTTPBox().XPaddingBytes = "1000-100"
 		}), true},
 		{"xPaddingBytes above MTU sanity bound", xhttp(func(o *Outbound) {
-			o.Transport.XPaddingBytes = "70000"
+			o.Transport.XHTTPBox().XPaddingBytes = "70000"
 		}), true},
 		{"xPaddingBytes valid range", xhttp(func(o *Outbound) {
-			o.Transport.XPaddingBytes = "100-1000"
+			o.Transport.XHTTPBox().XPaddingBytes = "100-1000"
 		}), false},
 		{"ALPN h3 without TLS", xhttp(func(o *Outbound) {
 			o.TLS.ALPN = []string{"h3"}

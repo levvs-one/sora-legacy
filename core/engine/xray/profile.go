@@ -50,7 +50,7 @@ func stripFiles(v any) {
 func renderProfile(p *engine.Plan, rt supervise.Runtime) ([]byte, error) {
 	profile := p.Outbounds[0]
 	var cfg obj
-	if err := json.Unmarshal(profile.Profile, &cfg); err != nil {
+	if err := json.Unmarshal(profile.ProfileBytes(), &cfg); err != nil {
 		return nil, fmt.Errorf("xray: profile %s: %w", profile.ID, err)
 	}
 	for _, key := range profileOwned {
@@ -117,7 +117,7 @@ func probeProfile(o engine.Outbound, index int) (outbounds []obj, first string, 
 	var cfg struct {
 		Outbounds []obj `json:"outbounds"`
 	}
-	if err := json.Unmarshal(o.Profile, &cfg); err != nil || len(cfg.Outbounds) == 0 {
+	if err := json.Unmarshal(o.ProfileBytes(), &cfg); err != nil || len(cfg.Outbounds) == 0 {
 		return nil, "", fmt.Errorf("xray: profile %s has no outbounds", o.ID)
 	}
 	for _, ob := range cfg.Outbounds {

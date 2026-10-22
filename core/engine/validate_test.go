@@ -129,9 +129,9 @@ func TestValidateRealityParity(t *testing.T) {
 	reality := func(pbk, sid string) Outbound {
 		o := Outbound{ID: "r1", Protocol: ProtocolVLESS, Server: "r.example.com", Port: 443}
 		o.TLS.Enabled = true
-		o.TLS.Reality = true
-		o.TLS.RealityPublicKey = pbk
-		o.TLS.RealityShortID = sid
+		o.TLS.Reality = &RealitySettings{}
+		o.TLS.RealityBox().PublicKey = pbk
+		o.TLS.RealityBox().ShortID = sid
 		o.TLS.ServerName = "cdn.example.com"
 		o.Transport.Type = "tcp"
 		return o
@@ -155,8 +155,8 @@ func TestValidateRealityParity(t *testing.T) {
 		{"reality nonhex sid", reality(goodKey, "zz11"), true},
 		{"reality long sid", reality(goodKey, "aabbccddeeff00112233"), true},
 		{"xhttp minimal", xhttp(nil), false},
-		{"xhttp bad mode", xhttp(func(o *Outbound) { o.Transport.Mode = "stream-sideways" }), true},
-		{"xhttp packet-up mode", xhttp(func(o *Outbound) { o.Transport.Mode = "packet-up" }), false},
+		{"xhttp bad mode", xhttp(func(o *Outbound) { o.Transport.XHTTPBox().Mode = "stream-sideways" }), true},
+		{"xhttp packet-up mode", xhttp(func(o *Outbound) { o.Transport.XHTTPBox().Mode = "packet-up" }), false},
 		{"xhttp vision no enc", xhttp(func(o *Outbound) { o.Flow = "xtls-rprx-vision" }), true},
 		{"xhttp vision with enc", xhttp(func(o *Outbound) {
 			o.Flow = "xtls-rprx-vision"

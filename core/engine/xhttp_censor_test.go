@@ -15,9 +15,9 @@ import (
 func xhttpRealityOutbound() Outbound {
 	o := Outbound{ID: "r1", Protocol: ProtocolVLESS, Server: "r.example.com", Port: 443}
 	o.TLS.Enabled = true
-	o.TLS.Reality = true
-	o.TLS.RealityPublicKey = "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8" // 32-byte base64url
-	o.TLS.RealityShortID = "ab12"
+	o.TLS.Reality = &RealitySettings{}
+	o.TLS.RealityBox().PublicKey = "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8" // 32-byte base64url
+	o.TLS.RealityBox().ShortID = "ab12"
 	o.TLS.ServerName = "cdn.example.com"
 	o.Transport.Type = "tcp"
 	return o
@@ -31,10 +31,10 @@ func TestCensorP1XmuxBoundaries(t *testing.T) {
 	base := func() Outbound {
 		o := xhttpRealityOutbound()
 		o.Transport.Type = "xhttp"
-		o.Transport.Mode = "stream-up"
+		o.Transport.XHTTPBox().Mode = "stream-up"
 		return o
 	}
-	ok := []Transport{
+	ok := []XHTTPSettings{
 		{}, // all zero: engine default
 		{XmuxMaxConcurrency: 1},
 		{XmuxMaxConcurrency: 128},
@@ -44,15 +44,15 @@ func TestCensorP1XmuxBoundaries(t *testing.T) {
 	}
 	for _, tr := range ok {
 		o := base()
-		o.Transport.XmuxMaxConcurrency = tr.XmuxMaxConcurrency
-		o.Transport.XmuxMaxConnections = tr.XmuxMaxConnections
-		o.Transport.XmuxMaxReuseTimes = tr.XmuxMaxReuseTimes
-		o.Transport.XmuxMaxRequestTimes = tr.XmuxMaxRequestTimes
+		o.Transport.XHTTPBox().XmuxMaxConcurrency = tr.XmuxMaxConcurrency
+		o.Transport.XHTTPBox().XmuxMaxConnections = tr.XmuxMaxConnections
+		o.Transport.XHTTPBox().XmuxMaxReuseTimes = tr.XmuxMaxReuseTimes
+		o.Transport.XHTTPBox().XmuxMaxRequestTimes = tr.XmuxMaxRequestTimes
 		if err := o.Validate(); err != nil {
 			t.Errorf("xmux %+v: Validate = %v, want nil", tr, err)
 		}
 	}
-	bad := []Transport{
+	bad := []XHTTPSettings{
 		{XmuxMaxConcurrency: -1},
 		{XmuxMaxConnections: -1},
 		{XmuxMaxReuseTimes: -1},
@@ -61,10 +61,10 @@ func TestCensorP1XmuxBoundaries(t *testing.T) {
 	}
 	for _, tr := range bad {
 		o := base()
-		o.Transport.XmuxMaxConcurrency = tr.XmuxMaxConcurrency
-		o.Transport.XmuxMaxConnections = tr.XmuxMaxConnections
-		o.Transport.XmuxMaxReuseTimes = tr.XmuxMaxReuseTimes
-		o.Transport.XmuxMaxRequestTimes = tr.XmuxMaxRequestTimes
+		o.Transport.XHTTPBox().XmuxMaxConcurrency = tr.XmuxMaxConcurrency
+		o.Transport.XHTTPBox().XmuxMaxConnections = tr.XmuxMaxConnections
+		o.Transport.XHTTPBox().XmuxMaxReuseTimes = tr.XmuxMaxReuseTimes
+		o.Transport.XHTTPBox().XmuxMaxRequestTimes = tr.XmuxMaxRequestTimes
 		if err := o.Validate(); err == nil {
 			t.Errorf("xmux %+v: Validate = nil, want an error", tr)
 		}
@@ -73,7 +73,7 @@ func TestCensorP1XmuxBoundaries(t *testing.T) {
 	// excess is a warning (xhttp-xmux-proxy-limit), never a silent
 	// clamp: the value the user wrote is the value rendered.
 	o := base()
-	o.Transport.XmuxMaxConcurrency = 129
+	o.Transport.XHTTPBox().XmuxMaxConcurrency = 129
 	if err := o.Validate(); err != nil {
 		t.Fatalf("xmux 129: Validate = %v, want nil (warning territory)", err)
 	}
@@ -91,8 +91,8 @@ func TestCensorP1PaddingBoundaries(t *testing.T) {
 	for _, ok := range []string{"", "0", "0-0", "1", "100-1000", "65535", "0-65535"} {
 		o := xhttpRealityOutbound()
 		o.Transport.Type = "xhttp"
-		o.Transport.Mode = "stream-up"
-		o.Transport.XPaddingBytes = ok
+		o.Transport.XHTTPBox().Mode = "stream-up"
+		o.Transport.XHTTPBox().XPaddingBytes = ok
 		if err := o.Validate(); err != nil {
 			t.Errorf("padding %q: Validate = %v, want nil", ok, err)
 		}
@@ -100,8 +100,8 @@ func TestCensorP1PaddingBoundaries(t *testing.T) {
 	for _, bad := range []string{"65536", "0-65536", "1000-100", "-5", "abc", "10-", "1-2-3"} {
 		o := xhttpRealityOutbound()
 		o.Transport.Type = "xhttp"
-		o.Transport.Mode = "stream-up"
-		o.Transport.XPaddingBytes = bad
+		o.Transport.XHTTPBox().Mode = "stream-up"
+		o.Transport.XHTTPBox().XPaddingBytes = bad
 		if err := o.Validate(); err == nil {
 			t.Errorf("padding %q: Validate = nil, want an error", bad)
 		}

@@ -23,7 +23,7 @@ func TestECHQueryServerNameGate(t *testing.T) {
 	}
 
 	p := &Plan{SessionID: "s1", Outbounds: []Outbound{echOutbound()}}
-	p.Outbounds[0].TLS.ECH.QueryServerName = "ech-query.example.com"
+	p.Outbounds[0].TLS.ECHBox().QueryServerName = "ech-query.example.com"
 	if !p.RequiredFeatures()[FeatureECHQueryServerName] {
 		t.Fatal("a plan pinning an ECH query_server_name must require feature ech-query-server-name")
 	}

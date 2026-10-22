@@ -31,13 +31,13 @@ func (p *Plan) Secrets() []string {
 // Secrets lists the secret fields of one outbound. Values shorter than four
 // characters are skipped: masking them would destroy ordinary log text.
 func (o Outbound) Secrets() []string {
-	candidates := []string{o.UUID, o.Password, o.UserID, o.ObfsParam, o.PluginOpts, o.Token, o.PrivateKey}
+	candidates := []string{o.UUID, o.Password, o.UserID, o.ObfsOrZero().Param, o.ObfsOrZero().PluginOpts, o.QUICOrZero().Token, o.WireGuardOrZero().PrivateKey}
 	// Secret-typed plugin option values (shadow-tls/restls/jls
 	// passwords, kcptun keys) live ONLY inside the PluginOpts string:
 	// masking the whole string does not mask a log line that quotes
 	// just the value, so the values are registered separately (SP3b).
-	if spec := SSPluginByName(o.Plugin); spec != nil {
-		if pairs, err := parseSSPluginOpts(o.PluginOpts); err == nil {
+	if spec := SSPluginByName(o.ObfsOrZero().Plugin); spec != nil {
+		if pairs, err := parseSSPluginOpts(o.ObfsOrZero().PluginOpts); err == nil {
 			for _, pr := range pairs {
 				if kind, ok := spec.optKind(pr.key); ok && kind == ssOptSecret {
 					candidates = append(candidates, pr.val)
@@ -63,10 +63,10 @@ func (o Outbound) Secrets() []string {
 	for _, k := range headerKeys {
 		candidates = append(candidates, o.Transport.Headers[k])
 	}
-	for _, p := range o.Peers {
+	for _, p := range o.WireGuardOrZero().Peers {
 		candidates = append(candidates, p.PreSharedKey)
 	}
-	candidates = append(candidates, profileSecrets(o.Profile)...)
+	candidates = append(candidates, profileSecrets(o.ProfileBytes())...)
 	out := make([]string, 0, len(candidates))
 	for _, c := range candidates {
 		if len(c) >= 4 {
@@ -80,6 +80,8 @@ func (o Outbound) Secrets() []string {
 // These are not credentials but identify user connections and providers.
 func (o Outbound) Identifiers() []string {
 	out := make([]string, 0, 3)
+	reality := o.TLS.RealityOrZero()
+	xhttp := o.Transport.XHTTPOrZero()
 	if o.Server != "" {
 		out = append(out, o.Server)
 		if o.Port != 0 {
@@ -92,14 +94,14 @@ func (o Outbound) Identifiers() []string {
 	// REALITY parameters are public but identify the server (sora
 	// SORA-L9, ported by S5 seams): they join the redaction set so a
 	// server's key, shortId and spider path never reach a log verbatim.
-	if o.TLS.RealityPublicKey != "" {
-		out = append(out, o.TLS.RealityPublicKey)
+	if reality.PublicKey != "" {
+		out = append(out, reality.PublicKey)
 	}
-	if o.TLS.RealityShortID != "" {
-		out = append(out, o.TLS.RealityShortID)
+	if reality.ShortID != "" {
+		out = append(out, reality.ShortID)
 	}
-	if o.TLS.SpiderX != "" {
-		out = append(out, o.TLS.SpiderX)
+	if reality.SpiderX != "" {
+		out = append(out, reality.SpiderX)
 	}
 	out = append(out, o.Name)
 	// The transport's fronting host and gRPC service name identify
@@ -116,17 +118,17 @@ func (o Outbound) Identifiers() []string {
 	// The XHTTP download split names a second server: it identifies
 	// the connection exactly like the uplink address does, so it joins
 	// the redaction set (S5-SP4, ported from sora).
-	if o.Transport.DownloadAddress != "" {
-		out = append(out, o.Transport.DownloadAddress)
-		if o.Transport.DownloadPort != 0 {
-			out = append(out, net.JoinHostPort(o.Transport.DownloadAddress, strconv.Itoa(int(o.Transport.DownloadPort))))
+	if xhttp.DownloadAddress != "" {
+		out = append(out, xhttp.DownloadAddress)
+		if xhttp.DownloadPort != 0 {
+			out = append(out, net.JoinHostPort(xhttp.DownloadAddress, strconv.Itoa(int(xhttp.DownloadPort))))
 		}
 	}
 	// An Xray profile carries its own server addresses, SNI names and
 	// REALITY dest inside the profile JSON; without extracting them
 	// here they were registered with no redactor at all (CENSOR-LEAK
 	// in sora, ported with profileIdentifiers).
-	out = append(out, profileIdentifiers(o.Profile)...)
+	out = append(out, profileIdentifiers(o.ProfileBytes())...)
 	return out
 }
 
@@ -164,7 +166,7 @@ func (o Outbound) Warnings() []string {
 		out = append(out, "xhttp-version-sync")
 		// Reverse proxies (nginx default 128) cap concurrent streams;
 		// above it the connection breaks instead of degrading.
-		if o.Transport.XmuxMaxConcurrency > 128 {
+		if o.Transport.XHTTPOrZero().XmuxMaxConcurrency > 128 {
 			out = append(out, "xhttp-xmux-proxy-limit")
 		}
 	}
@@ -210,7 +212,7 @@ func (o Outbound) Validate() error {
 		var profile struct {
 			Outbounds []json.RawMessage `json:"outbounds"`
 		}
-		if err := json.Unmarshal(o.Profile, &profile); err != nil || len(profile.Outbounds) == 0 {
+		if err := json.Unmarshal(o.ProfileBytes(), &profile); err != nil || len(profile.Outbounds) == 0 {
 			errs = append(errs, fmt.Errorf("outbound %s: the Xray profile has no outbounds", o.ID))
 		}
 	}
@@ -240,7 +242,7 @@ func (o Outbound) Validate() error {
 	// in the obfs-host would otherwise surface as a silently
 	// unobfuscated plan or as injected plugin options (SP3b).
 	errs = append(errs, validateShadowsocksPlugin(o)...)
-	for _, peer := range o.Peers {
+	for _, peer := range o.WireGuardOrZero().Peers {
 		if err := validatePeerEndpoint(o.ID, peer.Endpoint); err != nil {
 			errs = append(errs, err)
 		}
@@ -301,17 +303,18 @@ var xhttpPaddingRange = regexp.MustCompile(`^([0-9]{1,5})(-([0-9]{1,5}))?$`)
 // of other transports.
 func validateXHTTP(o Outbound) []error {
 	t := o.Transport
+	x := t.XHTTPOrZero()
 	if t.Type != "xhttp" {
 		// The split/tuning fields belong to XHTTP; on another transport
 		// they would be silently dropped by every renderer.
 		var errs []error
-		if t.DownloadAddress != "" || t.DownloadPort != 0 {
+		if x.DownloadAddress != "" || x.DownloadPort != 0 {
 			errs = append(errs, fmt.Errorf("outbound %s: downloadSettings needs the xhttp transport, not %q", o.ID, t.Type))
 		}
-		if t.XmuxMaxConcurrency != 0 || t.XmuxMaxConnections != 0 || t.XmuxMaxReuseTimes != 0 || t.XmuxMaxRequestTimes != 0 {
+		if x.XmuxMaxConcurrency != 0 || x.XmuxMaxConnections != 0 || x.XmuxMaxReuseTimes != 0 || x.XmuxMaxRequestTimes != 0 {
 			errs = append(errs, fmt.Errorf("outbound %s: xmux tuning needs the xhttp transport, not %q", o.ID, t.Type))
 		}
-		if t.XPaddingBytes != "" {
+		if x.XPaddingBytes != "" {
 			errs = append(errs, fmt.Errorf("outbound %s: xPaddingBytes needs the xhttp transport, not %q", o.ID, t.Type))
 		}
 		return errs
@@ -321,8 +324,8 @@ func validateXHTTP(o Outbound) []error {
 		args = append([]any{o.ID}, args...)
 		errs = append(errs, fmt.Errorf("outbound %s: xhttp "+format, args...))
 	}
-	if !validXHTTPModes[t.Mode] {
-		bad("mode %q is not one of auto, packet-up, stream-up, stream-one", t.Mode)
+	if !validXHTTPModes[x.Mode] {
+		bad("mode %q is not one of auto, packet-up, stream-up, stream-one", x.Mode)
 	}
 	if strings.HasPrefix(o.Flow, "xtls-rprx-vision") && !o.HasVLESSEncryption() {
 		// XTLS is available only under TCP+TLS/REALITY — or under
@@ -333,13 +336,13 @@ func validateXHTTP(o Outbound) []error {
 		// up/down split instead.
 		bad("flow %q cannot be combined with the xhttp transport (Vision needs TCP or VLESS Encryption)", o.Flow)
 	}
-	if t.DownloadAddress != "" || t.DownloadPort != 0 {
-		if t.DownloadAddress == "" || t.DownloadPort == 0 {
+	if x.DownloadAddress != "" || x.DownloadPort != 0 {
+		if x.DownloadAddress == "" || x.DownloadPort == 0 {
 			bad("downloadSettings needs both a download address and a download port")
-		} else if err := validateServer("outbound "+o.ID+" download", t.DownloadAddress, true); err != nil {
+		} else if err := validateServer("outbound "+o.ID+" download", x.DownloadAddress, true); err != nil {
 			errs = append(errs, err)
 		}
-		if t.Mode == "stream-one" {
+		if x.Mode == "stream-one" {
 			// stream-one carries both directions on one connection; a
 			// separate downlink contradicts it. stream-up is the
 			// two-leg mode (auto+reality degrades to stream-one only
@@ -347,16 +350,16 @@ func validateXHTTP(o Outbound) []error {
 			bad("downloadSettings is incompatible with mode stream-one (use stream-up)")
 		}
 	}
-	if t.XmuxMaxConcurrency < 0 || t.XmuxMaxConnections < 0 || t.XmuxMaxReuseTimes < 0 || t.XmuxMaxRequestTimes < 0 {
+	if x.XmuxMaxConcurrency < 0 || x.XmuxMaxConnections < 0 || x.XmuxMaxReuseTimes < 0 || x.XmuxMaxRequestTimes < 0 {
 		bad("xmux values must not be negative")
 	}
-	if t.XmuxMaxConcurrency > 0 && t.XmuxMaxConnections > 0 {
+	if x.XmuxMaxConcurrency > 0 && x.XmuxMaxConnections > 0 {
 		bad("xmux maxConcurrency and maxConnections are mutually exclusive")
 	}
-	if t.XPaddingBytes != "" {
-		m := xhttpPaddingRange.FindStringSubmatch(t.XPaddingBytes)
+	if x.XPaddingBytes != "" {
+		m := xhttpPaddingRange.FindStringSubmatch(x.XPaddingBytes)
 		if m == nil {
-			bad("xPaddingBytes %q is not a \"min-max\" range or a single number", t.XPaddingBytes)
+			bad("xPaddingBytes %q is not a \"min-max\" range or a single number", x.XPaddingBytes)
 		} else {
 			lo, _ := strconv.Atoi(m[1])
 			hi := lo
@@ -364,14 +367,14 @@ func validateXHTTP(o Outbound) []error {
 				hi, _ = strconv.Atoi(m[3])
 			}
 			if lo > hi {
-				bad("xPaddingBytes %q has its lower bound above the upper bound", t.XPaddingBytes)
+				bad("xPaddingBytes %q has its lower bound above the upper bound", x.XPaddingBytes)
 			}
 			if hi > 65535 {
-				bad("xPaddingBytes %q exceeds 65535 bytes", t.XPaddingBytes)
+				bad("xPaddingBytes %q exceeds 65535 bytes", x.XPaddingBytes)
 			}
 		}
 	}
-	if slices.Contains(o.TLS.ALPN, "h3") && !o.TLS.Enabled && !o.TLS.Reality {
+	if slices.Contains(o.TLS.ALPN, "h3") && !o.TLS.Enabled && (o.TLS.Reality == nil) {
 		// Xray dials QUIC for XHTTP only when ALPN is exactly ["h3"] on
 		// a TLS stream; without TLS the option does nothing.
 		bad("ALPN h3 needs TLS (or REALITY) on the xhttp transport")
@@ -395,25 +398,26 @@ func validateXHTTP(o Outbound) []error {
 // (SP5-render, from sora snapshot 63faf1d).
 func (t TLS) validate(what string) []error {
 	var errs []error
+	keyShare := t.RealityOrZero().KeyShare
 	// KeyShare is the REALITY key-share knob: only the two documented
 	// values, and only with REALITY — anywhere else it would be a
 	// setting no renderer can honour.
-	switch t.KeyShare {
+	switch keyShare {
 	case "", "classical", "hybrid":
 	default:
-		errs = append(errs, fmt.Errorf("%s: reality key_share %q is not \"classical\" or \"hybrid\"", what, t.KeyShare))
+		errs = append(errs, fmt.Errorf("%s: reality key_share %q is not \"classical\" or \"hybrid\"", what, keyShare))
 	}
-	if t.KeyShare != "" && !t.Reality {
+	if keyShare != "" && (t.Reality == nil) {
 		errs = append(errs, fmt.Errorf("%s: reality key_share needs REALITY", what))
 	}
-	ech := t.ECH
+	ech := t.ECHOrZero()
 	if !ech.Enabled {
 		return errs
 	}
 	if !t.Enabled {
 		errs = append(errs, fmt.Errorf("%s: ECH is enabled but TLS is not", what))
 	}
-	if t.Reality {
+	if t.Reality != nil {
 		errs = append(errs, fmt.Errorf("%s: ECH and REALITY are incompatible", what))
 	}
 	if len(ech.Config) > 0 {
@@ -559,7 +563,7 @@ func (p *Plan) Validate() error {
 	// which defeats the purpose of hiding the SNI. Fail closed with a
 	// message that names the fix (S5-SP5, ported from sora).
 	for _, o := range p.Outbounds {
-		if o.TLS.ECH.Enabled && len(o.TLS.ECH.Config) == 0 && !p.DNS.hasEncryptedServer() {
+		if o.TLS.ECHOrZero().Enabled && len(o.TLS.ECHOrZero().Config) == 0 && !p.DNS.hasEncryptedServer() {
 			errs = append(errs, fmt.Errorf("plan: outbound %s enables ECH without a pinned config, but the plan has no encrypted DNS transport; pin the ECH config or enable encrypted DNS", o.ID))
 		}
 	}
@@ -739,10 +743,12 @@ func parseAmneziaMagic(raw string) (lo, hi int64, err error) {
 // instead of producing a config the engine silently misapplies.
 func validateHysteria2Tuning(o Outbound) []error {
 	var errs []error
-	if o.UpMbps < 0 || o.DownMbps < 0 {
+	q := o.QUICOrZero()
+	ob := o.ObfsOrZero()
+	if q.UpMbps < 0 || q.DownMbps < 0 {
 		errs = append(errs, fmt.Errorf("outbound %s: hysteria2 bandwidth caps must not be negative", o.ID))
 	}
-	if o.UpMbps > MaxHy2BandwidthMbps || o.DownMbps > MaxHy2BandwidthMbps {
+	if q.UpMbps > MaxHy2BandwidthMbps || q.DownMbps > MaxHy2BandwidthMbps {
 		errs = append(errs, fmt.Errorf("outbound %s: hysteria2 bandwidth caps must not exceed %d Mbps", o.ID, MaxHy2BandwidthMbps))
 	}
 	// Obfs is a plan-level promise of wire obfuscation: the type must
@@ -751,39 +757,39 @@ func validateHysteria2Tuning(o Outbound) []error {
 	// both hopping engines reject an obfs block without a password
 	// at config load (verified on the pins, CENSOR-P3), so accepting
 	// it here would defer a plan error to a dead engine start.
-	if o.Obfs != "" && !ValidHy2Obfs[o.Obfs] {
-		errs = append(errs, fmt.Errorf("outbound %s: hysteria2 obfs %q is not salamander or gecko", o.ID, o.Obfs))
+	if ob.Type != "" && !ValidHy2Obfs[ob.Type] {
+		errs = append(errs, fmt.Errorf("outbound %s: hysteria2 obfs %q is not salamander or gecko", o.ID, ob.Type))
 	}
-	if o.Obfs != "" && o.ObfsParam == "" {
-		errs = append(errs, fmt.Errorf("outbound %s: hysteria2 obfs %q needs its password", o.ID, o.Obfs))
+	if ob.Type != "" && ob.Param == "" {
+		errs = append(errs, fmt.Errorf("outbound %s: hysteria2 obfs %q needs its password", o.ID, ob.Type))
 	}
-	if o.Obfs == "" && o.ObfsParam != "" {
+	if ob.Type == "" && ob.Param != "" {
 		errs = append(errs, fmt.Errorf("outbound %s: hysteria2 obfs password without an obfs type does nothing", o.ID))
 	}
-	if err := validateHopPorts(o.ID, o.HopPorts); err != nil {
+	if err := validateHopPorts(o.ID, q.HopPorts); err != nil {
 		errs = append(errs, err)
 	}
 	switch {
-	case o.HopInterval < 0:
+	case q.HopInterval < 0:
 		errs = append(errs, fmt.Errorf("outbound %s: hysteria2 hop interval must not be negative", o.ID))
-	case o.HopInterval > 0 && o.HopInterval < MinHy2HopIntervalSeconds:
+	case q.HopInterval > 0 && q.HopInterval < MinHy2HopIntervalSeconds:
 		// Hysteria2 requires at least 5s between hops.
 		errs = append(errs, fmt.Errorf("outbound %s: hysteria2 hop interval must be at least %ds", o.ID, MinHy2HopIntervalSeconds))
-	case o.HopInterval > 0 && o.HopPorts == "":
+	case q.HopInterval > 0 && q.HopPorts == "":
 		errs = append(errs, fmt.Errorf("outbound %s: hysteria2 hop interval needs hop ports", o.ID))
 	}
 	switch {
-	case o.HopIntervalMax < 0:
+	case q.HopIntervalMax < 0:
 		errs = append(errs, fmt.Errorf("outbound %s: hysteria2 hop interval max must not be negative", o.ID))
-	case o.HopIntervalMax > 0 && o.HopPorts == "":
+	case q.HopIntervalMax > 0 && q.HopPorts == "":
 		errs = append(errs, fmt.Errorf("outbound %s: hysteria2 hop interval max needs hop ports", o.ID))
-	case o.HopIntervalMax > 0 && o.HopInterval > 0 && o.HopIntervalMax < o.HopInterval:
+	case q.HopIntervalMax > 0 && q.HopInterval > 0 && q.HopIntervalMax < q.HopInterval:
 		// sing-box renders hop_interval..hop_interval_max as the
 		// randomized hop range; an inverted range is a config bug.
-		errs = append(errs, fmt.Errorf("outbound %s: hysteria2 hop interval max %ds is below the hop interval %ds", o.ID, o.HopIntervalMax, o.HopInterval))
+		errs = append(errs, fmt.Errorf("outbound %s: hysteria2 hop interval max %ds is below the hop interval %ds", o.ID, q.HopIntervalMax, q.HopInterval))
 	}
-	if o.BBRProfile != "" && !validBBRProfiles[o.BBRProfile] {
-		errs = append(errs, fmt.Errorf("outbound %s: hysteria2 bbr profile %q is not standard, conservative or aggressive", o.ID, o.BBRProfile))
+	if q.BBRProfile != "" && !validBBRProfiles[q.BBRProfile] {
+		errs = append(errs, fmt.Errorf("outbound %s: hysteria2 bbr profile %q is not standard, conservative or aggressive", o.ID, q.BBRProfile))
 	}
 	return errs
 }
@@ -814,14 +820,15 @@ func validateHopPorts(id, spec string) error {
 // default there (verified on the pins, CENSOR-P3).
 func validateTUICTuning(o Outbound) []error {
 	var errs []error
-	if o.CongestionControl != "" && !ValidTUICCongestion[o.CongestionControl] {
-		errs = append(errs, fmt.Errorf("outbound %s: unknown tuic congestion control %q", o.ID, o.CongestionControl))
+	q := o.QUICOrZero()
+	if q.CongestionControl != "" && !ValidTUICCongestion[q.CongestionControl] {
+		errs = append(errs, fmt.Errorf("outbound %s: unknown tuic congestion control %q", o.ID, q.CongestionControl))
 	}
-	if o.UDPRelayMode != "" && !ValidTUICUDPRelayMode[o.UDPRelayMode] {
-		errs = append(errs, fmt.Errorf("outbound %s: unknown tuic udp relay mode %q", o.ID, o.UDPRelayMode))
+	if q.UDPRelayMode != "" && !ValidTUICUDPRelayMode[q.UDPRelayMode] {
+		errs = append(errs, fmt.Errorf("outbound %s: unknown tuic udp relay mode %q", o.ID, q.UDPRelayMode))
 	}
-	if o.TUICHeartbeat < 0 || (o.TUICHeartbeat > 0 && o.TUICHeartbeat < MinTUICHeartbeatSeconds) || o.TUICHeartbeat > MaxTUICHeartbeatSeconds {
-		errs = append(errs, fmt.Errorf("outbound %s: tuic heartbeat %ds is outside %d-%ds (0 keeps the default)", o.ID, o.TUICHeartbeat, MinTUICHeartbeatSeconds, MaxTUICHeartbeatSeconds))
+	if q.TUICHeartbeat < 0 || (q.TUICHeartbeat > 0 && q.TUICHeartbeat < MinTUICHeartbeatSeconds) || q.TUICHeartbeat > MaxTUICHeartbeatSeconds {
+		errs = append(errs, fmt.Errorf("outbound %s: tuic heartbeat %ds is outside %d-%ds (0 keeps the default)", o.ID, q.TUICHeartbeat, MinTUICHeartbeatSeconds, MaxTUICHeartbeatSeconds))
 	}
 	return errs
 }

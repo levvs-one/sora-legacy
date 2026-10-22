@@ -49,8 +49,8 @@ func ssTestOutbound() engine.Outbound {
 func TestBuildProxyShadowsocksPlugin(t *testing.T) {
 	// Explicit plugin wins over the native obfs mapping.
 	o := ssTestOutbound()
-	o.Plugin, o.PluginOpts = "v2ray-plugin", "tls;host=example.com"
-	o.Obfs, o.ObfsParam = "tls", "example.com"
+	o.ObfsBox().Plugin, o.ObfsBox().PluginOpts = "v2ray-plugin", "tls;host=example.com"
+	o.ObfsBox().Type, o.ObfsBox().Param = "tls", "example.com"
 	px, err := buildProxy(o)
 	if err != nil {
 		t.Fatal(err)
@@ -70,7 +70,7 @@ func TestBuildProxyShadowsocksPlugin(t *testing.T) {
 	// under mihomo's own spelling: the adapter matches "obfs" and
 	// silently ignores the SIP002 binary name "obfs-local" (SP3b/F1).
 	o = ssTestOutbound()
-	o.Plugin, o.PluginOpts = "obfs-local", "obfs=tls;obfs-host=example.com"
+	o.ObfsBox().Plugin, o.ObfsBox().PluginOpts = "obfs-local", "obfs=tls;obfs-host=example.com"
 	px, err = buildProxy(o)
 	if err != nil {
 		t.Fatal(err)
@@ -82,7 +82,7 @@ func TestBuildProxyShadowsocksPlugin(t *testing.T) {
 
 	// Legacy path unchanged: native simple-obfs fields.
 	o = ssTestOutbound()
-	o.Obfs, o.ObfsParam = "tls", "example.com"
+	o.ObfsBox().Type, o.ObfsBox().Param = "tls", "example.com"
 	px, err = buildProxy(o)
 	if err != nil {
 		t.Fatal(err)
@@ -119,7 +119,7 @@ func TestBuildProxyPluginNameTranslation(t *testing.T) {
 		{"kcptun", "key=k", "kcptun"},
 	} {
 		o := ssTestOutbound()
-		o.Plugin, o.PluginOpts = tc.plugin, tc.opts
+		o.ObfsBox().Plugin, o.ObfsBox().PluginOpts = tc.plugin, tc.opts
 		px, err := buildProxy(o)
 		if err != nil {
 			t.Fatalf("%s: %v", tc.plugin, err)
@@ -130,7 +130,7 @@ func TestBuildProxyPluginNameTranslation(t *testing.T) {
 	}
 	// Unknown plugins fail closed at render.
 	o := ssTestOutbound()
-	o.Plugin = "unknown-xyz"
+	o.ObfsBox().Plugin = "unknown-xyz"
 	if _, err := buildProxy(o); err == nil || !strings.Contains(err.Error(), "does not implement") {
 		t.Fatalf("unknown plugin must fail closed, got %v", err)
 	}

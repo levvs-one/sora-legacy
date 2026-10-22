@@ -33,7 +33,7 @@ func TestXrayFloorRejectsOldPayloadAndAcceptsShippedPin(t *testing.T) {
 		t.Fatal(err)
 	}
 	hy2 := enginetest.Plan(engine.ProtocolHysteria2)
-	hy2.Outbounds[0].Obfs, hy2.Outbounds[0].ObfsParam = "", ""
+	hy2.Outbounds[0].ObfsBox().Type, hy2.Outbounds[0].ObfsBox().Param = "", ""
 	for name, plan := range map[string]*engine.Plan{
 		"plain vless": enginetest.Plan(engine.ProtocolVLESS),
 		"hysteria2":   hy2,

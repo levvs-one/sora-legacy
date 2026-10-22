@@ -13,7 +13,7 @@ import (
 
 func TestRenderECHProxyToggle(t *testing.T) {
 	p := testPlan()
-	p.Outbounds[0].TLS.ECH = engine.ECHConfig{Enabled: true}
+	p.Outbounds[0].TLS.ECH = &engine.ECHConfig{Enabled: true}
 	out, err := Render(p, testRuntime(t))
 	if err != nil {
 		t.Fatal(err)
@@ -31,7 +31,7 @@ func TestRenderECHPinnedConfigAndQueryServerName(t *testing.T) {
 	// dropped (only `ech: true` was rendered). The plan stores PEM
 	// lines; ech-opts.config is one base64 string.
 	p := testPlan()
-	p.Outbounds[0].TLS.ECH = engine.ECHConfig{
+	p.Outbounds[0].TLS.ECH = &engine.ECHConfig{
 		Enabled: true,
 		Config: []string{
 			"-----BEGIN ECHCONFIG-----",
@@ -59,7 +59,7 @@ func TestRenderECHPinnedConfigAndQueryServerName(t *testing.T) {
 
 func TestRenderECHRejectsUnmergeablePinnedConfigs(t *testing.T) {
 	p := testPlan()
-	p.Outbounds[0].TLS.ECH = engine.ECHConfig{
+	p.Outbounds[0].TLS.ECH = &engine.ECHConfig{
 		Enabled: true,
 		Config: []string{
 			"-----BEGIN ECHCONFIG-----", "QUJD", "-----END ECHCONFIG-----",
@@ -69,7 +69,7 @@ func TestRenderECHRejectsUnmergeablePinnedConfigs(t *testing.T) {
 	if _, err := Render(p, testRuntime(t)); err == nil {
 		t.Fatal("two pinned ECHConfigLists cannot merge into mihomo's single config value and must be refused")
 	}
-	p.Outbounds[0].TLS.ECH.Config = []string{"not base64!!!"}
+	p.Outbounds[0].TLS.ECHBox().Config = []string{"not base64!!!"}
 	if _, err := Render(p, testRuntime(t)); err == nil {
 		t.Fatal("a non-base64 pinned ECH config must be refused, not rendered")
 	}
@@ -97,8 +97,7 @@ func TestRenderRealityKeyShare(t *testing.T) {
 			ID: "srv-1", Name: "Reality 01", Protocol: engine.ProtocolVLESS,
 			Server: "re.example.com", Port: 443, UUID: "11111111-2222-3333-4444-555555555555",
 			TLS: engine.TLS{Enabled: true, ServerName: "www.example.com",
-				Reality: true, RealityPublicKey: "Z84J2IelR9ch3k8VtlVhhs5ycBUlXA7wHBWcBrjqnAw",
-				KeyShare: ks},
+				Reality: &engine.RealitySettings{PublicKey: "Z84J2IelR9ch3k8VtlVhhs5ycBUlXA7wHBWcBrjqnAw", KeyShare: ks}},
 		}
 		p.Groups = []engine.Group{{Name: "sel", Type: engine.GroupSelect, Outbounds: []string{"srv-1"}}}
 		p.Rules = []engine.Rule{{Type: engine.RuleMatchAll, Target: "srv-1"}}

@@ -190,7 +190,7 @@ func TestTLSVerificationSettingSelectsCompatibleEngine(t *testing.T) {
 	if err != nil || selection.Kind != KindSingBox {
 		t.Fatalf("automatic selection should preserve the setting: %+v, %v", selection, err)
 	}
-	for _, tls := range []TLS{{Insecure: true}, {Enabled: true, Reality: true, Insecure: true}} {
+	for _, tls := range []TLS{{Insecure: true}, {Enabled: true, Reality: &RealitySettings{}, Insecure: true}} {
 		p.Outbounds[0].TLS = tls
 		if _, err := SelectEngine(p, available, []Kind{KindXray}); err != nil {
 			t.Fatalf("an unused TLS flag rejected plaintext or REALITY: %v", err)
@@ -233,9 +233,10 @@ func TestPlanValidateChecksPortsAndPeerEndpoints(t *testing.T) {
 			plan := validPlan()
 			plan.Rules = []Rule{tc.rule}
 			plan.Outbounds = append(plan.Outbounds, Outbound{ID: "wg", Protocol: ProtocolWireGuard,
-				Server: "198.51.100.7", Port: 51820, PrivateKey: "cKE7LmCF61IhqqABGhvJ44jWXp8fKymcMAEVAzLDYVk=",
-				Addresses: []string{"10.7.0.2/32"},
-				Peers:     []WireGuardPeer{{PublicKey: "Z84J2IelR9ch3k8VtlVhhs5ycBUlXA7wHBWcBrjqnAw=", Endpoint: tc.peer.Endpoint}}})
+				Server: "198.51.100.7", Port: 51820,
+				WireGuard: &WireGuardSettings{PrivateKey: "cKE7LmCF61IhqqABGhvJ44jWXp8fKymcMAEVAzLDYVk=",
+					Addresses: []string{"10.7.0.2/32"},
+					Peers:     []WireGuardPeer{{PublicKey: "Z84J2IelR9ch3k8VtlVhhs5ycBUlXA7wHBWcBrjqnAw=", Endpoint: tc.peer.Endpoint}}}})
 			if err := plan.Validate(); err == nil {
 				t.Errorf("%s must not validate", tc.name)
 			}
@@ -250,7 +251,7 @@ func TestShadowsocksObfsIsConstrained(t *testing.T) {
 	good := validPlan()
 	good.Outbounds = append(good.Outbounds, Outbound{ID: "ss", Protocol: ProtocolShadowsocks,
 		Server: "ss.example.com", Port: 8388, Cipher: "aes-256-gcm", Password: "secret-pass",
-		Obfs: "http", ObfsParam: "cdn.example.com"})
+		Obfs: &ObfsSettings{Type: "http", Param: "cdn.example.com"}})
 	if err := good.Validate(); err != nil {
 		t.Errorf("a plain http obfs must validate: %v", err)
 	}
@@ -267,7 +268,7 @@ func TestShadowsocksObfsIsConstrained(t *testing.T) {
 			plan := validPlan()
 			plan.Outbounds = append(plan.Outbounds, Outbound{ID: "ss", Protocol: ProtocolShadowsocks,
 				Server: "ss.example.com", Port: 8388, Cipher: "aes-256-gcm", Password: "secret-pass",
-				Obfs: tc.obfs, ObfsParam: tc.obfsParam})
+				Obfs: &ObfsSettings{Type: tc.obfs, Param: tc.obfsParam}})
 			if err := plan.Validate(); err == nil {
 				t.Errorf("obfs %q / host %q must not validate", tc.obfs, tc.obfsParam)
 			}
@@ -287,8 +288,8 @@ func TestSpiderXRejectsEnginesWithoutIt(t *testing.T) {
 	// which have no such option and would silently drop it.
 	p := validPlan()
 	p.Outbounds[0].Protocol = ProtocolVLESS
-	p.Outbounds[0].TLS = TLS{Enabled: true, Reality: true, ServerName: "www.example.com",
-		RealityPublicKey: "QUJD", SpiderX: "/spider"}
+	p.Outbounds[0].TLS = TLS{Enabled: true, ServerName: "www.example.com",
+		Reality: &RealitySettings{PublicKey: "QUJD", SpiderX: "/spider"}}
 	sel, err := SelectEngine(p, available, preference)
 	if err != nil {
 		t.Fatalf("selection failed: %v", err)
@@ -301,7 +302,7 @@ func TestSpiderXRejectsEnginesWithoutIt(t *testing.T) {
 	}
 
 	// Negative: without spider_x the first preference wins again.
-	p.Outbounds[0].TLS.SpiderX = ""
+	p.Outbounds[0].TLS.RealityBox().SpiderX = ""
 	sel, err = SelectEngine(p, available, preference)
 	if err != nil {
 		t.Fatalf("selection failed: %v", err)

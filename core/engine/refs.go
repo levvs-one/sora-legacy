@@ -55,16 +55,21 @@ func (p *Plan) RequiredFeatures() map[Feature]bool {
 		}
 	}
 	for _, o := range p.Outbounds {
+		q := o.QUICOrZero()
+		ob := o.ObfsOrZero()
+		x := o.Transport.XHTTPOrZero()
+		ech := o.TLS.ECHOrZero()
+		reality := o.TLS.RealityOrZero()
 		if o.Transport.Type == "xhttp" {
 			out[FeatureXHTTP] = true
-			if o.Transport.DownloadAddress != "" {
+			if x.DownloadAddress != "" {
 				out[FeatureXHTTPDownloadSplit] = true
 			}
-			if o.Transport.XmuxMaxConcurrency > 0 || o.Transport.XmuxMaxConnections > 0 ||
-				o.Transport.XmuxMaxReuseTimes > 0 || o.Transport.XmuxMaxRequestTimes > 0 {
+			if x.XmuxMaxConcurrency > 0 || x.XmuxMaxConnections > 0 ||
+				x.XmuxMaxReuseTimes > 0 || x.XmuxMaxRequestTimes > 0 {
 				out[FeatureXHTTPXmux] = true
 			}
-			if o.Transport.XPaddingBytes != "" {
+			if x.XPaddingBytes != "" {
 				// Padding has its own gate: it is independent plan
 				// data, so a padding-only plan must not demand xmux
 				// support and vice versa (S5-SP4, ported from sora).
@@ -77,14 +82,14 @@ func (p *Plan) RequiredFeatures() map[Feature]bool {
 		if o.Amnezia != nil {
 			out[FeatureAmneziaWG] = true
 		}
-		if o.TLS.ECH.Enabled {
+		if ech.Enabled {
 			// An engine that does not render ECH would send the SNI
 			// in the clear while the plan promises it hidden: route
 			// ECH plans only to engines that emit it (PASS3 deep S4
 			// in sora; all three legacy renderers emit it since
 			// SP5-render).
 			out[FeatureECH] = true
-			if o.TLS.ECH.QueryServerName != "" {
+			if ech.QueryServerName != "" {
 				// The override is independent plan data with its
 				// own spelling per engine (see
 				// FeatureECHQueryServerName): a plan pinning one
@@ -93,21 +98,21 @@ func (p *Plan) RequiredFeatures() map[Feature]bool {
 				out[FeatureECHQueryServerName] = true
 			}
 		}
-		if o.TLS.KeyShare != "" {
+		if reality.KeyShare != "" {
 			out[FeatureRealityKeyShare] = true
 		}
-		if o.Protocol == ProtocolHysteria2 && o.HopPorts != "" {
+		if o.Protocol == ProtocolHysteria2 && q.HopPorts != "" {
 			// Xray's hysteria2 outbound cannot hop ports; without the
 			// feature gate a hopping plan would silently collapse to a
 			// single port on Xray.
 			out[FeatureHy2PortHop] = true
 		}
-		if o.Protocol == ProtocolHysteria2 && o.Obfs != "" {
+		if o.Protocol == ProtocolHysteria2 && ob.Type != "" {
 			// Xray's hysteria transport has no obfs option; without
 			// the gate an obfuscated plan was selected for Xray and
 			// only failed at render time.
 			out[FeatureHy2Obfs] = true
-			if o.Obfs == "gecko" {
+			if ob.Type == "gecko" {
 				// Gecko is a separate, younger spelling than the
 				// obfs block itself (sing-box 1.14, see
 				// FeatureHy2ObfsGecko): a build that carries
@@ -116,7 +121,7 @@ func (p *Plan) RequiredFeatures() map[Feature]bool {
 				out[FeatureHy2ObfsGecko] = true
 			}
 		}
-		if o.Protocol == ProtocolHysteria2 && o.HopIntervalMax > 0 {
+		if o.Protocol == ProtocolHysteria2 && q.HopIntervalMax > 0 {
 			// hop_interval_max exists only since sing-box 1.14,
 			// above the catalog's 1.12.0 floor (see
 			// FeatureHy2HopIntervalMax): a plan pinning a
@@ -125,7 +130,7 @@ func (p *Plan) RequiredFeatures() map[Feature]bool {
 			// engine whose renderer drops the bound silently.
 			out[FeatureHy2HopIntervalMax] = true
 		}
-		if o.Protocol == ProtocolHysteria2 && o.BBRProfile != "" {
+		if o.Protocol == ProtocolHysteria2 && q.BBRProfile != "" {
 			// bbr_profile likewise exists only since sing-box
 			// 1.14 (see FeatureHy2BBRProfile). The demand keys on
 			// the plan field, not on whether this renderer would

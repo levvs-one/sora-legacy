@@ -190,10 +190,10 @@ func (r *renderer) outbounds() ([]obj, error) {
 }
 
 func (r *renderer) outbound(o engine.Outbound) (obj, error) {
-	if o.TLS.Insecure && !o.TLS.Reality && (o.TLS.Enabled || o.Protocol == engine.ProtocolTrojan || o.Protocol == engine.ProtocolHysteria2) {
+	if o.TLS.Insecure && (o.TLS.Reality == nil) && (o.TLS.Enabled || o.Protocol == engine.ProtocolTrojan || o.Protocol == engine.ProtocolHysteria2) {
 		return nil, fmt.Errorf("xray: outbound %s disables certificate verification; this build requires verification or certificate pinning", o.ID)
 	}
-	if o.TLS.KeyShare != "" {
+	if o.TLS.RealityOrZero().KeyShare != "" {
 		// Fail closed behind the FeatureRealityKeyShare gate: Xray
 		// has no REALITY key_share knob — the uTLS parrot decides
 		// which key shares the ClientHello offers — so rendering
@@ -205,6 +205,7 @@ func (r *renderer) outbound(o engine.Outbound) (obj, error) {
 		return nil, fmt.Errorf("xray: outbound %s pins a REALITY key_share, which Xray does not expose (the fingerprint parrot decides the key share); use the sing-box or mihomo engine", o.ID)
 	}
 	tag := r.tags[o.ID]
+	ob := o.ObfsOrZero()
 	server := obj{"address": o.Server, "port": int(o.Port)}
 	var settings obj
 	protocol := string(o.Protocol)
@@ -228,11 +229,11 @@ func (r *renderer) outbound(o engine.Outbound) (obj, error) {
 		// mapping) would break the plan's promise silently, so
 		// refuse here; selection (catalog Missing, same data)
 		// refuses earlier (SP3b).
-		if o.Plugin != "" {
-			return nil, fmt.Errorf("xray: shadowsocks outbound %s uses plugin %q, which Xray does not implement: refusing to render it unobfuscated", o.ID, o.Plugin)
+		if ob.Plugin != "" {
+			return nil, fmt.Errorf("xray: shadowsocks outbound %s uses plugin %q, which Xray does not implement: refusing to render it unobfuscated", o.ID, ob.Plugin)
 		}
-		if o.Obfs != "" {
-			return nil, fmt.Errorf("xray: shadowsocks outbound %s uses obfs %q, which Xray does not implement for shadowsocks: refusing to render it unobfuscated", o.ID, o.Obfs)
+		if ob.Type != "" {
+			return nil, fmt.Errorf("xray: shadowsocks outbound %s uses obfs %q, which Xray does not implement for shadowsocks: refusing to render it unobfuscated", o.ID, ob.Type)
 		}
 		server["method"], server["password"] = orDefault(o.Cipher, "aes-256-gcm"), o.Password
 		settings = obj{"servers": []obj{server}}
@@ -245,7 +246,7 @@ func (r *renderer) outbound(o engine.Outbound) (obj, error) {
 		}
 		settings = obj{"servers": []obj{server}}
 	case engine.ProtocolHysteria2:
-		if o.Obfs != "" {
+		if ob.Type != "" {
 			// Reject unsupported obfuscation because Xray silently
 			// ignores unknown keys.
 			return nil, fmt.Errorf("xray: hysteria2 outbound %s uses obfs, which Sora does not render for Xray", o.ID)
@@ -266,7 +267,10 @@ func (r *renderer) outbound(o engine.Outbound) (obj, error) {
 func (r *renderer) stream(o engine.Outbound) (obj, error) {
 	s := obj{}
 	t := o.Transport
-	if (t.DownloadAddress != "" || t.DownloadPort != 0) && t.Type != "xhttp" {
+	x := t.XHTTPOrZero()
+	rs := o.TLS.RealityOrZero()
+	ech := o.TLS.ECHOrZero()
+	if (x.DownloadAddress != "" || x.DownloadPort != 0) && t.Type != "xhttp" {
 		// Plan validation rejects this too; the render backstop keeps
 		// a hand-built plan from losing the split silently (S5-SP4).
 		return nil, fmt.Errorf("xray: outbound %s: downloadSettings is an XHTTP-only option, not %q", o.ID, t.Type)
@@ -284,7 +288,7 @@ func (r *renderer) stream(o engine.Outbound) (obj, error) {
 		s["httpupgradeSettings"] = obj{}.set("path", t.Path).set("host", t.Host)
 	case "xhttp":
 		s["network"] = "xhttp"
-		xs := obj{"mode": orDefault(t.Mode, "auto")}.set("path", t.Path).set("host", t.Host)
+		xs := obj{"mode": orDefault(x.Mode, "auto")}.set("path", t.Path).set("host", t.Host)
 		// XHTTP reuse tuning and padding (S5-SP4, ported from sora):
 		// Xray spells both natively (xmux, xPaddingBytes), but this
 		// renderer emitted neither, so the tuning silently dropped
@@ -292,8 +296,8 @@ func (r *renderer) stream(o engine.Outbound) (obj, error) {
 		if xmux := xhttpXmux(t); len(xmux) > 0 {
 			xs["xmux"] = xmux
 		}
-		xs.set("xPaddingBytes", t.XPaddingBytes)
-		if t.DownloadAddress != "" || t.DownloadPort != 0 {
+		xs.set("xPaddingBytes", x.XPaddingBytes)
+		if x.DownloadAddress != "" || x.DownloadPort != 0 {
 			ds, err := xhttpDownloadSettings(o)
 			if err != nil {
 				return nil, err
@@ -307,7 +311,7 @@ func (r *renderer) stream(o engine.Outbound) (obj, error) {
 	}
 	needsTLS := o.Protocol == engine.ProtocolTrojan
 	switch {
-	case o.TLS.Reality:
+	case o.TLS.Reality != nil:
 		s["security"] = "reality"
 		// Xray's pinned "chrome" alias sends Chrome 133, which TSPU
 		// fingerprints and blocks (sora D05): when the plan carries no
@@ -315,14 +319,14 @@ func (r *renderer) stream(o engine.Outbound) (obj, error) {
 		// verified Chrome parrot of the engine's vendored uTLS. An
 		// explicit choice is never overridden.
 		s["realitySettings"] = obj{
-			"serverName": o.TLS.ServerName, "publicKey": o.TLS.RealityPublicKey,
+			"serverName": o.TLS.ServerName, "publicKey": rs.PublicKey,
 			"fingerprint": orDefault(o.TLS.Fingerprint, "hellochrome_auto"),
-		}.set("shortId", o.TLS.RealityShortID).set("spiderX", o.TLS.SpiderX)
+		}.set("shortId", rs.ShortID).set("spiderX", rs.SpiderX)
 	case o.TLS.Enabled || needsTLS:
 		s["security"] = "tls"
 		tlsSettings := obj{}.set("serverName", o.TLS.ServerName).set("alpn", o.TLS.ALPN).
 			set("fingerprint", o.TLS.Fingerprint)
-		if o.TLS.ECH.Enabled {
+		if ech.Enabled {
 			// ECH on Xray (transport/internet/tls/ech.go), probed on
 			// the pinned 26.10.17 binary (CENSOR-FP in sora; ported
 			// SP5-render from sora snapshot
@@ -334,8 +338,8 @@ func (r *renderer) stream(o engine.Outbound) (obj, error) {
 			// "full". (The loader does not parse echConfigList at
 			// config-test time, so only the capture proves this —
 			// the runtime probe re-measures it per binary.)
-			if len(o.TLS.ECH.Config) > 0 {
-				b64, err := engine.ECHConfigListBase64(o.TLS.ECH.Config)
+			if len(ech.Config) > 0 {
+				b64, err := engine.ECHConfigListBase64(ech.Config)
 				if err != nil {
 					return nil, fmt.Errorf("xray: outbound %s: %w", o.ID, err)
 				}
@@ -343,13 +347,13 @@ func (r *renderer) stream(o engine.Outbound) (obj, error) {
 			} else {
 				tlsSettings["echForceQuery"] = "full"
 			}
-			if o.TLS.ECH.QueryServerName != "" {
+			if ech.QueryServerName != "" {
 				// Xray has no query_server_name spelling for ECH:
 				// the pinned list carries its own public_name and
 				// the DNS query uses the server name. Refuse rather
 				// than silently drop the override (sing-box and
 				// mihomo render it).
-				return nil, fmt.Errorf("xray: outbound %s sets ECH query_server_name %q, which Xray does not spell; use the sing-box or mihomo engine", o.ID, o.TLS.ECH.QueryServerName)
+				return nil, fmt.Errorf("xray: outbound %s sets ECH query_server_name %q, which Xray does not spell; use the sing-box or mihomo engine", o.ID, ech.QueryServerName)
 			}
 		}
 		s["tlsSettings"] = tlsSettings
@@ -370,11 +374,12 @@ func (r *renderer) stream(o engine.Outbound) (obj, error) {
 // plan's single range describes the padding of the uplink requests
 // the server checks (S5-SP4, ported from sora).
 func xhttpXmux(t engine.Transport) obj {
+	x := t.XHTTPOrZero()
 	return obj{}.
-		set("maxConcurrency", t.XmuxMaxConcurrency).
-		set("maxConnections", t.XmuxMaxConnections).
-		set("cMaxReuseTimes", t.XmuxMaxReuseTimes).
-		set("hMaxRequestTimes", t.XmuxMaxRequestTimes)
+		set("maxConcurrency", x.XmuxMaxConcurrency).
+		set("maxConnections", x.XmuxMaxConnections).
+		set("cMaxReuseTimes", x.XmuxMaxReuseTimes).
+		set("hMaxRequestTimes", x.XmuxMaxRequestTimes)
 }
 
 // xhttpDownloadSettings renders the XHTTP downlink detour: the downlink
@@ -384,10 +389,12 @@ func xhttpXmux(t engine.Transport) obj {
 // the SNI pointed at the downlink host.
 func xhttpDownloadSettings(o engine.Outbound) (obj, error) {
 	t := o.Transport
-	if t.DownloadAddress == "" || t.DownloadPort == 0 {
+	x := t.XHTTPOrZero()
+	rs := o.TLS.RealityOrZero()
+	if x.DownloadAddress == "" || x.DownloadPort == 0 {
 		return nil, fmt.Errorf("xray: outbound %s: XHTTP downloadSettings needs both a download address and a download port", o.ID)
 	}
-	if t.Mode == "stream-one" {
+	if x.Mode == "stream-one" {
 		// stream-one carries both directions on one connection, so a
 		// separate downlink is contradictory; stream-up is the two-leg mode.
 		return nil, fmt.Errorf("xray: outbound %s: XHTTP downloadSettings is incompatible with mode stream-one (use stream-up)", o.ID)
@@ -400,18 +407,18 @@ func xhttpDownloadSettings(o engine.Outbound) (obj, error) {
 	if xmux := xhttpXmux(t); len(xmux) > 0 {
 		dxs["xmux"] = xmux
 	}
-	ds := obj{"address": t.DownloadAddress, "port": int(t.DownloadPort), "network": "xhttp"}.
+	ds := obj{"address": x.DownloadAddress, "port": int(x.DownloadPort), "network": "xhttp"}.
 		set("xhttpSettings", dxs)
 	switch {
-	case o.TLS.Reality:
+	case o.TLS.Reality != nil:
 		ds["security"] = "reality"
 		ds["realitySettings"] = obj{
-			"serverName": t.DownloadAddress, "publicKey": o.TLS.RealityPublicKey,
+			"serverName": x.DownloadAddress, "publicKey": rs.PublicKey,
 			"fingerprint": fp,
-		}.set("shortId", o.TLS.RealityShortID).set("spiderX", o.TLS.SpiderX)
+		}.set("shortId", rs.ShortID).set("spiderX", rs.SpiderX)
 	case o.TLS.Enabled || o.Protocol == engine.ProtocolTrojan:
 		ds["security"] = "tls"
-		ds["tlsSettings"] = obj{"serverName": t.DownloadAddress}.
+		ds["tlsSettings"] = obj{"serverName": x.DownloadAddress}.
 			set("alpn", o.TLS.ALPN).set("fingerprint", fp)
 	}
 	return ds, nil
@@ -434,6 +441,7 @@ func xhttpDownlinkFingerprint(o engine.Outbound) (string, error) {
 }
 
 func (*renderer) hysteria(o engine.Outbound, tag string) obj {
+	q := o.QUICOrZero()
 	// Xray's "hysteria" outbound is the native Hysteria2 implementation:
 	// upstream requires settings.version == 2 and rejects anything else,
 	// so there is no legacy v1 mapping here.
@@ -445,11 +453,11 @@ func (*renderer) hysteria(o engine.Outbound, tag string) obj {
 	// the transport config Xray documents for brutal:
 	// https://xtls.github.io/en/config/outbounds/hysteria.html
 	hy := obj{"version": 2, "auth": o.Password}
-	if o.UpMbps > 0 {
-		hy["up_mbps"] = o.UpMbps
+	if q.UpMbps > 0 {
+		hy["up_mbps"] = q.UpMbps
 	}
-	if o.DownMbps > 0 {
-		hy["down_mbps"] = o.DownMbps
+	if q.DownMbps > 0 {
+		hy["down_mbps"] = q.DownMbps
 	}
 	// Port hopping has no Xray spelling: plans that hop never reach this
 	// renderer (FeatureHy2PortHop in the engine catalog).
@@ -463,11 +471,12 @@ func (*renderer) hysteria(o engine.Outbound, tag string) obj {
 }
 
 func wireguard(o engine.Outbound, tag string) (obj, error) {
-	if len(o.Addresses) == 0 {
+	wg := o.WireGuardOrZero()
+	if len(wg.Addresses) == 0 {
 		return nil, fmt.Errorf("xray: wireguard outbound %s has no interface address", o.ID)
 	}
-	peers := make([]obj, 0, len(o.Peers))
-	for _, p := range o.Peers {
+	peers := make([]obj, 0, len(wg.Peers))
+	for _, p := range wg.Peers {
 		peers = append(peers, obj{"publicKey": p.PublicKey, "endpoint": p.Endpoint}.
 			set("preSharedKey", p.PreSharedKey).set("allowedIPs", p.AllowedIPs).set("keepAlive", p.PersistentKeepalive))
 	}
@@ -475,7 +484,7 @@ func wireguard(o engine.Outbound, tag string) (obj, error) {
 		return nil, fmt.Errorf("xray: wireguard outbound %s has no peer", o.ID)
 	}
 	return obj{"tag": tag, "protocol": "wireguard", "settings": obj{
-		"secretKey": o.PrivateKey, "address": o.Addresses, "peers": peers, "mtu": 1420,
+		"secretKey": wg.PrivateKey, "address": wg.Addresses, "peers": peers, "mtu": 1420,
 	}}, nil
 }
 

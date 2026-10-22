@@ -25,9 +25,9 @@ func findOutbound(cfg map[string]any, typ string) map[string]any {
 func TestRenderHysteria2BandwidthAndHopping(t *testing.T) {
 	p := enginetest.Plan(engine.ProtocolHysteria2)
 	o := &p.Outbounds[0]
-	o.UpMbps, o.DownMbps = 20, 100
-	o.HopPorts = "20000-30000,40000"
-	o.HopInterval = 30
+	o.QUICBox().UpMbps, o.QUICBox().DownMbps = 20, 100
+	o.QUICBox().HopPorts = "20000-30000,40000"
+	o.QUICBox().HopInterval = 30
 	cfg := render(t, p)
 	hy2 := findOutbound(cfg, "hysteria2")
 	if hy2 == nil {
@@ -56,10 +56,10 @@ func TestRenderHysteria2BandwidthAndHopping(t *testing.T) {
 func TestRenderHysteria2TuningFields(t *testing.T) {
 	p := enginetest.Plan(engine.ProtocolHysteria2)
 	o := &p.Outbounds[0]
-	o.HopPorts = "20000-30000"
-	o.HopInterval = 30
-	o.HopIntervalMax = 90
-	o.BBRProfile = "conservative"
+	o.QUICBox().HopPorts = "20000-30000"
+	o.QUICBox().HopInterval = 30
+	o.QUICBox().HopIntervalMax = 90
+	o.QUICBox().BBRProfile = "conservative"
 	cfg := render(t, p)
 	hy2 := findOutbound(cfg, "hysteria2")
 	if hy2 == nil {
@@ -78,8 +78,8 @@ func TestRenderHysteria2BBRProfileSuppressedUnderBrutal(t *testing.T) {
 	// bbr_profile would be dead config text.
 	p := enginetest.Plan(engine.ProtocolHysteria2)
 	o := &p.Outbounds[0]
-	o.UpMbps, o.DownMbps = 50, 200
-	o.BBRProfile = "aggressive"
+	o.QUICBox().UpMbps, o.QUICBox().DownMbps = 50, 200
+	o.QUICBox().BBRProfile = "aggressive"
 	cfg := render(t, p)
 	hy2 := findOutbound(cfg, "hysteria2")
 	if _, ok := hy2["bbr_profile"]; ok {
@@ -90,7 +90,7 @@ func TestRenderHysteria2BBRProfileSuppressedUnderBrutal(t *testing.T) {
 func TestRenderHysteria2GeckoObfs(t *testing.T) {
 	p := enginetest.Plan(engine.ProtocolHysteria2)
 	o := &p.Outbounds[0]
-	o.Obfs, o.ObfsParam = "gecko", "gecko-secret"
+	o.ObfsBox().Type, o.ObfsBox().Param = "gecko", "gecko-secret"
 	cfg := render(t, p)
 	hy2 := findOutbound(cfg, "hysteria2")
 	obfs, _ := hy2["obfs"].(map[string]any)
@@ -101,9 +101,9 @@ func TestRenderHysteria2GeckoObfs(t *testing.T) {
 
 func TestRenderTUICTuning(t *testing.T) {
 	p := enginetest.Plan(engine.ProtocolTUIC)
-	p.Outbounds[0].CongestionControl = "cubic"
-	p.Outbounds[0].UDPRelayMode = "quic"
-	p.Outbounds[0].TUICHeartbeat = 25
+	p.Outbounds[0].QUICBox().CongestionControl = "cubic"
+	p.Outbounds[0].QUICBox().UDPRelayMode = "quic"
+	p.Outbounds[0].QUICBox().TUICHeartbeat = 25
 	cfg := render(t, p)
 	tuic := findOutbound(cfg, "tuic")
 	if tuic == nil {
@@ -135,9 +135,9 @@ func TestRenderHy2TUICDeterministic(t *testing.T) {
 	for _, proto := range []engine.Protocol{engine.ProtocolHysteria2, engine.ProtocolTUIC} {
 		p := enginetest.Plan(proto)
 		o := &p.Outbounds[0]
-		o.HopPorts, o.HopInterval, o.HopIntervalMax = "20000-30000,40000", 30, 90
-		o.UpMbps, o.DownMbps = 20, 100
-		o.CongestionControl, o.UDPRelayMode, o.TUICHeartbeat = "cubic", "quic", 25
+		o.QUICBox().HopPorts, o.QUICBox().HopInterval, o.QUICBox().HopIntervalMax = "20000-30000,40000", 30, 90
+		o.QUICBox().UpMbps, o.QUICBox().DownMbps = 20, 100
+		o.QUICBox().CongestionControl, o.QUICBox().UDPRelayMode, o.QUICBox().TUICHeartbeat = "cubic", "quic", 25
 		first, err := Render(p, testRuntime)
 		if err != nil {
 			t.Fatal(err)

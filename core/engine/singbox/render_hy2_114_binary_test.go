@@ -45,18 +45,18 @@ func TestBinaryHy2SingBox114MatchesGate(t *testing.T) {
 
 	plans := map[string]func(*engine.Outbound){
 		"hop_interval_max": func(o *engine.Outbound) {
-			o.HopPorts, o.HopInterval, o.HopIntervalMax = "20000-30000", 30, 90
+			o.QUICBox().HopPorts, o.QUICBox().HopInterval, o.QUICBox().HopIntervalMax = "20000-30000", 30, 90
 		},
 		"bbr_profile": func(o *engine.Outbound) {
-			o.BBRProfile = "conservative"
+			o.QUICBox().BBRProfile = "conservative"
 		},
 		"gecko obfs": func(o *engine.Outbound) {
-			o.Obfs, o.ObfsParam = "gecko", "gecko-secret"
+			o.ObfsBox().Type, o.ObfsBox().Param = "gecko", "gecko-secret"
 		},
 		"all 1.14 fields": func(o *engine.Outbound) {
-			o.HopPorts, o.HopInterval, o.HopIntervalMax = "20000-30000", 30, 90
-			o.BBRProfile = "conservative"
-			o.Obfs, o.ObfsParam = "gecko", "gecko-secret"
+			o.QUICBox().HopPorts, o.QUICBox().HopInterval, o.QUICBox().HopIntervalMax = "20000-30000", 30, 90
+			o.QUICBox().BBRProfile = "conservative"
+			o.ObfsBox().Type, o.ObfsBox().Param = "gecko", "gecko-secret"
 		},
 	}
 	features := map[string][]engine.Feature{

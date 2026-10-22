@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"slices"
 	"strings"
@@ -123,8 +124,10 @@ func mustVersion(t *testing.T, s string) Version {
 }
 
 func TestAProfileHidesItsCredentials(t *testing.T) {
-	o := Outbound{ID: "p", Protocol: ProtocolXrayProfile, Profile: []byte(`{"outbounds":[{"settings":{"vnext":[{"users":[{"id":"9f1c2d3e-aaaa-bbbb-cccc-0123456789ab"}]}]},
-		"streamSettings":{"realitySettings":{"publicKey":"pubkey-value-123","shortId":"shortid42"}}}]}`)}
+	o := Outbound{ID: "p", Protocol: ProtocolXrayProfile}
+	profile := json.RawMessage(`{"outbounds":[{"settings":{"vnext":[{"users":[{"id":"9f1c2d3e-aaaa-bbbb-cccc-0123456789ab"}]}]},
+		"streamSettings":{"realitySettings":{"publicKey":"pubkey-value-123","shortId":"shortid42"}}}]}`)
+	o.Profile = &profile
 	secrets := o.Secrets()
 	for _, want := range []string{"9f1c2d3e-aaaa-bbbb-cccc-0123456789ab", "pubkey-value-123", "shortid42"} {
 		if !slices.Contains(secrets, want) {

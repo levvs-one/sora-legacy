@@ -77,22 +77,15 @@ type ECHConfig struct {
 	QueryServerName string
 }
 
-// TLS holds transport security parameters of an outbound.
-type TLS struct {
-	Enabled     bool
-	ServerName  string
-	ALPN        []string
-	Fingerprint string
-	// ECH enables Encrypted Client Hello. Opt-in only: some censors drop
-	// ClientHellos carrying the ECH extension, so it must never default on.
-	ECH      ECHConfig
-	Insecure bool
-	Reality  bool
-	// RealityPublicKey and other REALITY parameters are public but masked
+// RealitySettings holds the REALITY parameters of an outbound's TLS.
+// Boxed behind a pointer on TLS: most outbounds run plain TLS, so the
+// four strings cost nothing in a plan until REALITY is configured.
+type RealitySettings struct {
+	// PublicKey and the other REALITY parameters are public but masked
 	// because they identify a server.
-	RealityPublicKey string
-	RealityShortID   string
-	SpiderX          string
+	PublicKey string
+	ShortID   string
+	SpiderX   string
 	// KeyShare selects the key share the REALITY ClientHello offers:
 	// "" leaves the engine default, "classical" offers X25519 only,
 	// "hybrid" offers the X25519MLKEM768 hybrid. REALITY servers on
@@ -108,14 +101,63 @@ type TLS struct {
 	KeyShare string
 }
 
-// Transport holds the stream transport of an outbound.
-type Transport struct {
-	// Type is tcp, ws, grpc, h2, httpupgrade or xhttp.
-	Type    string
-	Path    string
-	Host    string
-	Service string
-	Headers map[string]string
+// TLS holds transport security parameters of an outbound.
+type TLS struct {
+	Enabled     bool
+	ServerName  string
+	ALPN        []string
+	Fingerprint string
+	// ECH enables Encrypted Client Hello. Opt-in only: some censors drop
+	// ClientHellos carrying the ECH extension, so it must never default on.
+	// Boxed: a nil ECH is a disabled ECH.
+	ECH      *ECHConfig
+	Insecure bool
+	// Reality holds the REALITY parameters; nil is plain TLS.
+	Reality *RealitySettings
+}
+
+// ECHOrZero returns the ECH configuration, or its zero (disabled)
+// value when none is boxed.
+func (t TLS) ECHOrZero() ECHConfig {
+	if t.ECH == nil {
+		return ECHConfig{}
+	}
+	return *t.ECH
+}
+
+// ECHBox returns the boxed ECH configuration, allocating it first
+// when the outbound carries none.
+func (t *TLS) ECHBox() *ECHConfig {
+	if t.ECH == nil {
+		t.ECH = &ECHConfig{}
+	}
+	return t.ECH
+}
+
+// RealityOrZero returns the REALITY parameters, or their zero value
+// when the outbound runs plain TLS.
+func (t TLS) RealityOrZero() RealitySettings {
+	if t.Reality == nil {
+		return RealitySettings{}
+	}
+	return *t.Reality
+}
+
+// RealityBox returns the boxed REALITY parameters, allocating them
+// first when the outbound carries none.
+func (t *TLS) RealityBox() *RealitySettings {
+	if t.Reality == nil {
+		t.Reality = &RealitySettings{}
+	}
+	return t.Reality
+}
+
+// XHTTPSettings holds the XHTTP-only stream tuning of an outbound:
+// the stream mode, the split download leg, connection reuse (xmux)
+// and the padding range. Boxed behind a pointer on Transport: the
+// fields are rejected on every other transport, so a plain TCP or
+// WebSocket outbound pays nothing for them in a plan.
+type XHTTPSettings struct {
 	// Mode is the XHTTP mode: auto, packet-up, stream-up or stream-one.
 	Mode string
 	// DownloadAddress and DownloadPort split the XHTTP downlink onto a
@@ -143,6 +185,36 @@ type Transport struct {
 	XPaddingBytes string
 }
 
+// Transport holds the stream transport of an outbound.
+type Transport struct {
+	// Type is tcp, ws, grpc, h2, httpupgrade or xhttp.
+	Type    string
+	Path    string
+	Host    string
+	Service string
+	Headers map[string]string
+	// XHTTP holds the XHTTP-only tuning; nil on other transports.
+	XHTTP *XHTTPSettings
+}
+
+// XHTTPOrZero returns the XHTTP tuning, or its zero value when the
+// transport carries none.
+func (t Transport) XHTTPOrZero() XHTTPSettings {
+	if t.XHTTP == nil {
+		return XHTTPSettings{}
+	}
+	return *t.XHTTP
+}
+
+// XHTTPBox returns the boxed XHTTP tuning, allocating it first when
+// the transport carries none.
+func (t *Transport) XHTTPBox() *XHTTPSettings {
+	if t.XHTTP == nil {
+		t.XHTTP = &XHTTPSettings{}
+	}
+	return t.XHTTP
+}
+
 // WireGuardPeer is one WireGuard peer of an outbound.
 type WireGuardPeer struct {
 	PublicKey           string
@@ -168,26 +240,42 @@ type Outbound struct {
 
 	// UUID and the following credential fields must be masked in logs and
 	// events.
-	UUID      string
-	Password  string
-	Cipher    string
-	UserID    string
-	Flow      string
-	Obfs      string
-	ObfsParam string
-	// Plugin and PluginOpts carry a Shadowsocks SIP002 obfuscation plugin
-	// (e.g. v2ray-plugin) and its raw option string, verbatim from the
-	// import link. When set, Plugin wins over the legacy Obfs/ObfsParam
-	// obfs-local mapping. Like the other credential fields, PluginOpts
-	// must be masked in logs and events.
-	Plugin     string
-	PluginOpts string
-	PrivateKey string
-	PublicKey  string
-	ShortID    string
+	UUID     string
+	Password string
+	Cipher   string
+	UserID   string
+	Flow     string
+	// Obfs holds the wire-obfuscation settings; nil is a plain
+	// connection (see ObfsSettings).
+	Obfs      *ObfsSettings
+	PublicKey string
+	ShortID   string
 	// Encryption configures VLESS. Empty or "none" disables it; other
 	// values use Xray's post-quantum VLESS Encryption.
 	Encryption string
+	// QUIC holds the Hysteria2/TUIC tuning; nil for every other
+	// protocol (see QUICSettings).
+	QUIC *QUICSettings
+
+	// WireGuard holds the WireGuard interface material; nil for
+	// every other protocol (see WireGuardSettings).
+	WireGuard *WireGuardSettings
+	// Amnezia turns a WireGuard outbound into AmneziaWG. Nil is plain
+	// WireGuard.
+	Amnezia *AmneziaWG
+	// Bypass is the strategy of a bypass outbound.
+	Bypass *BypassStrategy
+	// Profile contains a provider's Xray configuration and credentials, so
+	// the entire value is secret. Boxed: only xray-profile outbounds
+	// carry one, and a profile document is large.
+	Profile *json.RawMessage
+}
+
+// QUICSettings holds the Hysteria2 and TUIC tuning of an outbound.
+// Both protocols ride QUIC and share the congestion vocabulary; the
+// group is boxed behind a pointer on Outbound because TCP-based
+// protocols — the bulk of every plan — never fill a single field.
+type QUICSettings struct {
 	// UpMbps and DownMbps are the client's Hysteria2 bandwidth caps in
 	// Mbps (from upmbps/downmbps in the import link). Positive values
 	// switch sing-box and mihomo from BBR to Hysteria (Brutal) congestion
@@ -234,19 +322,106 @@ type Outbound struct {
 	// UUID+Password. Like the other credential fields, it must be masked
 	// in logs and events.
 	Token string
+}
 
-	Peers []WireGuardPeer
-	// Amnezia turns a WireGuard outbound into AmneziaWG. Nil is plain
-	// WireGuard.
-	Amnezia *AmneziaWG
-	// Bypass is the strategy of a bypass outbound.
-	Bypass *BypassStrategy
-	// Profile contains a provider's Xray configuration and credentials, so
-	// the entire value is secret.
-	Profile json.RawMessage
+// WireGuardSettings holds the WireGuard interface material of an
+// outbound: the interface key, addresses and peers. Boxed behind a
+// pointer on Outbound: only wireguard outbounds carry any of it.
+type WireGuardSettings struct {
+	// PrivateKey is the interface private key. Like the other
+	// credential fields, it must be masked in logs and events.
+	PrivateKey string
+	Peers      []WireGuardPeer
 	// Addresses lists WireGuard interface CIDRs, required for the tunnel to
 	// carry traffic.
 	Addresses []string
+}
+
+// QUICOrZero returns the QUIC tuning, or its zero value when the
+// outbound carries none.
+func (o Outbound) QUICOrZero() QUICSettings {
+	if o.QUIC == nil {
+		return QUICSettings{}
+	}
+	return *o.QUIC
+}
+
+// QUICBox returns the boxed QUIC tuning, allocating it first when
+// the outbound carries none.
+func (o *Outbound) QUICBox() *QUICSettings {
+	if o.QUIC == nil {
+		o.QUIC = &QUICSettings{}
+	}
+	return o.QUIC
+}
+
+// WireGuardOrZero returns the WireGuard material, or its zero value
+// when the outbound carries none.
+func (o Outbound) WireGuardOrZero() WireGuardSettings {
+	if o.WireGuard == nil {
+		return WireGuardSettings{}
+	}
+	return *o.WireGuard
+}
+
+// WireGuardBox returns the boxed WireGuard material, allocating it
+// first when the outbound carries none.
+func (o *Outbound) WireGuardBox() *WireGuardSettings {
+	if o.WireGuard == nil {
+		o.WireGuard = &WireGuardSettings{}
+	}
+	return o.WireGuard
+}
+
+// ObfsSettings holds the wire obfuscation of an outbound: the
+// simple-obfs mode of Shadowsocks and the obfs of Hysteria2 (the
+// Type/Param pair), and the Shadowsocks SIP002 plugin selection.
+// Boxed behind a pointer on Outbound: most protocols run plain and
+// never fill a field, so the four strings cost nothing in a plan
+// until obfuscation is configured.
+type ObfsSettings struct {
+	// Type is the obfuscation type: a simple-obfs mode ("http" or
+	// "tls") for Shadowsocks, or a Hysteria2 obfs ("salamander" or
+	// "gecko").
+	Type string
+	// Param is the obfuscation parameter: the simple-obfs host, or
+	// the Hysteria2 obfs password. Like the other credential fields,
+	// it must be masked in logs and events.
+	Param string
+	// Plugin and PluginOpts carry a Shadowsocks SIP002 obfuscation
+	// plugin (e.g. v2ray-plugin) and its raw option string, verbatim
+	// from the import link. When set, Plugin wins over the legacy
+	// Type/Param obfs-local mapping. Like the other credential
+	// fields, PluginOpts must be masked in logs and events.
+	Plugin     string
+	PluginOpts string
+}
+
+// ObfsOrZero returns the obfuscation settings, or their zero value
+// when the outbound runs plain.
+func (o Outbound) ObfsOrZero() ObfsSettings {
+	if o.Obfs == nil {
+		return ObfsSettings{}
+	}
+	return *o.Obfs
+}
+
+// ObfsBox returns the boxed obfuscation settings, allocating them
+// first when the outbound carries none.
+func (o *Outbound) ObfsBox() *ObfsSettings {
+	if o.Obfs == nil {
+		o.Obfs = &ObfsSettings{}
+	}
+	return o.Obfs
+}
+
+// ProfileBytes returns the Xray profile document, or nil when the
+// outbound carries none.
+func (o Outbound) ProfileBytes() json.RawMessage {
+	if o.Profile == nil {
+		return nil
+	}
+	return *o.Profile
 }
 
 // Group is a user-selectable set of outbounds.
