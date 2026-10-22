@@ -44,7 +44,9 @@ namespace Sora.Ancient
         public static void Restore(string snapshotPath)
         {
             if (!File.Exists(snapshotPath)) return;
-            var map = JsonMini.Parse(File.ReadAllText(snapshotPath)) as Dictionary<string, object>;
+            Dictionary<string, object> map;
+            try { map = JsonMini.Parse(File.ReadAllText(snapshotPath)) as Dictionary<string, object>; }
+            catch (FormatException) { throw new InvalidOperationException("Proxy snapshot is damaged; system proxy was left unchanged."); }
             if (map == null) throw new InvalidOperationException("Proxy snapshot is damaged; system proxy was left unchanged.");
             using (RegistryKey key = Registry.CurrentUser.OpenSubKey(KeyPath, true))
             {

@@ -32,8 +32,10 @@ namespace Sora.Ancient
         //  "net":..,"type":..,"host":..,"path":..,"tls":..,"sni":..}
         private static ServerEntry ParseVmess(string payload)
         {
-            string json = Encoding.UTF8.GetString(Convert.FromBase64String(PadBase64(StripWhitespace(payload))));
-            var map = JsonMini.Parse(json) as Dictionary<string, object>;
+            string json = DecodeBase64(payload, "VMess link payload is not valid base64.");
+            Dictionary<string, object> map;
+            try { map = JsonMini.Parse(json) as Dictionary<string, object>; }
+            catch (FormatException) { throw new FormatException("VMess link payload is not a JSON object."); }
             if (map == null) throw new FormatException("VMess link payload is not a JSON object.");
             var e = new ServerEntry();
             e.Protocol = "vmess";
@@ -76,7 +78,7 @@ namespace Sora.Ancient
             if (at >= 0 && body.IndexOf('@') == at && IsBase64ish(body.Substring(0, at)) && body.Substring(at + 1).IndexOf(':') > 0 && !body.Substring(0, at).Contains(":"))
             {
                 // SIP002
-                string creds = Encoding.UTF8.GetString(Convert.FromBase64String(PadBase64(Uri.UnescapeDataString(body.Substring(0, at)))));
+                string creds = DecodeBase64(Uri.UnescapeDataString(body.Substring(0, at)), "Shadowsocks link is malformed.");
                 SplitCreds(creds, out method, out password);
                 // The query (?plugin=...) sits AFTER host:port in a SIP002
                 // link, so it must be separated BEFORE SplitHostPort:
@@ -94,7 +96,7 @@ namespace Sora.Ancient
             }
             else
             {
-                string decoded = Encoding.UTF8.GetString(Convert.FromBase64String(PadBase64(StripWhitespace(body))));
+                string decoded = DecodeBase64(body, "Shadowsocks link is malformed.");
                 int credEnd = decoded.LastIndexOf('@');
                 if (credEnd < 0) throw new FormatException("Shadowsocks link is malformed.");
                 SplitCreds(decoded.Substring(0, credEnd), out method, out password);
@@ -146,8 +148,7 @@ namespace Sora.Ancient
             // links; a plain-text list is accepted too.
             if (!text.Contains("://"))
             {
-                string decoded = Encoding.UTF8.GetString(Convert.FromBase64String(PadBase64(StripWhitespace(text))));
-                text = decoded;
+                text = DecodeBase64(text, "Subscription body is not valid base64.");
             }
             var result = new List<ServerEntry>();
             var errors = new List<string>();
@@ -163,6 +164,22 @@ namespace Sora.Ancient
                     ? "No usable era servers in subscription. First refusal: " + errors[0]
                     : "No servers in subscription.");
             return result;
+        }
+
+        // Base64 decoding whose failure is an authored sentence, never
+        // the runtime's FormatException text: every FormatException that
+        // reaches the UI (MainForm.ShowError) is a sentence written in
+        // this assembly, and the decoder's own wording ("Invalid length
+        // for a Base-64 char array…" and friends) must not leak through
+        // it. The same applies to JsonMini's tokenizer wording, which
+        // callers of JsonMini.Parse translate at their boundary.
+        private static string DecodeBase64(string payload, string failure)
+        {
+            try
+            {
+                return Encoding.UTF8.GetString(Convert.FromBase64String(PadBase64(StripWhitespace(payload))));
+            }
+            catch (FormatException) { throw new FormatException(failure); }
         }
 
         private static void SplitCreds(string creds, out string method, out string password)

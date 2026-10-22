@@ -31,7 +31,9 @@ namespace Sora.Ancient
         {
             var list = new List<ServerEntry>();
             if (!File.Exists(StorePath)) return list;
-            var arr = JsonMini.Parse(File.ReadAllText(StorePath)) as List<object>;
+            List<object> arr;
+            try { arr = JsonMini.Parse(File.ReadAllText(StorePath)) as List<object>; }
+            catch (FormatException) { throw new FormatException("Saved server list is damaged."); }
             if (arr == null) throw new FormatException("Saved server list is damaged.");
             foreach (object item in arr)
             {

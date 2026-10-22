@@ -37,7 +37,8 @@ namespace Sora.Ancient
             psi.CreateNoWindow = true;
             psi.RedirectStandardOutput = true;
             psi.RedirectStandardError = true;
-            _process = Process.Start(psi);
+            try { _process = Process.Start(psi); }
+            catch (Exception) { throw new InvalidOperationException("Era engine failed to start."); }
             if (_process == null) throw new InvalidOperationException("Era engine failed to start.");
             _process.BeginOutputReadLine();
             _process.BeginErrorReadLine();

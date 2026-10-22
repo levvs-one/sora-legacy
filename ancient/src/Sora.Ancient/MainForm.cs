@@ -174,6 +174,15 @@ namespace Sora.Ancient
             }
         }
 
+        // Invariant: `message` here is only ever a sentence authored in
+        // this assembly. Every throw site reachable from the handlers
+        // above writes its own user-facing sentence (EraGate, LinkParser,
+        // ServerStore, SystemProxy, EngineRunner), and the two sources
+        // whose wording is NOT authored — the runtime base64 decoder and
+        // the JsonMini tokenizer — are translated to authored sentences
+        // at their boundaries in LinkParser/ServerStore/SystemProxy.
+        // Raw runtime or parser text never reaches this status line or
+        // dialog.
         private void ShowError(string message)
         {
             _status.Text = message;
