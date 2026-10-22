@@ -342,7 +342,7 @@ func (r *renderer) outbound(o engine.Outbound) (obj, error) {
 func (r *renderer) tls(o engine.Outbound) (obj, error) {
 	t := obj{"enabled": true}
 	rs := o.TLS.RealityOrZero()
-	ech := o.TLS.ECHOrZero()
+	echCfg := o.TLS.ECHOrZero()
 	t.set("server_name", o.TLS.ServerName).set("insecure", o.TLS.Insecure).set("alpn", o.TLS.ALPN)
 	fingerprint := o.TLS.Fingerprint
 	if o.TLS.Reality != nil {
@@ -364,7 +364,7 @@ func (r *renderer) tls(o engine.Outbound) (obj, error) {
 	if fingerprint != "" {
 		t["utls"] = obj{"enabled": true, "fingerprint": fingerprint}
 	}
-	if ech.Enabled {
+	if echCfg.Enabled {
 		// Without a pinned config the engine fetches the ECHConfigList
 		// from the server's HTTPS DNS record. query_server_name exists
 		// since sing-box 1.13, above the catalog's 1.12.0 floor: the
@@ -375,19 +375,19 @@ func (r *renderer) tls(o engine.Outbound) (obj, error) {
 		// BuildCapabilities); a bare Render that bypasses selection
 		// still emits the field, and a 1.12.x build refuses it.
 		ech := obj{"enabled": true}
-		if len(ech.Config) > 0 {
+		if len(echCfg.Config) > 0 {
 			// The pinned list is canonicalized to the PEM label the
 			// binary actually accepts — "ECH CONFIGS", probed on
 			// lx.22: the historical "ECHCONFIG" label makes the
 			// binary refuse the whole config at startup ("invalid
 			// ECH configs pem", CENSOR-FP).
-			pem, err := engine.ECHConfigPEM(ech.Config)
+			pem, err := engine.ECHConfigPEM(echCfg.Config)
 			if err != nil {
 				return nil, fmt.Errorf("singbox: outbound %s: %w", o.ID, err)
 			}
 			ech["config"] = pem
 		}
-		ech.set("query_server_name", ech.QueryServerName)
+		ech.set("query_server_name", echCfg.QueryServerName)
 		t["ech"] = ech
 	}
 	if r.plan.Options.Fragment.Enabled && o.Protocol != engine.ProtocolHysteria2 && o.Protocol != engine.ProtocolTUIC {
