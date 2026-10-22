@@ -11,11 +11,6 @@ namespace Sora.Ancient
     {
         private Process _process;
 
-        public bool IsRunning
-        {
-            get { return _process != null && !_process.HasExited; }
-        }
-
         public static string FindEngine(string baseDir)
         {
             string[] candidates =
