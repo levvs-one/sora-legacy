@@ -218,6 +218,18 @@ func TestMaskPatternsDifferential(t *testing.T) {
 		"Authorization: Token abcdefgh123456",
 		"[masked]",
 		"token: [masked],",
+		// Bare UUID with no key, scheme or seed covering it, and
+		// the same UUID in non-ASCII lines (production's separate
+		// non-ASCII maskPatterns branch): only the uuidPattern
+		// pass in that branch can mask these. The pass-3 review
+		// found this class absent from the snapshot differential
+		// corpus; it is pinned explicitly here too so neither
+		// differential depends on the accidental "uuid is ..."
+		// fragment above for non-ASCII UUID coverage.
+		"123e4567-e89b-12d3-a456-426614174000",
+		"пароль 123e4567-e89b-12d3-a456-426614174000",
+		"лог: идентификатор 123e4567-e89b-12d3-a456-426614174000 завершён",
+		"сессия 123e4567-e89b-12d3-a456-426614174000 закрыта",
 	}
 	var inputs []string
 	inputs = append(inputs, fragments...)
