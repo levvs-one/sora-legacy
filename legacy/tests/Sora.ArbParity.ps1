@@ -20,10 +20,11 @@
 #
 # Runs on stock Windows PowerShell 5.1, manually:
 #   powershell -File legacy\tests\Sora.ArbParity.ps1
-# It is not wired into CI: no workflow in this repository invokes this
-# script today, so until that connection is made as its own step, the
-# pin holds only when someone runs it — the command above is the run.
 # Exit code 0 and PASS lines on success; 1 with every failure listed.
+# The same three checks also run as a Go test in the core suite
+# (core/control/arb_mirror_test.go, TestARBMirrorLocalesLanguagesAndCodeKeys),
+# which is the pin that executes in CI; this script remains the
+# Windows-side manual equivalent.
 param(
     [string]$ClientPath = (Join-Path $PSScriptRoot '..\Client')
 )
