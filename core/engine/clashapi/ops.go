@@ -91,12 +91,6 @@ func firstOf(values ...string) string {
 	return ""
 }
 
-// ReloadConfig loads a config file inside the engine home. force=true replaces
-// mihomo's live configuration.
-func (c *Client) ReloadConfig(ctx context.Context, path string) error {
-	return c.call(ctx, http.MethodPut, "/configs?force=true", map[string]string{"path": path}, nil)
-}
-
 // ReloadPayload applies inline configuration without keeping credentials on
 // disk.
 func (c *Client) ReloadPayload(ctx context.Context, yamlText string) error {
@@ -122,19 +116,6 @@ func (c *Client) Counters(ctx context.Context) (engine.Counters, error) {
 // previous outbound after a switch.
 func (c *Client) CloseConnections(ctx context.Context) error {
 	return c.call(ctx, http.MethodDelete, "/connections", nil, nil)
-}
-
-// FlushDNS clears the resolver cache, including the fake-ip table.
-func (c *Client) FlushDNS(ctx context.Context) error {
-	if err := c.call(ctx, http.MethodPost, "/cache/dns/flush", nil, nil); err != nil {
-		return err
-	}
-	return c.call(ctx, http.MethodPost, "/cache/fakeip/flush", nil, nil)
-}
-
-// UpdateProvider makes the engine re-download one subscription provider.
-func (c *Client) UpdateProvider(ctx context.Context, name string) error {
-	return c.call(ctx, http.MethodPut, "/providers/proxies/"+url.PathEscape(name), nil, nil)
 }
 
 // call performs a controller request with an optional JSON body and response
