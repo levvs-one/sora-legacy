@@ -113,11 +113,12 @@ var olcrtcTransportParams = map[string][]olcrtcParamSpec{
 	},
 }
 
-// olcrtcDeprecatedParams are v1 payload keys the current olcrtc runtime
-// ignores (docs/uri.md migration note). They are preserved on import
-// like any other key; producers are required to stop emitting them
-// (sora's emitter never produces them; legacy has no emitter).
-var olcrtcDeprecatedParams = map[string]bool{"video-bitrate": true, "video-hw": true}
+// The v1 payload keys video-bitrate and video-hw are deprecated: the
+// current olcrtc runtime ignores them (docs/uri.md migration note).
+// They need no table here — import preserves them like any other key
+// (pinned by TestOLCRTCUnknownAndDeprecatedParams); producers are
+// required to stop emitting them (sora's emitter never produces them;
+// legacy has no emitter).
 
 func olcrtcParamRule(transport, key string) (olcrtcParamSpec, bool) {
 	for _, spec := range olcrtcTransportParams[transport] {
