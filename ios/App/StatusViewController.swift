@@ -3,8 +3,9 @@ import SoraLegacyCore
 
 /// Status screen: connection state, selected server, connect /
 /// disconnect. Mirrors Android MainActivity's honest-state model —
-/// the label shows exactly TunnelManager's state, including error
-/// text from the engine, never a fake "connected".
+/// the label shows exactly TunnelManager's state; on error it shows
+/// TunnelManager's authored user sentence (raw engine text goes to
+/// the log, never to this label), never a fake "connected".
 final class StatusViewController: UIViewController {
     private let tunnel = TunnelManager()
     private let statusLabel = UILabel()
@@ -56,7 +57,7 @@ final class StatusViewController: UIViewController {
             statusLabel.text = "Disconnecting…"
             toggleButton.setTitle("Disconnect", for: .normal)
         case .error:
-            statusLabel.text = tunnel.lastError ?? "Error"
+            statusLabel.text = tunnel.lastError ?? "Connection failed"
             toggleButton.setTitle("Connect", for: .normal)
         case .stopped:
             statusLabel.text = "Disconnected"

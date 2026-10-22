@@ -74,7 +74,7 @@ final class StatusViewController: UIViewController {
             statusLabel.text = "Disconnecting…"
             toggleButton.setTitle("Disconnect", for: .normal)
         case .error:
-            statusLabel.text = tunnel.lastError ?? "Error"
+            statusLabel.text = tunnel.lastError ?? "Connection failed"
             toggleButton.setTitle("Connect", for: .normal)
         case .stopped:
             statusLabel.text = "Disconnected"

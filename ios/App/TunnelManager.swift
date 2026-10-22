@@ -74,9 +74,12 @@ final class TunnelManager {
             } catch {
                 DispatchQueue.main.async {
                     guard self.connectEpoch == epoch else { return }
-                    self.lastError = (error as? MobileAPIError).map {
-                        switch $0 { case .engine(let m), .badJSON(let m): return m }
-                    } ?? error.localizedDescription
+                    // The technical detail goes to the log only:
+                    // lastError is rendered verbatim by the status
+                    // screen, so it carries authored sentences, never
+                    // an engine/localizedDescription string.
+                    NSLog("[tunnel] connect pipeline failed: %@", "\(error)")
+                    self.lastError = "The server configuration could not be prepared. Check the selected server and try again."
                     self.state = .error
                 }
             }
@@ -102,7 +105,8 @@ final class TunnelManager {
             if let error {
                 DispatchQueue.main.async {
                     guard self?.connectEpoch == epoch else { return }
-                    self?.lastError = error.localizedDescription; self?.state = .error
+                    NSLog("[tunnel] saveToPreferences failed: %@", "\(error)")
+                    self?.lastError = "The VPN configuration could not be saved."; self?.state = .error
                 }
                 return
             }
@@ -114,7 +118,10 @@ final class TunnelManager {
                     guard let self, self.connectEpoch == epoch, self.state == .starting else { return }
                     self.manager = manager
                     do { try manager.connection.startVPNTunnel() }
-                    catch { self.lastError = error.localizedDescription; self.state = .error }
+                    catch {
+                        NSLog("[tunnel] startVPNTunnel failed: %@", "\(error)")
+                        self.lastError = "The tunnel could not be started."; self.state = .error
+                    }
                 }
             }
         }

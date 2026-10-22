@@ -57,7 +57,7 @@ final class ServersViewController: UITableViewController {
                 // A Keychain failure must not be swallowed: log the
                 // status and surface it like other store errors.
                 NSLog("[servers] remove failed: %@", "\(error)")
-                showError("\(error)", title: "Delete failed")
+                showError("The server could not be deleted.", title: "Delete failed")
             }
             reload()
         }
@@ -95,7 +95,10 @@ final class ServersViewController: UITableViewController {
                 // showError hops to main itself (see below), and the
                 // import hop goes through runImport's own queues.
                 guard let self else { return }
-                if let error { self.showError(error.localizedDescription); return }
+                if let error {
+                    NSLog("[servers] subscription fetch failed: %@", "\(error)")
+                    self.showError("The subscription could not be downloaded.", title: "Download failed"); return
+                }
                 guard let data else { self.showError("Empty response"); return }
                 self.runImport { try AppStore.mobileAPI.parseSubscription(data) }
             }.resume()
@@ -111,7 +114,7 @@ final class ServersViewController: UITableViewController {
                         try AppStore.shared.addServers(imported)
                     } catch {
                         NSLog("[servers] save failed: %@", "\(error)")
-                        self?.showError("\(error)")
+                        self?.showError("The imported servers could not be saved.")
                         return
                     }
                     if AppStore.shared.selectedID() == nil, let first = imported.first {
@@ -120,7 +123,10 @@ final class ServersViewController: UITableViewController {
                     self?.reload()
                 }
             } catch {
-                DispatchQueue.main.async { self?.showError("\(error)") }
+                NSLog("[servers] import failed: %@", "\(error)")
+                DispatchQueue.main.async {
+                    self?.showError("The content could not be imported. Check the links or subscription and try again.")
+                }
             }
         }
     }
