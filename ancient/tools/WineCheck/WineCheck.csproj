@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Wine-phase harness: the client's UI-free sources (link parser,
+       era gate, config renderer, store) compiled for the SAME era
+       target frameworks as the client itself (net40 / net46) and run
+       as a console program inside the Wine prefixes. This proves the
+       import + config-generation path executes on the era .NET
+       runtime under Wine, which the WinForms GUI alone cannot show
+       in a headless phase (its import path is a modal prompt).
+       The GUI itself is smoke-launched separately (client-smoke.sh).
+       Ships nowhere; build-time / Wine-phase check only. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFrameworks>net40;net46</TargetFrameworks>
+    <LangVersion>7.3</LangVersion>
+    <AssemblyName>WineCheck</AssemblyName>
+    <RootNamespace>WineCheck</RootNamespace>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="System" />
+    <Reference Include="System.Core" />
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+    <Compile Include="..\..\src\Sora.Ancient\JsonMini.cs" Link="JsonMini.cs" />
+    <Compile Include="..\..\src\Sora.Ancient\ServerEntry.cs" Link="ServerEntry.cs" />
+    <Compile Include="..\..\src\Sora.Ancient\EraGate.cs" Link="EraGate.cs" />
+    <Compile Include="..\..\src\Sora.Ancient\LinkParser.cs" Link="LinkParser.cs" />
+    <Compile Include="..\..\src\Sora.Ancient\ConfigBuilder.cs" Link="ConfigBuilder.cs" />
+    <Compile Include="..\..\src\Sora.Ancient\ServerStore.cs" Link="ServerStore.cs" />
+  </ItemGroup>
+</Project>

@@ -151,8 +151,16 @@ Build (Linux, as with the toolchain department's net48 precedent):
 
 Client and engine are **built and proven at build/config level**
 (client: both TFMs compile; parser/config: ParserCheck green; engine:
-config probes + Linux loopback run). **Runtime on the era systems is
-not yet proven**: the Wine phase (prefixes winxp/winvista, era .NET,
-engine smoke + loopback) is prepared in `wine/` and runs as a separate
-task; a real XP/Vista/8.0 device check remains the final gate. No
+config probes + Linux loopback run), and **runtime under Wine is now
+proven** (phase WS1-C, 2026-10-22, report `LEGACY-FULL-1C-WINE.md` in
+the programme reports): in both prefixes (winxp + net40, winvista +
+net46) the pinned engine answers `-version` and passes `-test`, the
+client starts without crashing and enters its message loop, vmess
+import + era config generation executed on the prefixes' own era
+runtimes (WineCheck harness on the client's exact sources; framework
+4.0.30319.1 / 4.0.30319.17929), and loopback traffic passed through
+the engine's SOCKS inbound in both prefixes. What Wine does **not**
+prove is listed point-by-point in the phase report (drivers/TAP, real
+Internet Settings semantics, performance, the era OSes' own network
+stacks). A real XP/Vista/8.0 device check remains the final gate. No
 status in this track claims more than that.

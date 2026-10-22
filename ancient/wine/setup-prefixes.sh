@@ -18,7 +18,7 @@ for name in winxp winvista; do
   # Pin the reported Windows version per prefix.
   case "$name" in
     winxp)    WINEPREFIX="$prefix" winecfg -v winxp >/dev/null 2>&1 || true ;;
-    winvista) WINEPREFIX="$prefix" winecfg -v winvista >/dev/null 2>&1 || true ;;
+    winvista) WINEPREFIX="$prefix" winecfg -v vista >/dev/null 2>&1 || true ;; # measured on wine 9.0 (WS1-C): the value is "vista"; "winvista" exits 1 and was silently swallowed by || true
   esac
 done
 echo "Prefixes ready under $ROOT (winxp, winvista)."
