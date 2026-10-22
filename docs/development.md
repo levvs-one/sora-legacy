@@ -128,6 +128,7 @@ packaging/zapret/build.sh dist/engines
 
 ```sh
 cd core && CGO_ENABLED=0 GOARCH=amd64 go build -trimpath -ldflags '-s -w' -o ../dist/sora-core ./cmd/sora-core && cd ..
+cd macos/helper && CGO_ENABLED=0 GOARCH=amd64 go build -trimpath -ldflags '-s -w' -o ../../dist/sora-ctl . && cd ../..
 packaging/engines/fetch.sh amd64 dist/engines
 packaging/zapret/build.sh dist/engines
 SORA_ARCH=amd64 SORA_VERSION=0.3.0 nfpm package --config packaging/linux/nfpm.yaml --packager deb --target dist/
