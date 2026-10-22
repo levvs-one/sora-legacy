@@ -287,12 +287,12 @@ independent measurement in `apple/Legacy/ENGINES.md` §7:
 
 ### 3.5 What the self-builds do NOT fix (gates, stated once)
 
-- The core renderer emits sing-box-1.14-only fields whenever a plan
-  sets them — `hop_interval_max`, `bbr_profile`, Hysteria2 obfs
-  `gecko` — with no per-version gate in `core/engine/catalog.go` or
-  the renderer. On the §3.2/§3.3 engines such plans fail at engine
-  config load. They are listed here as tier gates; fixing the
-  catalog gate is core work outside this department's zones.
+- The sing-box-1.14-only fields — `hop_interval_max`, `bbr_profile`,
+  Hysteria2 obfs `gecko` — are gated by the catalog
+  (LEGACY-FULL-GATES-FIX): on the §3.2/§3.3 self-built engines
+  (1.13.21/1.11.15) plans setting them are refused by SelectEngine
+  by name, not at engine config load. They are listed here as tier
+  gates.
 - On the §3.2 engine additionally: no Tailscale outbound (tag
   dropped, §3.2 — no catalog claim exists for it), no AmneziaWG
   and no XHTTP (upstream sing-box features that do not exist;
