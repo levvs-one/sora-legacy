@@ -15,7 +15,7 @@ final class MainWindowController: NSObject, NSTableViewDataSource {
     private let proxy: SystemProxyController
 
     private let window: NSWindow
-    private let statusLabel = NSTextField(labelWithString: "Status: …")
+    private let statusLabel = NSTextField(labelWithString: "Status: checking…")
     private let detailLabel = NSTextField(labelWithString: "")
     private let connectButton = NSButton(title: "Connect", target: nil, action: nil)
     private let disconnectButton = NSButton(title: "Disconnect", target: nil, action: nil)
@@ -180,7 +180,8 @@ final class MainWindowController: NSObject, NSTableViewDataSource {
                     self.table.reloadData()
                     self.detailLabel.stringValue = "Imported \(doc.servers.count) server(s)."
                 case .failure(let f):
-                    self.detailLabel.stringValue = "Import failed: \(f)"
+                    NSLog("[import] helper failure: %@", "\(f)")
+                    self.detailLabel.stringValue = Self.helperFailureText(f, action: "Import")
                 }
             }
         }
@@ -202,8 +203,9 @@ final class MainWindowController: NSObject, NSTableViewDataSource {
                 }
                 self.refreshStatus()
             case .failure(let f):
+                NSLog("[connect] helper failure: %@", "\(f)")
                 DispatchQueue.main.async {
-                    self.detailLabel.stringValue = "Connect failed: \(f)"
+                    self.detailLabel.stringValue = Self.helperFailureText(f, action: "Connect")
                 }
             }
         }
@@ -241,8 +243,9 @@ final class MainWindowController: NSObject, NSTableViewDataSource {
             }
             _ = helper.disconnect()
         case .failure(let e):
+            NSLog("[proxy] apply failed: %@", "\(e)")
             DispatchQueue.main.async { [weak self] in
-                self?.detailLabel.stringValue = "System proxy NOT changed: \(e). Disconnecting."
+                self?.detailLabel.stringValue = "System proxy NOT changed: \(Self.proxyFailureText(e)). Disconnecting."
             }
             _ = helper.disconnect()
         }
@@ -262,7 +265,8 @@ final class MainWindowController: NSObject, NSTableViewDataSource {
                 case .success:
                     self.detailLabel.stringValue = "Disconnected."
                 case .failure(let f):
-                    self.detailLabel.stringValue = "Disconnect failed: \(f)"
+                    NSLog("[disconnect] helper failure: %@", "\(f)")
+                    self.detailLabel.stringValue = Self.helperFailureText(f, action: "Disconnect")
                 }
                 self.refreshStatus()
             }
@@ -324,6 +328,35 @@ final class MainWindowController: NSObject, NSTableViewDataSource {
                     self.detailLabel.stringValue = "Is the core service installed? See service/darwin."
                 }
             }
+        }
+    }
+
+    /// Authored user sentences for failure cases. The failure
+    /// payloads (helper stderr, networksetup output, process error
+    /// text) are technical: they go to the log at the call sites and
+    /// are never interpolated into a label — the screen shows only a
+    /// sentence per case, written here.
+    private static func helperFailureText(_ failure: HelperClient.Failure, action: String) -> String {
+        switch failure {
+        case .helperMissing:
+            return "\(action) failed: the core helper is not installed."
+        case .helperFailed:
+            return "\(action) failed: the core service refused the request."
+        case .unreadableOutput:
+            return "\(action) failed: the core answer could not be read."
+        }
+    }
+
+    private static func proxyFailureText(_ error: SystemProxyError) -> String {
+        switch error {
+        case .authorizationDenied:
+            return "administrator authorization was denied"
+        case .toolUnavailable:
+            return "the network setup tool is unavailable"
+        case .commandFailed:
+            return "the system refused the change"
+        case .noServices:
+            return "no active network service was found"
         }
     }
 

@@ -77,7 +77,9 @@ public final class SystemProxyController {
 
     /// Runs networksetup, returning stdout. A refusal mentioning
     /// authorization maps to .authorizationDenied; anything else is
-    /// carried verbatim (trimmed) so the UI can show the real cause.
+    /// carried verbatim (trimmed) as the failure payload — for the
+    /// log. The UI maps each error case to its own authored sentence
+    /// and never renders this raw tool text.
     @discardableResult
     func tool(_ arguments: [String]) -> Result<String, SystemProxyError> {
         guard FileManager.default.isExecutableFile(atPath: toolPath) else {

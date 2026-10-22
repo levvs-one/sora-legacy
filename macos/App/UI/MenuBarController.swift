@@ -6,7 +6,7 @@ import AppKit
 final class MenuBarController: NSObject {
     private let item: NSStatusItem
     private let helper: HelperClient
-    private let statusItem = NSMenuItem(title: "Status: …", action: nil, keyEquivalent: "")
+    private let statusItem = NSMenuItem(title: "Status: checking…", action: nil, keyEquivalent: "")
     private var timer: Timer?
 
     init(helper: HelperClient, onOpenWindow: @escaping () -> Void, onQuit: @escaping () -> Void) {
