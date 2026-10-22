@@ -38,7 +38,7 @@ namespace v2rayN.Forms
                 CreateHappSettingRow("Журнал", "", () => ShowHappPage(BuildHappLogsPage())),
                 CreateHappSettingRow("Резервные копии", "", ShowSoraBackupMenu));
             AddHappSection(page, "О приложении",
-                CreateHappSettingRow("О Sora", "", ShowCommunityAbout));
+                CreateHappSettingRow("О Sora Legacy", "", ShowCommunityAbout));
             return page;
         }
 

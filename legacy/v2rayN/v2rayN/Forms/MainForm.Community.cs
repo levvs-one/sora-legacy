@@ -1115,7 +1115,7 @@ namespace v2rayN.Forms
             {
                 var close = CreateSoraIconButton("x", () => dialog.Close());
                 close.Location = new Point(444, 14);
-                close.AccessibleName = "Закрыть сведения о Sora";
+                close.AccessibleName = "Закрыть сведения о Sora Legacy";
                 close.DialogResult = DialogResult.Cancel;
 
                 var logo = new PictureBox
@@ -1130,7 +1130,7 @@ namespace v2rayN.Forms
                 {
                     Location = new Point(84, 18),
                     Size = new Size(340, 28),
-                    Text = "О Sora",
+                    Text = SoraText.Translate("О Sora Legacy"),
                     Font = new Font("Segoe UI Semibold", 15F),
                     ForeColor = HappText,
                     TextAlign = ContentAlignment.MiddleLeft
@@ -1139,7 +1139,7 @@ namespace v2rayN.Forms
                 {
                     Location = new Point(85, 47),
                     Size = new Size(340, 22),
-                    Text = "Версия " + SoraVersion + ", Windows 7 x86",
+                    Text = SoraText.Translate("Версия") + " " + SoraVersion + ", Windows 7 x86",
                     Font = new Font("Segoe UI", 9F),
                     ForeColor = HappMuted
                 };
@@ -1147,7 +1147,7 @@ namespace v2rayN.Forms
                 {
                     Location = new Point(32, 86),
                     Size = new Size(436, 24),
-                    Text = "Клиент подключений для устаревших систем",
+                    Text = SoraText.Translate("Клиент подключений для устаревших систем"),
                     Font = new Font("Segoe UI", 10F),
                     ForeColor = HappText
                 };
@@ -1158,10 +1158,10 @@ namespace v2rayN.Forms
                     BackColor = HappSurface
                 };
                 ApplyRoundedSurface(details, 6, Color.FromArgb(76, 76, 80));
-                var licenseName = new Label { Location = new Point(16, 1), Size = new Size(160, 42), Text = "Лицензия", ForeColor = HappText, TextAlign = ContentAlignment.MiddleLeft, Font = new Font("Segoe UI", 9F) };
+                var licenseName = new Label { Location = new Point(16, 1), Size = new Size(160, 42), Text = SoraText.Translate("Лицензия"), ForeColor = HappText, TextAlign = ContentAlignment.MiddleLeft, Font = new Font("Segoe UI", 9F) };
                 var licenseValue = new Label { Location = new Point(196, 1), Size = new Size(224, 42), Text = "GPL-3.0", ForeColor = HappMuted, TextAlign = ContentAlignment.MiddleRight, Font = new Font("Segoe UI", 9F) };
                 var divider = new Panel { Location = new Point(0, 43), Size = new Size(436, 1), BackColor = Color.FromArgb(76, 76, 80) };
-                var sourceName = new Label { Location = new Point(16, 45), Size = new Size(160, 42), Text = "Исходный код", ForeColor = HappText, TextAlign = ContentAlignment.MiddleLeft, Font = new Font("Segoe UI", 9F) };
+                var sourceName = new Label { Location = new Point(16, 45), Size = new Size(160, 42), Text = SoraText.Translate("Исходный код"), ForeColor = HappText, TextAlign = ContentAlignment.MiddleLeft, Font = new Font("Segoe UI", 9F) };
                 var sourceValue = new LinkLabel
                 {
                     Location = new Point(176, 45),
@@ -1175,7 +1175,7 @@ namespace v2rayN.Forms
                     TextAlign = ContentAlignment.MiddleRight,
                     Font = new Font("Segoe UI", 8.5F),
                     Cursor = Cursors.Hand,
-                    AccessibleName = "Открыть исходный код Sora на GitHub"
+                    AccessibleName = "Открыть исходный код Sora Legacy на GitHub"
                 };
                 sourceValue.LinkClicked += (sender, args) => OpenSoraCommunityLink("https://github.com/levvs-one/sora-legacy");
                 var telegramDivider = new Panel { Location = new Point(0, 87), Size = new Size(436, 1), BackColor = Color.FromArgb(76, 76, 80) };
@@ -1202,7 +1202,7 @@ namespace v2rayN.Forms
                 {
                     Location = new Point(32, 272),
                     Size = new Size(436, 20),
-                    Text = "Независимый проект сообщества",
+                    Text = SoraText.Translate("Независимый проект сообщества"),
                     Font = new Font("Segoe UI", 8.5F),
                     ForeColor = HappMuted
                 };

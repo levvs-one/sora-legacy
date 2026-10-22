@@ -11,7 +11,7 @@ body:
     id: version
     attributes:
       label: Версия Sora
-      placeholder: 0.2.2
+      placeholder: 0.2.3
     validations:
       required: true
   - type: dropdown
@@ -19,8 +19,15 @@ body:
     attributes:
       label: Система
       options:
-        - Windows 7 SP1 x86
-        - Другая версия Windows
+        - Windows 7 SP1
+        - Windows 8.1
+        - Windows 10
+        - Windows 11
+        - Linux (служба ядра, без GUI)
+        - Android (проверка — на устройстве)
+        - macOS (проверка — на Mac)
+        - iOS (проверка — на устройстве)
+        - Другая система
     validations:
       required: true
   - type: textarea
