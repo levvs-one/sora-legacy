@@ -36,6 +36,15 @@ import (
 // means byte-identical to this snapshot — when porting a newer sora
 // redactor, refresh the snapshot by diffing it against the new sora
 // source, never by pointing it back at production.
+//
+// Revalidation (final pass 3, 2026-10-22): the snapshot was checked
+// against sora's LIVE redactor at sora HEAD 18c3f551 — the only sora
+// change to redact.go since 1ec55191 is a dead-code removal
+// (keyGateWords, ad8d6171), and a behavioral differential over the
+// combinatorial corpus of TestRedactorReviewGCombinatorialDifferential
+// plus pattern-only lines (909 outputs) came out byte-identical
+// between the two repositories' production redactors. The snapshot
+// therefore still pins current sora behavior, not a stale fork.
 
 // --- BEGIN snapshot of sora@1ec55191 core/engine/redact.go ---
 
