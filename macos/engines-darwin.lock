@@ -21,14 +21,38 @@
 #     that runs on the systems this client targets.
 #   sing-box arm64: no legacy asset exists upstream; the regular build
 #     declares min macOS 26.0. On Apple Silicon below macOS 26 the
-#     core honestly has no sing-box — Xray and mihomo carry the plans
-#     they can, and the core's engine selection says so.
+#     SHIPPED service honestly has no sing-box — Xray and mihomo carry
+#     the plans they can, and the core's engine selection says so.
+#     The sing-box-selfbuilt lines below close that gap at the
+#     ENGINE level for the tiers in TIERS.md (there is still no
+#     daemon below 12.0 to drive them in the shipped service —
+#     TIERS.md §§1-2 are the protocols of those attempts).
 #   xray: min macOS 12.0 on both architectures (matches the daemon's
 #     own floor — see README.md).
 #   mihomo: min macOS 10.13 (amd64) / 11.0 (arm64).
+#
+# Self-built sing-box (LEGACY-FULL WS3, 2026-10-22; TIERS.md §3,
+# recipe build-singbox-darwin.sh). Format exception, stated plainly:
+# for these lines the sha256 is the digest of the raw Mach-O BINARY
+# (there is no downloadable archive — the fourth field is the
+# SOURCE archive the binary is built from), and the builds are
+# byte-reproducible, so re-running the recipe verifies the digest.
+#   1.13.21: built with Go 1.24.13, release tag set minus
+#     with_tailscale (the pinned Tailscale fork needs a Go 1.25
+#     API — TIERS.md §3.2). Measured Mach-O floor 11.0 on both
+#     architectures: this is the macOS 11 tier engine, and the
+#     first sing-box that launches on Apple Silicon below 26.
+#   1.11.15: built with Go 1.22.12 (its QUIC fork refuses Go
+#     < 1.21 — TIERS.md §3.3). amd64: load command 10.13, honest
+#     floor 10.15 (Go 1.22 runtime) — the Catalina tier engine,
+#     Intel only. arm64: floor 11.0 (no arm64 Mac predates 11).
 sing-box  amd64  5deb29edfa07ff7a9db7be084ef90f661cc483136e797daa2c14d4479995d112  https://github.com/SagerNet/sing-box/releases/download/v1.14.3/sing-box-1.14.3-darwin-amd64-legacy-macos-10.13.tar.gz
 sing-box  arm64  0360ce634a04c26a6b4fd957517987bb4f6c8950f63435ce3c5af2fcae5860c5  https://github.com/SagerNet/sing-box/releases/download/v1.14.3/sing-box-1.14.3-darwin-arm64.tar.gz
 xray      amd64  f5b0471d3459eff1b82e48af0aeac186abcc3298210070afbbbd8437a4e8b203  https://github.com/XTLS/Xray-core/releases/download/v26.3.27/Xray-macos-64.zip
 xray      arm64  2e93a67e8aa1936ecefb307e120830fcbd4c643ab9b1c46a2d0838d5f8409eaf  https://github.com/XTLS/Xray-core/releases/download/v26.3.27/Xray-macos-arm64-v8a.zip
 mihomo    amd64  b7de9fc46af2ca985ecfb302a6362170e04ff2023dee1e82addc54133e669bc9  https://github.com/MetaCubeX/mihomo/releases/download/v1.19.32/mihomo-darwin-amd64-v1.19.32.gz
 mihomo    arm64  3312a6780652c622890fd4357c6a853bbf865464fd047ac7b7f52dab8de18652  https://github.com/MetaCubeX/mihomo/releases/download/v1.19.32/mihomo-darwin-arm64-v1.19.32.gz
+sing-box-selfbuilt-1.13.21  amd64  7996de37a7faf96b93c5d9c8348e056550d06f2ae3619333333ed166be396a32  https://github.com/SagerNet/sing-box/archive/refs/tags/v1.13.21.tar.gz
+sing-box-selfbuilt-1.13.21  arm64  7434c00fc5edfd9e56512f733d75d39bc6b0a8298fc1cf7af7779d13d618f35b  https://github.com/SagerNet/sing-box/archive/refs/tags/v1.13.21.tar.gz
+sing-box-selfbuilt-1.11.15  amd64  ca9dd6b0d32ee3ef99ba80acd9a4d20664dd5fe6d82aacac9dafc518e1a7ccbc  https://github.com/SagerNet/sing-box/archive/refs/tags/v1.11.15.tar.gz
+sing-box-selfbuilt-1.11.15  arm64  6220cf5facb14d8d43fa51901fb6e61110b1f2e0f8bec80809a426f3a2669aac  https://github.com/SagerNet/sing-box/archive/refs/tags/v1.11.15.tar.gz

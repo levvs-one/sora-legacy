@@ -98,6 +98,8 @@ binaries, not guessed:
 | Xray 26.3.27 | 12.0 / 12.0 |
 | mihomo 1.19.32 | 10.13 (amd64) / 11.0 (arm64) |
 | sing-box 1.14.3 | legacy-10.13 asset (amd64) / **26.0** regular (arm64) |
+| sing-box 1.13.21, self-built (TIERS.md §3.2) | **11.0 / 11.0** |
+| sing-box 1.11.15, self-built (TIERS.md §3.3) | **10.15** honest floor (amd64) / 11.0 (arm64) |
 
 Modes:
 
@@ -108,9 +110,18 @@ Modes:
 | NetworkExtension | **not implemented — prospect** | Needs Developer ID, NE entitlement, system-extension approval, notarization. Spec only; no code pretends otherwise. |
 
 Below macOS 12 the client launches and explains (the service cannot
-run); on Apple Silicon below macOS 26 there is no sing-box build that
+run — the attempts to build the daemon for macOS 11 and for a
+10.15-limited tier are recorded in [TIERS.md](TIERS.md) §§1–2:
+the dependency graph requires Go ≥ 1.25/1.26, so those tiers are
+engine tiers, not service tiers). For the shipped service on Apple
+Silicon below macOS 26 there is still no sing-box build that
 launches — Xray and mihomo carry what they can, and the daemon's own
-engine selection reports the rest. Engine features and obfuscation
+engine selection reports the rest; at the engine level the gap is
+now closed by reproducible self-builds (sing-box 1.13.21 at an
+11.0 floor for both architectures, 1.11.15 at 10.15 for Intel —
+[TIERS.md](TIERS.md) §3, pins in `engines-darwin.lock`,
+recipe `build-singbox-darwin.sh`), which no shipped driver drives
+below 12.0 yet. Engine features and obfuscation
 capabilities reach the UI only as data: the helper's `engineinfo`
 (core catalog via `core/mobileapi`) and the daemon's `GetAbout`
 (installed/version per engine). No feature strings are hardcoded in
@@ -126,7 +137,9 @@ the Swift UI.
 | `App/Info.plist` | bundle metadata (no entitlements claimed) |
 | `project.yml` | XcodeGen spec: one macOS app target, deployment target 10.13 |
 | `Package.swift` | SPM package for App/Core + Tests/CoreTests |
-| `engines-darwin.lock` | darwin engine pins (URL + sha256, digests cross-checked vs upstream .dgst / GitHub API) |
+| `engines-darwin.lock` | darwin engine pins (URL + sha256, digests cross-checked vs upstream .dgst / GitHub API) plus the self-built sing-box pins of TIERS.md §3 |
+| `TIERS.md` | macOS 11 / 10.15-limited tiers: daemon build-attempt protocols, self-built sing-box, gates, per-tier client divergence |
+| `build-singbox-darwin.sh` | reproducible self-build of the tier sing-box pins (pinned toolchains + sources, SHA-256 verified) |
 | `fetch-engines-darwin.sh` | downloads + verifies + lays out engines with the SHA256SUMS manifest the core requires |
 
 ## Building
