@@ -1,5 +1,8 @@
 # Sora Legacy for iOS
 
+> Part of [Sora Legacy](../README.md). This tree is the iOS client; it has never been compiled with Xcode from this environment — the verify-on-mac status is stated below and in [platforms](../legacy/docs/platforms.md). Full documentation index: [docs/README.md](../docs/README.md).
+
+
 Native iOS client for sora-legacy: the desktop core's control plane
 (`core/mobileapi`) plus upstream **sing-box 1.12.12** libbox, in a
 packet-tunnel extension. Sibling of `android/` — same pipeline, same

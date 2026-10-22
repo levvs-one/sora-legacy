@@ -1,5 +1,8 @@
 # Sora Legacy — Android client
 
+> Part of [Sora Legacy](../README.md). This tree is the Android client; it is not a shipped release — the verify-on-device status is stated below and in [platforms](../legacy/docs/platforms.md). Full documentation index: [docs/README.md](../docs/README.md).
+
+
 A full Android client for the sora-legacy core, in one tree:
 
 - **Core logic is not reimplemented.** Imports, plan validation and

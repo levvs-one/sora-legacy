@@ -1,5 +1,8 @@
 # Sora Legacy — macOS client
 
+> Part of [Sora Legacy](../README.md). This tree is the macOS client; it has never been built or run on a Mac from this environment — the verify-on-mac status is stated below and in [platforms](../legacy/docs/platforms.md). Full documentation index: [docs/README.md](../docs/README.md).
+
+
 A native macOS client for the sora-legacy core: a root launchd
 service running the existing Go daemon, a thin Go helper, and an
 AppKit app. Nothing in the product logic is reimplemented — imports,
