@@ -220,6 +220,15 @@ func (o Outbound) Validate() error {
 		errs = append(errs, fmt.Errorf("outbound %s: too many ALPN entries", o.ID))
 	}
 	errs = append(errs, o.TLS.validate(what)...)
+	// Early fingerprint-name validation (§8.8): a garbage uTLS
+	// fingerprint name used to pass plan validation and fail only
+	// late, at the engine binary's config check. The name catalog
+	// is the reference's (fingerprint.go, pinned by
+	// TestFingerprintCatalogParityPin); a name no engine can spell
+	// is refused here, by name, before any renderer runs.
+	if fp := o.TLS.Fingerprint; fp != "" && !ValidFingerprintName(fp) {
+		errs = append(errs, fmt.Errorf("outbound %s: fingerprint %q is not a known uTLS fingerprint", o.ID, fp))
+	}
 	if len(o.Transport.Headers) > MaxHeaderCount {
 		errs = append(errs, fmt.Errorf("outbound %s: more than %d headers", o.ID, MaxHeaderCount))
 	}

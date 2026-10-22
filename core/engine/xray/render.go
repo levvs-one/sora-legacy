@@ -431,8 +431,9 @@ func xhttpDownloadSettings(o engine.Outbound) (obj, error) {
 // refuses an empty fingerprint with an honest render error: the downlink
 // dials a different server than the uplink, so a silent default would
 // put a different ClientHello on the wire (S5-SP4, ported from sora;
-// legacy has no fingerprint-name catalog, so an explicit name is
-// passed through unchecked, exactly like the main stream's).
+// the explicit name reaches this renderer only through plan
+// validation, which now checks it against the fingerprint-name
+// catalog in engine/fingerprint.go — §8.8 release fix).
 func xhttpDownlinkFingerprint(o engine.Outbound) (string, error) {
 	if o.TLS.Fingerprint == "" {
 		return "", fmt.Errorf("xray: outbound %s: XHTTP downloadSettings needs an explicit uTLS fingerprint (plan TLS.Fingerprint): refusing to silently default the downlink parrot", o.ID)
