@@ -251,8 +251,9 @@ classes. Dexing still succeeds and the app uses no Kotlin
 reflection; AGP builds on a dev machine (newer R8 via AGP 8.5) do
 not have this warning.
 
-The universal APK is large (~267 MiB): both engines' `.so` for all
-four ABIs, stored uncompressed for direct mmap loading. Per-ABI
+The universal APK is large (279,213,197 bytes, ~266 MiB — the exact
+size and SHA-256 are in `docs/install.md`): both engines' `.so` for
+all four ABIs, stored uncompressed for direct mmap loading. Per-ABI
 splits are a packaging step for distribution, not a client concern.
 
 ## Not verified (verify on device)
