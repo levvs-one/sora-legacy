@@ -1,6 +1,6 @@
 # Sora Ancient — Windows XP / Vista / 8.0 track
 
-> Part of [Sora Legacy](../../README.md). This tree is the ancient-Windows track (XP SP3 / Vista SP2 / Windows 8.0); its honest status and floors are stated below and in [platforms](../../legacy/docs/platforms.md). Full documentation index: [docs/README.md](../../docs/README.md).
+> Part of [Sora Legacy](../README.md). This tree is the ancient-Windows track (XP SP3 / Vista SP2 / Windows 8.0); its honest status and floors are stated below and in [platforms](../legacy/docs/platforms.md). Full documentation index: [docs/README.md](../docs/README.md).
 
 
 A separate, **additive** track for Windows versions the main legacy
