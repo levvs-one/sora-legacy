@@ -82,7 +82,11 @@ namespace v2rayN.Tool
             }
             catch (Exception exception)
             {
-                error = exception.Message;
+                Utils.SaveLog("Не удалось запустить TUN", exception);
+                // `error` is shown to the user as-is (UI.ShowWarning at the
+                // call site), so it only ever carries an authored sentence —
+                // the raw exception text belongs in the log above, never here.
+                error = "Не удалось запустить TUN. Подробности находятся в журнале подключения.";
                 Stop();
                 return false;
             }

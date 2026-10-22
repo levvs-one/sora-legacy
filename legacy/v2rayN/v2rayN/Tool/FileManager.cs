@@ -111,7 +111,7 @@ namespace v2rayN.Tool
         {
             try
             {
-                string baseDir = Utils.GetPath();
+                string baseDir = Utils.GetPath(string.Empty);
                 using (ZipArchive archive = ZipFile.OpenRead(fileName))
                 {
                     foreach (ZipArchiveEntry entry in archive.Entries)

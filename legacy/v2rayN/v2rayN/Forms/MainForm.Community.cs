@@ -829,8 +829,9 @@ namespace v2rayN.Forms
             }
             catch (Exception exception)
             {
+                Utils.SaveLog("Не удалось определить адрес сервера для безопасного маршрута", exception);
                 UpdateCommunityConnectionState(config.sysProxyType);
-                UI.ShowWarning("Не удалось определить адрес сервера для безопасного маршрута: " + exception.Message);
+                UI.ShowWarning("Не удалось определить адрес сервера для безопасного маршрута. Откройте журнал подключения.");
                 return;
             }
             if (!addresses.Any(address => address.AddressFamily == AddressFamily.InterNetwork))
@@ -902,9 +903,10 @@ namespace v2rayN.Forms
             }
             catch (Exception exception)
             {
+                Utils.SaveLog("Не удалось перезапустить приложение с правами администратора", exception);
                 config.soraReconnectOnStart = false;
                 ConfigHandler.SaveConfig(ref config, false);
-                UI.ShowWarning("Не удалось перезапустить приложение с правами администратора: " + exception.Message);
+                UI.ShowWarning("Не удалось перезапустить приложение с правами администратора.");
             }
         }
 
@@ -1219,7 +1221,8 @@ namespace v2rayN.Forms
             }
             catch (Exception exception)
             {
-                UI.ShowWarning("Не удалось открыть ссылку: " + exception.Message);
+                Utils.SaveLog("Не удалось открыть ссылку", exception);
+                UI.ShowWarning("Не удалось открыть ссылку.");
             }
         }
     }

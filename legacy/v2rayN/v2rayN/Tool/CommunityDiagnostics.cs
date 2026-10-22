@@ -56,7 +56,8 @@ namespace v2rayN.Tool
             }
             catch (Exception exception)
             {
-                UI.ShowError("Не удалось создать диагностику:\r\n" + exception.Message);
+                Utils.SaveLog("Не удалось создать диагностику", exception);
+                UI.ShowError("Не удалось создать диагностику.");
             }
             finally
             {

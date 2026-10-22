@@ -585,7 +585,7 @@ namespace v2rayN.Forms
             var page = CreateHappScrollablePage("Статистика");
             var active = config?.GetVmessItem(config.indexId);
             var activeStatistics = active == null ? null : statistics?.Statistic?.FirstOrDefault(item => item.itemId == active.indexId);
-            string connectedAt = _happConnection?.ConnectedAt?.ToString("HH:mm:ss") ?? "—";
+            string connectedAt = _happConnection?.ConnectedAt?.ToString("HH:mm:ss") ?? "Нет данных";
             string downloadRate = Utils.HumanFy((ulong)Math.Max(0L, Interlocked.Read(ref _happDownloadRate))) + "/s";
             string uploadRate = Utils.HumanFy((ulong)Math.Max(0L, Interlocked.Read(ref _happUploadRate))) + "/s";
             AddHappSection(page, "Сеанс",
@@ -683,7 +683,8 @@ namespace v2rayN.Forms
             }
             catch (Exception exception)
             {
-                UI.ShowError("Не удалось сохранить журнал:\r\n" + exception.Message);
+                Utils.SaveLog("Не удалось сохранить журнал", exception);
+                UI.ShowError("Не удалось сохранить журнал.");
             }
         }
 
