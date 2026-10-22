@@ -86,8 +86,9 @@ var Catalog = map[Kind]Capabilities{
 		// The minimum version is the shipped build verified for
 		// Hysteria2, XHTTP, and VLESS Encryption. The floor is
 		// load-bearing, not ceremonial: Xray gained its Hysteria
-		// outbound and transport only in v26.1.23 (upstream PR
-		// 5508), and the previous Windows payload build 25.9.11
+		// outbound and transport with upstream PR 5508 (first
+		// tagged in v26.1.13; absent in 25.9.11), and the
+		// previous Windows payload build 25.9.11
 		// refuses this renderer's Hy2 render at load ("unknown
 		// transport protocol: hysteria") while passing the rest of
 		// the claimed corpus — so lowering the floor to that build

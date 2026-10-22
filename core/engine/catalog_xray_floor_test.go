@@ -12,7 +12,8 @@ import (
 // payload pin are the same build (26.3.27, Xray-win7-32). The floor
 // exists because the payload it replaced (25.9.11) provably cannot
 // carry one claimed protocol: Xray gained its Hysteria outbound and
-// transport only in v26.1.23 (upstream PR 5508), and the 25.9.11
+// transport with upstream PR 5508 (first tagged in v26.1.13), and
+// the 25.9.11
 // binary refuses the renderer's Hy2 render with "unknown transport
 // protocol: hysteria" (binary corpus in LEGACY-FULL-2-XRAY.md).
 // These tests pin the resolution in both directions so the pin and

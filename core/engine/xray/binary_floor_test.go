@@ -20,7 +20,8 @@ import (
 // a real Xray binary, and the binary's version must be at or above
 // the catalog floor. The floor exists because the previous payload
 // build (25.9.11) has no Hysteria outbound at all (added upstream
-// in v26.1.23, PR 5508): pointed at such a binary this test fails
+// by PR 5508, first tagged in v26.1.13): pointed at such a binary
+// this test fails
 // on the Hysteria2 configs, which is exactly the regression it
 // guards. ECH is lazy-validated by Xray's loader, so its configs
 // are only run -test-accepted here; the field's presence in the
