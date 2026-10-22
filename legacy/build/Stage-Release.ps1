@@ -48,6 +48,7 @@ if (-not (Test-Path -LiteralPath $assetsDirectory)) {
 Copy-Item -LiteralPath $assetsDirectory -Destination $resolvedStage -Recurse
 
 $projectRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
+$repoRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..\..')).Path
 $icon = Join-Path $projectRoot 'v2rayN\v2rayN\Assets\Sora\sora.ico'
 Copy-Item -LiteralPath $icon -Destination (Join-Path $resolvedStage 'sora.ico')
 $xrayExecutable = Join-Path $CompatPayload 'core\xray.exe'
@@ -91,7 +92,7 @@ finally {
     }
 }
 
-Copy-Item -LiteralPath (Join-Path $projectRoot 'LICENSE'), (Join-Path $projectRoot 'README.md'), (Join-Path $projectRoot 'NOTICE.md'), (Join-Path $projectRoot 'CHANGELOG.md'), (Join-Path $projectRoot 'THIRD-PARTY-NOTICES.md') -Destination $resolvedStage
+Copy-Item -LiteralPath (Join-Path $repoRoot 'LICENSE'), (Join-Path $repoRoot 'README.md'), (Join-Path $repoRoot 'NOTICE.md'), (Join-Path $repoRoot 'CHANGELOG.md'), (Join-Path $repoRoot 'THIRD-PARTY-NOTICES.md') -Destination $resolvedStage
 Copy-Item -LiteralPath (Join-Path $CompatPayload 'licenses') -Destination $resolvedStage -Recurse
 $licenseDirectory = Join-Path $resolvedStage 'licenses'
 Copy-Item -LiteralPath (Join-Path $projectRoot 'licenses\nuget') -Destination $licenseDirectory -Recurse
