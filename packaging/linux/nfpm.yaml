@@ -35,6 +35,13 @@ contents:
   - src: ./dist/sora-core
     dst: /usr/bin/sora-core
     file_info: {mode: 0755}
+  # sora-ctl is the Linux client's whole UI surface: the same thin control
+  # helper the macOS app drives (status, import, select, connect,
+  # disconnect over the production socket). Built from macos/helper —
+  # platform-neutral Go, no new stack.
+  - src: ./dist/sora-ctl
+    dst: /usr/bin/sora-ctl
+    file_info: {mode: 0755}
   - src: ./dist/engines/sing-box
     dst: /usr/lib/sora/engines/sing-box
     file_info: {mode: 0755}

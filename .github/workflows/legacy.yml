@@ -89,6 +89,7 @@ jobs:
       - name: Build the core service
         run: |
           cd core && CGO_ENABLED=0 GOARCH=amd64 go build -trimpath -ldflags '-s -w' -o ../dist/sora-core ./cmd/sora-core
+          cd macos/helper && CGO_ENABLED=0 GOARCH=amd64 go build -trimpath -ldflags '-s -w' -o ../../dist/sora-ctl .
       - name: Fetch engines and build zapret
         run: |
           packaging/engines/fetch.sh amd64 dist/engines
@@ -106,6 +107,7 @@ jobs:
           tar --zstd -tf dist/*.pkg.tar.* > "$RUNNER_TEMP/arch.list"
           for list in deb rpm arch; do
             grep -q 'usr/bin/sora-core' "$RUNNER_TEMP/$list.list"
+            grep -q 'usr/bin/sora-ctl' "$RUNNER_TEMP/$list.list"
             grep -q 'usr/lib/sora/engines/SHA256SUMS' "$RUNNER_TEMP/$list.list"
             grep -q 'usr/lib/sora/engines/sing-box' "$RUNNER_TEMP/$list.list"
             grep -q 'usr/lib/sora/engines/tpws' "$RUNNER_TEMP/$list.list"
