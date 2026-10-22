@@ -16,6 +16,9 @@ object VpnState {
         private set
     @Volatile var serverName: String = ""
         private set
+    /** Last failure as an authored user sentence (a strings.xml
+     *  resource resolved by the service). Raw exception/engine text
+     *  is never stored here — it belongs in the log. */
     @Volatile var lastError: String = ""
         private set
     @Volatile var sinceMillis: Long = 0L

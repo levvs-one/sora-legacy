@@ -2,6 +2,7 @@ package one.levvs.sora.legacy
 
 import android.app.Activity
 import android.os.Bundle
+import android.util.Log
 import android.widget.EditText
 import android.widget.Switch
 import android.widget.TextView
@@ -31,23 +32,23 @@ class SettingsActivity : Activity() {
         store = ServerStore(this)
 
         val column = contentColumn()
-        column.label("Local proxy port (plan local_port, 1–65535)", 14f)
+        column.label(getString(R.string.local_port_label), 14f)
         portInput = column.input("", number = true)
         portInput.setText(store.localPort().toString())
 
-        column.label("TUN MTU (tun inbound mtu, 576–9000)", 14f)
+        column.label(getString(R.string.tun_mtu_label), 14f)
         mtuInput = column.input("", number = true)
         mtuInput.setText(store.tunMtu().toString())
 
         strictSwitch = Switch(this).apply {
-            text = "Strict route (tun inbound strict_route)"
+            text = getString(R.string.strict_route_label)
             isChecked = store.strictRoute()
         }
         column.addView(strictSwitch)
 
-        column.button("Save (applies on next connect)") { save() }
+        column.button(getString(R.string.save_button)) { save() }
 
-        column.label("Engine", 18f)
+        column.label(getString(R.string.engine_label), 18f)
         val engineView: TextView = column.label("", 13f)
         engineView.text = engineSummary()
     }
@@ -55,26 +56,27 @@ class SettingsActivity : Activity() {
     private fun save() {
         val port = portInput.text.toString().toIntOrNull()
         if (port == null || port !in 1..65535) {
-            toast("Local port must be a number in 1–65535.")
+            toast(getString(R.string.local_port_invalid_toast))
             return
         }
         val mtu = mtuInput.text.toString().toIntOrNull()
         if (mtu == null || mtu !in 576..9000) {
-            toast("MTU must be a number in 576–9000.")
+            toast(getString(R.string.tun_mtu_invalid_toast))
             return
         }
         store.setLocalPort(port)
         store.setTunMtu(mtu)
         store.setStrictRoute(strictSwitch.isChecked)
-        toast("Saved.")
+        toast(getString(R.string.saved_toast))
     }
 
     private fun engineSummary(): String {
         val out = StringBuilder()
         try {
-            out.append("sing-box (libbox): ").append(Libbox.version()).append('\n')
+            out.append(getString(R.string.engine_libbox_line, Libbox.version())).append('\n')
         } catch (e: Exception) {
-            out.append("sing-box (libbox): unavailable (${e.javaClass.simpleName})\n")
+            Log.w(TAG, "libbox version unavailable", e)
+            out.append(getString(R.string.engine_libbox_unavailable)).append('\n')
         }
         try {
             val info = JSONObject(mobileapi.Mobileapi.engineInfo())
@@ -84,19 +86,24 @@ class SettingsActivity : Activity() {
                     val engine = engines.getJSONObject(i)
                     out.append('\n')
                         .append(engine.optString("kind"))
-                        .append(" ≥ ").append(engine.optString("min_version")).append('\n')
-                        .append("  protocols: ").append(joinArray(engine.optJSONArray("protocols"))).append('\n')
-                        .append("  features: ").append(joinArray(engine.optJSONArray("features"))).append('\n')
+                        .append(getString(R.string.engine_min_version, engine.optString("min_version"))).append('\n')
+                        .append(getString(R.string.engine_protocols_line, joinArray(engine.optJSONArray("protocols")))).append('\n')
+                        .append(getString(R.string.engine_features_line, joinArray(engine.optJSONArray("features")))).append('\n')
                 }
             }
             val preference = info.optJSONArray("default_preference")
             if (preference != null) {
-                out.append("\ndefault preference: ").append(joinArray(preference))
+                out.append(getString(R.string.engine_default_preference, joinArray(preference)))
             }
         } catch (e: Exception) {
-            out.append("\ncore catalog unavailable: ").append(e.message ?: e.javaClass.simpleName)
+            Log.w(TAG, "engine catalog unavailable", e)
+            out.append('\n').append(getString(R.string.engine_catalog_unavailable))
         }
         return out.toString()
+    }
+
+    companion object {
+        private const val TAG = "SettingsActivity"
     }
 
     private fun joinArray(array: org.json.JSONArray?): String {

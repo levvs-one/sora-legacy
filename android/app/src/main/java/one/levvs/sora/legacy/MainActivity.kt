@@ -29,11 +29,14 @@ class MainActivity : Activity() {
 
         val column = contentColumn()
         column.label(getString(R.string.app_name), 22f)
-        statusView = column.label("—")
-        serverView = column.label("—")
-        toggleButton = column.button("Connect") { onToggle() }
-        column.button("Servers") { startActivity(Intent(this, ServersActivity::class.java)) }
-        column.button("Settings") { startActivity(Intent(this, SettingsActivity::class.java)) }
+        // Real initial state, not a symbol placeholder: the client
+        // starts STOPPED, and refresh() recomputes both labels from
+        // the store and VpnState on every resume.
+        statusView = column.label(getString(R.string.status_disconnected))
+        serverView = column.label(getString(R.string.no_server_selected))
+        toggleButton = column.button(getString(R.string.connect)) { onToggle() }
+        column.button(getString(R.string.servers_button)) { startActivity(Intent(this, ServersActivity::class.java)) }
+        column.button(getString(R.string.settings_button)) { startActivity(Intent(this, SettingsActivity::class.java)) }
         logView = column.label("", 12f)
 
         requestNotificationPermission()
@@ -53,25 +56,25 @@ class MainActivity : Activity() {
     private fun refresh() {
         val selected = store.selected()
         serverView.text = if (selected == null) {
-            "No server selected — open Servers to import one."
+            getString(R.string.no_server_selected)
         } else {
-            "Server: ${selected.label()}"
+            getString(R.string.server_selected, selected.label())
         }
         val state = VpnState.state
         statusView.text = when (state) {
-            ConnState.STOPPED -> "Status: disconnected"
-            ConnState.STARTING -> "Status: connecting…"
-            ConnState.RUNNING -> "Status: connected"
-            ConnState.STOPPING -> "Status: disconnecting…"
-            ConnState.ERROR -> "Status: failed — ${VpnState.lastError}"
+            ConnState.STOPPED -> getString(R.string.status_disconnected)
+            ConnState.STARTING -> getString(R.string.status_connecting)
+            ConnState.RUNNING -> getString(R.string.status_connected)
+            ConnState.STOPPING -> getString(R.string.status_disconnecting)
+            ConnState.ERROR -> getString(R.string.status_failed)
         }
         toggleButton.text = when (state) {
-            ConnState.RUNNING, ConnState.STARTING -> "Disconnect"
-            else -> "Connect"
+            ConnState.RUNNING, ConnState.STARTING -> getString(R.string.disconnect)
+            else -> getString(R.string.connect)
         }
         toggleButton.isEnabled = state != ConnState.STOPPING
         val log = VpnState.recentLog().takeLast(8)
-        logView.text = if (log.isEmpty()) "" else "Engine log (last lines):\n" + log.joinToString("\n")
+        logView.text = if (log.isEmpty()) "" else getString(R.string.engine_log_header) + "\n" + log.joinToString("\n")
     }
 
     private fun onToggle() {
@@ -81,7 +84,7 @@ class MainActivity : Activity() {
             }
             else -> {
                 if (store.selected() == null) {
-                    toast("No server selected — import one in Servers first.")
+                    toast(getString(R.string.no_server_toast))
                     return
                 }
                 // The system VPN consent dialog: prepare() returns an
@@ -102,7 +105,7 @@ class MainActivity : Activity() {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == REQUEST_VPN) {
             if (resultCode == RESULT_OK) startVpn()
-            else toast("VPN permission was not granted; cannot connect.")
+            else toast(getString(R.string.vpn_permission_denied))
         }
     }
 

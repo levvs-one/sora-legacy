@@ -3,6 +3,7 @@ package one.levvs.sora.legacy
 import android.app.Activity
 import android.app.AlertDialog
 import android.os.Bundle
+import android.util.Log
 import android.widget.ArrayAdapter
 import android.widget.EditText
 import android.widget.ListView
@@ -35,38 +36,38 @@ class ServersActivity : Activity() {
         store = ServerStore(this)
 
         val column = contentColumn()
-        column.label("Imported servers (tap to select, long-press to delete)", 14f)
+        column.label(getString(R.string.imported_servers_hint), 14f)
         listView = ListView(this)
         column.addView(listView, android.widget.LinearLayout.LayoutParams(
             android.view.ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
 
-        column.label("Import links or subscription text", 14f)
-        pasteInput = column.input("Paste vless://… / trojan://… links, a subscription body, a Clash or sing-box document", multiLine = true)
-        column.button("Import links") { runImport { Mobileapi.importLinks(pasteInput.text.toString()) } }
-        column.button("Import as subscription document") {
+        column.label(getString(R.string.import_text_label), 14f)
+        pasteInput = column.input(getString(R.string.import_input_hint), multiLine = true)
+        column.button(getString(R.string.import_links_button)) { runImport { Mobileapi.importLinks(pasteInput.text.toString()) } }
+        column.button(getString(R.string.import_subscription_button)) {
             runImport { Mobileapi.parseSubscription(pasteInput.text.toString().toByteArray(Charsets.UTF_8)) }
         }
 
-        column.label("Subscription URL", 14f)
-        urlInput = column.input("https://provider.example/sub/…")
-        column.button("Fetch subscription") { fetchSubscription() }
+        column.label(getString(R.string.subscription_url_label), 14f)
+        urlInput = column.input(getString(R.string.subscription_url_hint))
+        column.button(getString(R.string.fetch_subscription_button)) { fetchSubscription() }
 
         listView.setOnItemClickListener { _, _, position, _ ->
             val entry = entries.getOrNull(position) ?: return@setOnItemClickListener
             store.select(entry.id)
             refresh()
-            toast("Selected: ${entry.label()}")
+            toast(getString(R.string.selected_toast, entry.label()))
         }
         listView.setOnItemLongClickListener { _, _, position, _ ->
             val entry = entries.getOrNull(position) ?: return@setOnItemLongClickListener false
             AlertDialog.Builder(this)
-                .setTitle("Delete server")
+                .setTitle(getString(R.string.delete_server_title))
                 .setMessage(entry.label())
-                .setPositiveButton("Delete") { _, _ ->
+                .setPositiveButton(getString(R.string.delete_button)) { _, _ ->
                     store.delete(entry.id)
                     refresh()
                 }
-                .setNegativeButton("Cancel", null)
+                .setNegativeButton(getString(R.string.cancel_button), null)
                 .show()
             true
         }
@@ -93,10 +94,11 @@ class ServersActivity : Activity() {
                 val merged = store.mergeImport(block())
                 runOnUiThread {
                     refresh()
-                    toast("Imported. ${merged.size} server(s) stored.")
+                    toast(getString(R.string.imported_toast, merged.size))
                 }
             } catch (e: Exception) {
-                runOnUiThread { toast("Import failed: ${shortError(e)}") }
+                Log.w(TAG, "import failed", e)
+                runOnUiThread { toast(getString(R.string.import_failed_toast)) }
             }
         }
     }
@@ -104,7 +106,7 @@ class ServersActivity : Activity() {
     private fun fetchSubscription() {
         val raw = urlInput.text.toString().trim()
         if (raw.isEmpty()) {
-            toast("Enter a subscription URL first.")
+            toast(getString(R.string.enter_url_toast))
             return
         }
         executor.execute {
@@ -113,10 +115,11 @@ class ServersActivity : Activity() {
                 val merged = store.mergeImport(Mobileapi.parseSubscription(body))
                 runOnUiThread {
                     refresh()
-                    toast("Subscription imported. ${merged.size} server(s) stored.")
+                    toast(getString(R.string.subscription_imported_toast, merged.size))
                 }
             } catch (e: Exception) {
-                runOnUiThread { toast("Subscription failed: ${shortError(e)}") }
+                Log.w(TAG, "subscription fetch/import failed", e)
+                runOnUiThread { toast(getString(R.string.subscription_failed_toast)) }
             }
         }
     }
@@ -140,6 +143,7 @@ class ServersActivity : Activity() {
         }
     }
 
-    private fun shortError(e: Exception): String =
-        e.message?.takeIf { it.isNotBlank() } ?: e.javaClass.simpleName
+    companion object {
+        private const val TAG = "ServersActivity"
+    }
 }

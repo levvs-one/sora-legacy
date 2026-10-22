@@ -119,11 +119,11 @@ class SoraVpnService : VpnService(), PlatformInterface {
         val store = ServerStore(this)
         val selected = store.selected()
         if (selected == null) {
-            failStart("No server selected. Import a link or a subscription first.")
+            failStart(getString(R.string.error_no_server))
             return
         }
         VpnState.transition(ConnState.STARTING, server = selected.label())
-        startForegroundCompat(buildStatusNotification("Connecting to ${selected.label()}…"))
+        startForegroundCompat(buildStatusNotification(getString(R.string.notification_connecting, selected.label())))
         try {
             // Plan document: the one selected server plus the stored
             // local port — both real fields of mobileapi's Plan shape.
@@ -156,10 +156,10 @@ class SoraVpnService : VpnService(), PlatformInterface {
             service.start()
             boxService = service
             VpnState.transition(ConnState.RUNNING, server = selected.label())
-            notifications.notify(NOTIFICATION_ID, buildStatusNotification("Connected — ${selected.label()}"))
+            notifications.notify(NOTIFICATION_ID, buildStatusNotification(getString(R.string.notification_connected, selected.label())))
         } catch (e: Exception) {
             Log.e(TAG, "start failed", e)
-            failStart(userMessage(e))
+            failStart(getString(R.string.error_engine_start))
         }
     }
 
@@ -184,10 +184,6 @@ class SoraVpnService : VpnService(), PlatformInterface {
         stopForegroundCompat()
         stopSelf()
     }
-
-    /** Honest user-facing text: the engine's own message, never a stack trace. */
-    private fun userMessage(e: Exception): String =
-        e.message?.takeIf { it.isNotBlank() } ?: "The engine refused to start (${e.javaClass.simpleName})."
 
     // -- foreground notification ---------------------------------------
 

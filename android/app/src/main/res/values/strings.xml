@@ -5,4 +5,64 @@
     <string name="settings_title">Settings</string>
     <string name="channel_vpn">VPN status</string>
     <string name="channel_alerts">Engine notifications</string>
+
+    <!-- Main screen. The ERROR status is one authored sentence: the
+         raw engine/exception text is logged by the service and never
+         interpolated into a label or toast anywhere in this client. -->
+    <string name="status_disconnected">Status: disconnected</string>
+    <string name="status_connecting">Status: connecting…</string>
+    <string name="status_connected">Status: connected</string>
+    <string name="status_disconnecting">Status: disconnecting…</string>
+    <string name="status_failed">Status: failed — the engine could not start.</string>
+    <string name="no_server_selected">No server selected — open Servers to import one.</string>
+    <string name="server_selected">Server: %1$s</string>
+    <string name="connect">Connect</string>
+    <string name="disconnect">Disconnect</string>
+    <string name="servers_button">Servers</string>
+    <string name="settings_button">Settings</string>
+    <string name="engine_log_header">Engine log (last lines):</string>
+    <string name="no_server_toast">No server selected — import one in Servers first.</string>
+    <string name="vpn_permission_denied">VPN permission was not granted; cannot connect.</string>
+
+    <!-- Servers screen -->
+    <string name="imported_servers_hint">Imported servers (tap to select, long-press to delete)</string>
+    <string name="import_text_label">Import links or subscription text</string>
+    <string name="import_input_hint">Paste vless://… / trojan://… links, a subscription body, a Clash or sing-box document</string>
+    <string name="import_links_button">Import links</string>
+    <string name="import_subscription_button">Import as subscription document</string>
+    <string name="subscription_url_label">Subscription URL</string>
+    <string name="subscription_url_hint">https://provider.example/sub/…</string>
+    <string name="fetch_subscription_button">Fetch subscription</string>
+    <string name="selected_toast">Selected: %1$s</string>
+    <string name="delete_server_title">Delete server</string>
+    <string name="delete_button">Delete</string>
+    <string name="cancel_button">Cancel</string>
+    <string name="imported_toast">Imported. %1$d server(s) stored.</string>
+    <string name="import_failed_toast">Import failed. Check the content and try again.</string>
+    <string name="enter_url_toast">Enter a subscription URL first.</string>
+    <string name="subscription_imported_toast">Subscription imported. %1$d server(s) stored.</string>
+    <string name="subscription_failed_toast">Subscription failed. Check the URL and try again.</string>
+
+    <!-- Settings screen -->
+    <string name="local_port_label">Local proxy port (plan local_port, 1–65535)</string>
+    <string name="tun_mtu_label">TUN MTU (tun inbound mtu, 576–9000)</string>
+    <string name="strict_route_label">Strict route (tun inbound strict_route)</string>
+    <string name="save_button">Save (applies on next connect)</string>
+    <string name="engine_label">Engine</string>
+    <string name="local_port_invalid_toast">Local port must be a number in 1–65535.</string>
+    <string name="tun_mtu_invalid_toast">MTU must be a number in 576–9000.</string>
+    <string name="saved_toast">Saved.</string>
+    <string name="engine_libbox_line">sing-box (libbox): %1$s</string>
+    <string name="engine_libbox_unavailable">sing-box (libbox): unavailable</string>
+    <string name="engine_min_version"> ≥ %1$s</string>
+    <string name="engine_protocols_line">  protocols: %1$s</string>
+    <string name="engine_features_line">  features: %1$s</string>
+    <string name="engine_default_preference">\ndefault preference: %1$s</string>
+    <string name="engine_catalog_unavailable">core catalog unavailable.</string>
+
+    <!-- VPN service -->
+    <string name="notification_connecting">Connecting to %1$s…</string>
+    <string name="notification_connected">Connected — %1$s</string>
+    <string name="error_no_server">No server selected. Import a link or a subscription first.</string>
+    <string name="error_engine_start">The engine could not start. Check the selected server and try again.</string>
 </resources>
