@@ -41,6 +41,7 @@
   "export": "Ба файл захира кунед",
   "clear": "Тоза",
   "logsEmpty": "Ҳеҷ чиз дар ин ҷо",
+  "clearLogsConfirm": "Ҳама журналҳо тоза карда шаванд?",
   "appVersion": "Версияи {version}",
   "notInstalled": "Насб карда нашудааст",
   "sourceCode": "Рамзи манбаъ",

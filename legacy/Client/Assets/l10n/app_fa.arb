@@ -41,6 +41,7 @@
   "export": "ذخیره در فایل",
   "clear": "پاک کردن",
   "logsEmpty": "اینجا هیچی",
+  "clearLogsConfirm": "همه گزارش‌ها پاک شود؟",
   "appVersion": "نسخه {version}",
   "notInstalled": "نصب نشده است",
   "sourceCode": "کد منبع",

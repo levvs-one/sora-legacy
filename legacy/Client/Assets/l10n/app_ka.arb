@@ -41,6 +41,7 @@
   "export": "ფაილში შენახვა",
   "clear": "წმინდა",
   "logsEmpty": "აქ არაფერი",
+  "clearLogsConfirm": "გსურთ ყველა ჟურნალის გასუფთავება?",
   "appVersion": "ვერსია {version}",
   "notInstalled": "არ არის დაინსტალირებული",
   "sourceCode": "წყაროს კოდი",

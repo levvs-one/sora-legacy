@@ -41,6 +41,7 @@
   "export": "Файлга сактоо",
   "clear": "Таза",
   "logsEmpty": "Бул жерде эч нерсе",
+  "clearLogsConfirm": "Бардык журналдар тазалансынбы?",
   "appVersion": "Версия {version}",
   "notInstalled": "Орнотулган эмес",
   "sourceCode": "Булак коду",

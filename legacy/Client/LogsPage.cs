@@ -310,6 +310,11 @@ internal sealed class LogsPage : UserControl
         var connected = core;
         var current = reading;
         if (connected == null || current == null || clear.Loading) return;
+        // Clearing is destructive and irreversible, so it asks first —
+        // the same confirmation shape as subscription deletion
+        // (OKCancel, default on Cancel so Enter never clears).
+        if (MessageBox.Show(this, text["clearLogsConfirm"], text["clear"],
+            MessageBoxButtons.OKCancel, MessageBoxIcon.None, MessageBoxDefaultButton.Button2) != DialogResult.OK) return;
         clear.Loading = true;
         try
         {

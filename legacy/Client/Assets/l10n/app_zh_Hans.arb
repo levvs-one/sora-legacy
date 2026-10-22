@@ -41,6 +41,7 @@
   "export": "保存到文件",
   "clear": "清除",
   "logsEmpty": "这里什么都没有",
+  "clearLogsConfirm": "清除所有日志？",
   "appVersion": "版本 {version}",
   "notInstalled": "未安装",
   "sourceCode": "源代码",

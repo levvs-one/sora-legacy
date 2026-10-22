@@ -48,6 +48,7 @@
   "export": "Сохранить в файл",
   "clear": "Очистить",
   "logsEmpty": "Здесь пусто",
+  "clearLogsConfirm": "Очистить все журналы?",
   "appVersion": "Версия {version}",
   "@appVersion": {
     "placeholders": {

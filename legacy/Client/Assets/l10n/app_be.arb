@@ -41,6 +41,7 @@
   "export": "Захаваць у файл",
   "clear": "Ясна",
   "logsEmpty": "Нічога тут",
+  "clearLogsConfirm": "Ачысціць усе журналы?",
   "appVersion": "Версія {version}",
   "notInstalled": "Не ўстаноўлены",
   "sourceCode": "Зыходны код",

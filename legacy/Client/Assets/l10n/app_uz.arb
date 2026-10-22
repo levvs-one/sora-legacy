@@ -41,6 +41,7 @@
   "export": "Faylga saqlang",
   "clear": "Toza",
   "logsEmpty": "Bu yerda hech narsa",
+  "clearLogsConfirm": "Barcha jurnallar tozalansinmi?",
   "appVersion": "{version} versiyasi",
   "notInstalled": "Oʻrnatilmagan",
   "sourceCode": "Manba kodi",

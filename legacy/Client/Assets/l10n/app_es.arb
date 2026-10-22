@@ -41,6 +41,7 @@
   "export": "Guardar en archivo",
   "clear": "Clara",
   "logsEmpty": "Nada aquí",
+  "clearLogsConfirm": "¿Borrar todos los registros?",
   "appVersion": "Versión {version}",
   "notInstalled": "No instalado",
   "sourceCode": "código fuente",

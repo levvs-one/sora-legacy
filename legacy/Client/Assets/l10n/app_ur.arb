@@ -41,6 +41,7 @@
   "export": "فائل میں محفوظ کریں۔",
   "clear": "صاف",
   "logsEmpty": "یہاں کچھ نہیں۔",
+  "clearLogsConfirm": "تمام لاگز صاف کریں؟",
   "appVersion": "ورژن {version}",
   "notInstalled": "انسٹال نہیں ہے۔",
   "sourceCode": "سورس کوڈ",

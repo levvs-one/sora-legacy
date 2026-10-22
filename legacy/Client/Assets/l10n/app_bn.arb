@@ -41,6 +41,7 @@
   "export": "ফাইলে সংরক্ষণ করুন",
   "clear": "পরিষ্কার",
   "logsEmpty": "এখানে কিছুই নেই",
+  "clearLogsConfirm": "সব লগ পরিষ্কার করবেন?",
   "appVersion": "সংস্করণ {version}",
   "notInstalled": "ইনস্টল করা হয়নি",
   "sourceCode": "সোর্স কোড",

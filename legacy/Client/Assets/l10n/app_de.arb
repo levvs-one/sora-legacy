@@ -41,6 +41,7 @@
   "export": "In Datei speichern",
   "clear": "Klar",
   "logsEmpty": "Nichts hier",
+  "clearLogsConfirm": "Alle Protokolle löschen?",
   "appVersion": "Version {version}",
   "notInstalled": "Nicht installiert",
   "sourceCode": "Quellcode",

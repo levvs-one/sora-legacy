@@ -41,6 +41,7 @@
   "export": "Simpan ke file",
   "clear": "Jernih",
   "logsEmpty": "Tidak ada apa pun di sini",
+  "clearLogsConfirm": "Hapus semua catatan?",
   "appVersion": "Versi {version}",
   "notInstalled": "Tidak dipasang",
   "sourceCode": "Kode sumber",

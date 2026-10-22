@@ -41,6 +41,7 @@
   "export": "Salva su file",
   "clear": "Chiara",
   "logsEmpty": "Niente qui",
+  "clearLogsConfirm": "Cancellare tutti i registri?",
   "appVersion": "Versione {version}",
   "notInstalled": "Non installato",
   "sourceCode": "Codice sorgente",

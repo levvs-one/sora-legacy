@@ -41,6 +41,7 @@
   "export": "Lưu vào tập tin",
   "clear": "Thông thoáng",
   "logsEmpty": "Không có gì ở đây",
+  "clearLogsConfirm": "Xóa tất cả nhật ký?",
   "appVersion": "Phiên bản {version}",
   "notInstalled": "Chưa được cài đặt",
   "sourceCode": "Mã nguồn",

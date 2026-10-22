@@ -41,6 +41,7 @@
   "export": "Dosyaya kaydet",
   "clear": "Temizlemek",
   "logsEmpty": "Burada hiçbir şey yok",
+  "clearLogsConfirm": "Tüm kayıtlar temizlensin mi?",
   "appVersion": "Sürüm {version}",
   "notInstalled": "Kurulu değil",
   "sourceCode": "Kaynak kodu",

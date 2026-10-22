@@ -41,6 +41,7 @@
   "export": "Файлға сақтаңыз",
   "clear": "Таза",
   "logsEmpty": "Мұнда ештеңе жоқ",
+  "clearLogsConfirm": "Барлық журналдарды тазалау керек пе?",
   "appVersion": "{version} нұсқасы",
   "notInstalled": "Орнатылмаған",
   "sourceCode": "Бастапқы код",

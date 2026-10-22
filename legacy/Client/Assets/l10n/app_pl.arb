@@ -41,6 +41,7 @@
   "export": "Zapisz do pliku",
   "clear": "Jasne",
   "logsEmpty": "Nic tutaj",
+  "clearLogsConfirm": "Wyczyścić wszystkie dzienniki?",
   "appVersion": "Wersja {version}",
   "notInstalled": "Nie zainstalowano",
   "sourceCode": "Kod źródłowy",

@@ -41,6 +41,7 @@
   "export": "حفظ إلى ملف",
   "clear": "واضح",
   "logsEmpty": "لا شيء هنا",
+  "clearLogsConfirm": "مسح كل السجلات؟",
   "appVersion": "الإصدار {version}",
   "notInstalled": "غير مثبت",
   "sourceCode": "كود المصدر",

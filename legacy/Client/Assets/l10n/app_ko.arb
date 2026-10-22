@@ -41,6 +41,7 @@
   "export": "파일에 저장",
   "clear": "분명한",
   "logsEmpty": "여기에는 아무것도 없습니다",
+  "clearLogsConfirm": "모든 로그를 지우시겠습니까?",
   "appVersion": "버전 {version}",
   "notInstalled": "설치되지 않음",
   "sourceCode": "소스 코드",

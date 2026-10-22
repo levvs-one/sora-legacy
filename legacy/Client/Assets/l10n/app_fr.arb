@@ -41,6 +41,7 @@
   "export": "Enregistrer dans un fichier",
   "clear": "Claire",
   "logsEmpty": "Rien ici",
+  "clearLogsConfirm": "Effacer tous les journaux ?",
   "appVersion": "Version {version}",
   "notInstalled": "Non installé",
   "sourceCode": "Code source",

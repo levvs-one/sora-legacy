@@ -41,6 +41,7 @@
   "export": "บันทึกลงไฟล์",
   "clear": "ชัดเจน",
   "logsEmpty": "ไม่มีอะไรที่นี่",
+  "clearLogsConfirm": "ล้างบันทึกทั้งหมดใช่ไหม",
   "appVersion": "เวอร์ชัน {version}",
   "notInstalled": "ไม่ได้ติดตั้ง",
   "sourceCode": "ซอร์สโค้ด",

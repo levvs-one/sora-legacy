@@ -41,6 +41,7 @@
   "export": "ファイルに保存",
   "clear": "クリア",
   "logsEmpty": "ここには何もありません",
+  "clearLogsConfirm": "すべてのログを消去しますか?",
   "appVersion": "バージョン {version}",
   "notInstalled": "インストールされていません",
   "sourceCode": "ソースコード",

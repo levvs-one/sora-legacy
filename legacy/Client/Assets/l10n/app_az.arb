@@ -41,6 +41,7 @@
   "export": "Faylda saxla",
   "clear": "Təmiz",
   "logsEmpty": "Burada heç nə",
+  "clearLogsConfirm": "Bütün jurnallar təmizlənsin?",
   "appVersion": "Versiya {version}",
   "notInstalled": "Quraşdırılmayıb",
   "sourceCode": "Mənbə kodu",

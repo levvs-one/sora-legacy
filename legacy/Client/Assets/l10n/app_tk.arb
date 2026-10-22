@@ -41,6 +41,7 @@
   "export": "Faýl ýazdyryň",
   "clear": "Arassala",
   "logsEmpty": "Bu ýerde hiç zat ýok",
+  "clearLogsConfirm": "Ähli žurnallary arassalaňmy?",
   "appVersion": "{version} wersiýasy",
   "notInstalled": "Gurulmady",
   "sourceCode": "Çeşme kody",

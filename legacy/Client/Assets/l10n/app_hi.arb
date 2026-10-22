@@ -41,6 +41,7 @@
   "export": "फाइल को बचाएं",
   "clear": "स्पष्ट",
   "logsEmpty": "यहाँ कुछ भी नहीं है",
+  "clearLogsConfirm": "सभी लॉग साफ़ करें?",
   "appVersion": "संस्करण {version}",
   "notInstalled": "स्थापित नहीं हे",
   "sourceCode": "सोर्स कोड",
