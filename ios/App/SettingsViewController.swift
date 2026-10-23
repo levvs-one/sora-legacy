@@ -15,7 +15,7 @@ final class SettingsViewController: UITableViewController {
 
     override func numberOfSections(in tableView: UITableView) -> Int { 2 }
     override func tableView(_ tableView: UITableView, titleForHeaderInSection section: Int) -> String? {
-        section == 0 ? "Tunnel" : "Engines (mobileapi.EngineInfo)"
+        section == 0 ? "Tunnel" : "Engines"
     }
     override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
         section == 0 ? 3 : max(info.engines.count, 1)
@@ -28,7 +28,7 @@ final class SettingsViewController: UITableViewController {
         if indexPath.section == 0 {
             switch indexPath.row {
             case 0:
-                cell.textLabel?.text = "Local port (mixed inbound)"
+                cell.textLabel?.text = "Local port"
                 cell.detailTextLabel?.text = "\(store.localPort())"
             case 1:
                 cell.textLabel?.text = "TUN MTU"
@@ -39,7 +39,7 @@ final class SettingsViewController: UITableViewController {
             }
             cell.accessoryType = .disclosureIndicator
         } else if info.engines.isEmpty {
-            cell.textLabel?.text = "Mobileapi framework not linked"
+            cell.textLabel?.text = "Engine information unavailable"
             cell.detailTextLabel?.text = nil
             cell.accessoryType = .none
         } else {

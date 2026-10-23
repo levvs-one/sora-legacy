@@ -42,9 +42,10 @@ public struct Capability: Equatable {
     public let mode: CapabilityMode
     /// What the user can be told, in one line.
     public let summary: String
-    /// "available", "degraded", "not-implemented" — machine-stable.
+    /// "available", "degraded", "not-implemented" — machine-stable
+    /// data for code and tests; the UI does not show these tokens.
     public let availability: String
-    /// The price or the blocker, in one line.
+    /// The price or the blocker, in plain words for the user.
     public let cost: String
 }
 
@@ -73,29 +74,25 @@ public enum Capabilities {
         return [
             Capability(
                 mode: .tunViaService,
-                summary: "TUN through the root core service (engine utun, auto_route)",
+                summary: "TUN through the core service",
                 availability: serviceState,
-                cost: "Needs the LaunchDaemon installed (service/darwin) and macOS 12+ " +
-                      "(daemon's measured Mach-O floor); " +
-                      "kill switch is NOT enforced on macOS (core firewall is a no-op there). " +
-                      "Runtime path is verify-on-mac — it has never run on real hardware. " +
-                      "System: \(systemVersion)."
+                cost: "Needs the core service installed and macOS 12 or newer. " +
+                      "Kill switch is NOT enforced on macOS. " +
+                      "Not verified on real hardware."
             ),
             Capability(
                 mode: .systemProxy,
-                summary: "System-proxy mode: daemon serves a loopback proxy, this app points the system proxy at it",
+                summary: "System proxy through the core service",
                 availability: serviceState,
-                cost: "Needs the service (macOS 12+). Covers proxy-aware apps only — not all traffic. " +
-                      "Changing the system proxy may ask for administrator authorization; " +
-                      "denial is shown as a state, never faked as success. Verify-on-mac."
+                cost: "Needs the core service and macOS 12 or newer. " +
+                      "Only apps that use the system proxy are covered — not all traffic. " +
+                      "Changing the system proxy may ask for administrator approval."
             ),
             Capability(
                 mode: .networkExtension,
                 summary: "NetworkExtension / PacketTunnel provider",
                 availability: "not-implemented",
-                cost: "Prospect only: needs Developer ID, the network-extension " +
-                      "entitlement, user approval of a system extension and notarization. " +
-                      "No code in this tree implements it."
+                cost: "Not available in this client."
             ),
         ]
     }

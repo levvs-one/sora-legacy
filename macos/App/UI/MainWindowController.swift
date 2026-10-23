@@ -21,7 +21,7 @@ final class MainWindowController: NSObject, NSTableViewDataSource {
     private let disconnectButton = NSButton(title: "Disconnect", target: nil, action: nil)
     private let modePopup = NSPopUpButton()
     private let killSwitchBox = NSButton(checkboxWithTitle:
-        "Kill switch (on macOS: requested, NOT enforced — the core has no packet filter here)",
+        "Kill switch (not enforced on macOS)",
         target: nil, action: nil)
     private let table = NSTableView()
     private let importField = NSTextField()
@@ -59,6 +59,10 @@ final class MainWindowController: NSObject, NSTableViewDataSource {
     // MARK: Layout (10.13 AppKit, no storyboard)
 
     private func buildContent() {
+        // The detail label carries full status and error sentences:
+        // it wraps instead of cutting them off at the window edge.
+        detailLabel.cell?.wraps = true
+        detailLabel.cell?.lineBreakMode = .byWordWrapping
         modePopup.addItems(withTitles: ["System proxy", "TUN (service)"])
         modePopup.selectItem(at: settings.mode == "tun" ? 1 : 0)
         killSwitchBox.state = settings.killSwitch ? .on : .off
@@ -80,6 +84,10 @@ final class MainWindowController: NSObject, NSTableViewDataSource {
         tableScroll.documentView = table
         tableScroll.hasVerticalScroller = true
         tableScroll.borderType = .bezelBorder
+        // Same explicit viewport height as the two text scroll
+        // views below: a scroll view in a stack view has no
+        // intrinsic height of its own and could collapse.
+        tableScroll.heightAnchor.constraint(equalToConstant: 120).isActive = true
 
         importField.placeholderString = "Paste share links, or a subscription https:// URL, then Import"
         let importButton = NSButton(title: "Import", target: self, action: #selector(importTapped))
@@ -98,9 +106,9 @@ final class MainWindowController: NSObject, NSTableViewDataSource {
             statusLabel, detailLabel, buttons, modePopup, killSwitchBox,
             NSTextField(labelWithString: "Servers (double-click to select)"),
             tableScroll, importRow,
-            NSTextField(labelWithString: "Engines and features — from the core catalog"),
+            NSTextField(labelWithString: "Engines and features"),
             catalogScroll,
-            NSTextField(labelWithString: "What this client can do on this system"),
+            NSTextField(labelWithString: "Capabilities on this system"),
             capabilityScroll,
         ])
         root.orientation = .vertical
@@ -110,23 +118,25 @@ final class MainWindowController: NSObject, NSTableViewDataSource {
         let content = NSView()
         content.addSubview(root)
         NSLayoutConstraint.activate([
-            root.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 14),
-            root.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -14),
-            root.topAnchor.constraint(equalTo: content.topAnchor, constant: 14),
-            root.bottomAnchor.constraint(lessThanOrEqualTo: content.bottomAnchor, constant: -14),
+            root.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 16),
+            root.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -16),
+            root.topAnchor.constraint(equalTo: content.topAnchor, constant: 16),
+            root.bottomAnchor.constraint(lessThanOrEqualTo: content.bottomAnchor, constant: -16),
             tableScroll.widthAnchor.constraint(equalTo: root.widthAnchor),
         ])
         window.contentView = content
 
         let sys = Capabilities.runningSystem()
         let rows = Capabilities.matrix(systemVersion: "\(sys.major).\(sys.minor).\(sys.patch)")
-        capabilityView.string = rows.map { "• \($0.summary)\n  [\($0.availability)] \($0.cost)" }
+        // The availability values are machine tokens for code and
+        // tests; the screen shows only the summary and its cost.
+        capabilityView.string = rows.map { "• \($0.summary)\n  \($0.cost)" }
             .joined(separator: "\n")
         if !Capabilities.meetsFloor(major: sys.major, minor: sys.minor) {
-            detailLabel.stringValue = "This system is below the client's 10.13 floor; expect missing pieces."
+            detailLabel.stringValue = "This system is below the client's minimum, macOS 10.13."
         } else if !Capabilities.serviceAvailable(major: sys.major, minor: sys.minor) {
-            detailLabel.stringValue = "The core service needs macOS 12 or newer (its measured floor); " +
-                "on this system the client can only show status and this explanation."
+            detailLabel.stringValue = "The core service needs macOS 12 or newer. " +
+                "On this system the client can only show status."
         }
     }
 
@@ -299,7 +309,7 @@ final class MainWindowController: NSObject, NSTableViewDataSource {
                         "\(e.kind) (min \(e.minVersion))\n  protocols: \(e.protocols.joined(separator: ", "))\n  features: \(e.features.joined(separator: ", "))"
                     }.joined(separator: "\n")
                 case .failure:
-                    self.catalogView.string = "Engine catalog unavailable (helper not found)."
+                    self.catalogView.string = "Engine catalog unavailable."
                 }
             }
         }
@@ -325,7 +335,7 @@ final class MainWindowController: NSObject, NSTableViewDataSource {
                     self.detailLabel.stringValue = parts.joined(separator: " · ")
                 case .failure:
                     self.statusLabel.stringValue = "Status: service unreachable"
-                    self.detailLabel.stringValue = "Is the core service installed? See service/darwin."
+                    self.detailLabel.stringValue = "Check that the core service is installed."
                 }
             }
         }

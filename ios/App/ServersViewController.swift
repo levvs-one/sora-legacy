@@ -99,7 +99,7 @@ final class ServersViewController: UITableViewController {
                     NSLog("[servers] subscription fetch failed: %@", "\(error)")
                     self.showError("The subscription could not be downloaded.", title: "Download failed"); return
                 }
-                guard let data else { self.showError("Empty response"); return }
+                guard let data else { self.showError("The subscription returned no data.", title: "Download failed"); return }
                 self.runImport { try AppStore.mobileAPI.parseSubscription(data) }
             }.resume()
         }

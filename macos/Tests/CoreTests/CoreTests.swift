@@ -19,7 +19,7 @@ final class CoreTests: XCTestCase {
         let tun = rows.first { $0.mode == .tunViaService }
         XCTAssertTrue(tun?.cost.contains("NOT enforced") ?? false,
                       "the TUN row must state the kill-switch limit")
-        XCTAssertTrue(tun?.cost.contains("verify-on-mac") ?? false,
+        XCTAssertTrue(tun?.cost.contains("Not verified on real hardware") ?? false,
                       "nothing on macOS may claim hardware verification from this tree")
     }
 

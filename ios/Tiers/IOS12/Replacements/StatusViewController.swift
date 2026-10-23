@@ -29,6 +29,11 @@ final class StatusViewController: UIViewController {
         } else {
             view.backgroundColor = .white
         }
+        // Both labels wrap: the status label can carry a full
+        // error sentence and a server name can be long — the
+        // single-line default would cut both off with an ellipsis.
+        statusLabel.numberOfLines = 0
+        serverLabel.numberOfLines = 0
         statusLabel.font = .preferredFont(forTextStyle: .title2)
         statusLabel.textAlignment = .center
         serverLabel.font = .preferredFont(forTextStyle: .body)
