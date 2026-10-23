@@ -35,7 +35,7 @@ func runService(arguments []string) (bool, error) {
 		// Services have no console, so startup failures go to the
 		// Windows event log.
 		if log, lerr := eventlog.Open(serviceName); lerr == nil {
-			_ = log.Error(1, "Sora core stopped: "+problemText(err))
+			_ = log.Error(1, "Sora Legacy core stopped: "+problemText(err))
 			_ = log.Close()
 		}
 	}
@@ -55,10 +55,10 @@ func (h *handler) Execute(_ []string, requests <-chan svc.ChangeRequest, status 
 	go func() { done <- run(ctx, h.arguments) }()
 	status <- svc.Status{State: svc.Running, Accepts: svc.AcceptStop | svc.AcceptShutdown}
 	if events, err := eventlog.Open(serviceName); err == nil {
-		_ = events.Info(2, "Sora core service started: "+buildVersion)
+		_ = events.Info(2, "Sora Legacy core service started: "+buildVersion)
 		defer func() {
 			if h.err == nil {
-				_ = events.Info(3, "Sora core service stopped normally")
+				_ = events.Info(3, "Sora Legacy core service stopped normally")
 			}
 			_ = events.Close()
 		}()
