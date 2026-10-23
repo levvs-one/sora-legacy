@@ -21,6 +21,8 @@
 # Go
 /core/bin/
 /core/dist/
+/core/sora-core
+/core/sora-core.exe
 *.test
 *.out
 /core/coverage.*
