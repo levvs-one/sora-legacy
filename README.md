@@ -5,6 +5,8 @@
 
 [English](README.en.md)
 
+[![Release](https://img.shields.io/github/v/release/levvs-one/sora-legacy)](https://github.com/levvs-one/sora-legacy/releases)
+[![Downloads](https://img.shields.io/github/downloads/levvs-one/sora-legacy/total)](https://github.com/levvs-one/sora-legacy/releases)
 [![License](https://img.shields.io/github/license/levvs-one/sora-legacy)](LICENSE)
 
 Клиент Sora для старых Windows: Windows 7 SP1, 8.1, 10 и 11 на x86 (на x64 работает через WoW64). Отдельный репозиторий и отдельное поколение; обычный клиент для современных систем — [sora](https://github.com/levvs-one/sora).

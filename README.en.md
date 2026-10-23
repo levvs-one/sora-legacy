@@ -5,6 +5,8 @@
 
 [Русский](README.md)
 
+[![Release](https://img.shields.io/github/v/release/levvs-one/sora-legacy)](https://github.com/levvs-one/sora-legacy/releases)
+[![Downloads](https://img.shields.io/github/downloads/levvs-one/sora-legacy/total)](https://github.com/levvs-one/sora-legacy/releases)
 [![License](https://img.shields.io/github/license/levvs-one/sora-legacy)](LICENSE)
 
 The Sora client for older Windows: Windows 7 SP1, 8.1, 10 and 11 on x86 (on x64 it runs through WoW64). A separate repository and a separate generation; the regular client for current systems is [sora](https://github.com/levvs-one/sora).
