@@ -111,7 +111,7 @@
     </PackageReference>
   </ItemGroup>
   <PropertyGroup>
-    <PostBuildEvent>del $(TargetDir)*.xml $(TargetDir)*.so $(TargetDir)*.dylib
+    <PostBuildEvent Condition="'$(OS)' == 'Windows_NT'">del $(TargetDir)*.xml $(TargetDir)*.so $(TargetDir)*.dylib
 if not "$(ConfigurationName)" == "Debug" del $(TargetDir)*.pdb</PostBuildEvent>
   </PropertyGroup>
 </Project>
