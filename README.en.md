@@ -15,7 +15,7 @@ The Sora client for older Windows: Windows 7 SP1, 8.1, 10 and 11 on x86 (on x64 
 
 Requirements in one line: Windows 7 SP1 or newer and .NET Framework 4.8; the installer checks .NET and the required Windows 7 updates itself and installs what is missing where it can. Installation is per-user, needs no administrator rights, and goes to `%LOCALAPPDATA%\Programs\Sora`.
 
-There is no finished public release yet: the installer is built from this repository following the development recipe. The full guide, including update and uninstall behaviour, is [docs/install.md](docs/install.md) (in Russian).
+Finished builds are in the [GitHub releases](https://github.com/levvs-one/sora-legacy/releases): Linux packages, Android APKs and the Windows delivery kit; the Windows installer is built from that kit following the development recipe. The full guide, including update and uninstall behaviour, is [docs/install.md](docs/install.md) (in Russian).
 
 ## Quick start
 
