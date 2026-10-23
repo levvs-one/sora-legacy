@@ -50,6 +50,13 @@ jobs:
           (cd "$RUNNER_TEMP" && sha256sum -c "$archive.sha256")
           tar -xzf "$archive" -C "$RUNNER_TEMP" actionlint
           "$RUNNER_TEMP/actionlint" -color
+      - name: Sync-check payload engine pins against the catalog floor
+        # engines.lock (what the packages ship) must never fall below
+        # the MinVersion floors in core/engine/catalog.go (what the
+        # core accepts at load). Semantic comparison; an architecture
+        # split or a missing engine fails too. Local equivalent:
+        #   python3 tools/check-engine-pins.py
+        run: python3 tools/check-engine-pins.py
       - name: Check formatting and static errors
         working-directory: core
         run: |
