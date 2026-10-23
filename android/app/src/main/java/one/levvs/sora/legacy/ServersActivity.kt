@@ -83,7 +83,8 @@ class ServersActivity : Activity() {
         entries = store.loadServers()
         val selectedId = store.selectedId()
         val labels = entries.map { entry ->
-            (if (entry.id == selectedId) "● " else "○ ") + entry.label()
+            (if (entry.id == selectedId) getString(R.string.server_selected_marker)
+            else getString(R.string.server_unselected_marker)) + entry.label()
         }
         listView.adapter = ArrayAdapter(this, android.R.layout.simple_list_item_1, labels)
     }

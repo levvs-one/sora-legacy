@@ -91,6 +91,7 @@ class SettingsActivity : Activity() {
                     val engine = engines.getJSONObject(i)
                     out.append('\n')
                         .append(engine.optString("kind"))
+                        .append(" ")
                         .append(getString(R.string.engine_min_version, engine.optString("min_version"))).append('\n')
                         .append(getString(R.string.engine_protocols_line, joinArray(engine.optJSONArray("protocols")))).append('\n')
                         .append(getString(R.string.engine_features_line, joinArray(engine.optJSONArray("features")))).append('\n')

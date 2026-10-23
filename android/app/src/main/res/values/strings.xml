@@ -26,7 +26,7 @@
 
     <!-- Servers screen -->
     <string name="imported_servers_hint">Imported servers (tap to select, long-press to delete)</string>
-    <string name="import_text_label">Import links or subscription text</string>
+    <string name="import_text_label">Import links, base64 or subscription text, a Clash, sing-box or Xray document, SIP008 or a WireGuard config</string>
     <string name="import_input_hint">vless://… / trojan://…</string>
     <string name="import_links_button">Import links</string>
     <string name="import_subscription_button">Import as subscription document</string>
@@ -34,6 +34,10 @@
     <string name="subscription_url_hint">https://provider.example/sub/…</string>
     <string name="fetch_subscription_button">Fetch subscription</string>
     <string name="selected_toast">Selected: %1$s</string>
+    <!-- Selection markers for the server list rows; the trailing
+         space is part of the marker and is kept by the quotes. -->
+    <string name="server_selected_marker">"● "</string>
+    <string name="server_unselected_marker">"○ "</string>
     <string name="delete_server_title">Delete server</string>
     <string name="delete_button">Delete</string>
     <string name="cancel_button">Cancel</string>
@@ -57,7 +61,7 @@
     <string name="saved_toast">Saved.</string>
     <string name="engine_libbox_line">sing-box (libbox): %1$s</string>
     <string name="engine_libbox_unavailable">sing-box (libbox): unavailable</string>
-    <string name="engine_min_version"> ≥ %1$s</string>
+    <string name="engine_min_version">≥ %1$s</string>
     <string name="engine_protocols_line">protocols: %1$s</string>
     <string name="engine_features_line">features: %1$s</string>
     <string name="engine_default_preference">default preference: %1$s</string>

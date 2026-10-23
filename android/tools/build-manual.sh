@@ -19,6 +19,26 @@
 set -euo pipefail
 
 ANDROID_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+
+# Product version: read from the same single source as the Gradle
+# build — productVersionName in app/build.gradle.kts — and compute
+# versionCode from it by the same rule the Gradle config applies
+# (major*10000 + minor*100 + patch). This script carries no version
+# literal of its own; an unparseable value aborts the build instead
+# of silently shipping a wrong code.
+VERSION_NAME="$(sed -n 's/^val productVersionName = "\([^"]*\)".*/\1/p' "$ANDROID_DIR/app/build.gradle.kts")"
+IFS='.' read -r VERSION_MAJOR VERSION_MINOR VERSION_PATCH <<< "$VERSION_NAME"
+if [ -z "$VERSION_MAJOR" ] || [ -z "$VERSION_MINOR" ] || [ -z "$VERSION_PATCH" ]; then
+    echo "cannot parse productVersionName '$VERSION_NAME' from app/build.gradle.kts" >&2
+    exit 1
+fi
+case "$VERSION_MAJOR$VERSION_MINOR$VERSION_PATCH" in
+    *[!0-9]*)
+        echo "productVersionName '$VERSION_NAME' in app/build.gradle.kts is not numeric x.y.z" >&2
+        exit 1
+        ;;
+esac
+VERSION_CODE=$((VERSION_MAJOR * 10000 + VERSION_MINOR * 100 + VERSION_PATCH))
 LEGPLAT="${LEGPLAT:-$HOME/workspace/.legplat}"
 export JAVA_HOME="${JAVA_HOME:-$LEGPLAT/jdk/jdk-17.0.20.1+1}"
 export PATH="$JAVA_HOME/bin:$PATH"
@@ -94,7 +114,7 @@ MOBILE_JAR="$WORK/mobileapi-classes.jar"
     --manifest "$MANIFEST" \
     --java "$WORK/gen" \
     --min-sdk-version "$MIN_SDK" --target-sdk-version 34 \
-    --version-code 203 --version-name 0.2.3 \
+    --version-code "$VERSION_CODE" --version-name "$VERSION_NAME" \
     -o "$WORK/base.apk" "$WORK/res.zip"
 
 # --- 3. Kotlin -> classes ----------------------------------------------
