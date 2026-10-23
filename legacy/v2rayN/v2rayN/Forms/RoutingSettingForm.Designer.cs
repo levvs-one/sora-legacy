@@ -110,7 +110,6 @@
             // 
             // labRoutingTips
             // 
-            this.labRoutingTips.ForeColor = System.Drawing.Color.Brown;
             resources.ApplyResources(this.labRoutingTips, "labRoutingTips");
             this.labRoutingTips.Name = "labRoutingTips";
             // 

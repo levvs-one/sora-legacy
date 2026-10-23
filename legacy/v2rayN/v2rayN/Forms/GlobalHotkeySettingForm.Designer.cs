@@ -96,13 +96,11 @@
             // label6
             // 
             resources.ApplyResources(this.label6, "label6");
-            this.label6.ForeColor = System.Drawing.Color.Red;
             this.label6.Name = "label6";
             // 
             // label5
             // 
             resources.ApplyResources(this.label5, "label5");
-            this.label5.ForeColor = System.Drawing.Color.Red;
             this.label5.Name = "label5";
             // 
             // txtGlobalHotkey3

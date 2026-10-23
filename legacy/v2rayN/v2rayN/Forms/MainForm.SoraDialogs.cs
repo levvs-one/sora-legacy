@@ -41,7 +41,7 @@ namespace v2rayN.Forms
 
         private void ShowSoraImportDialog()
         {
-            using (var dialog = CreateSoraDialog(new Size(780, 560)))
+            using (var dialog = CreateSoraDialog(new Size(780, 534)))
             {
                 dialog.Name = "sora.subscription.add.dialog";
                 dialog.AccessibleName = "Добавить подписку";
@@ -54,14 +54,6 @@ namespace v2rayN.Forms
                     ForeColor = HappText,
                     TextAlign = ContentAlignment.MiddleLeft
                 };
-                var subtitle = new Label
-                {
-                    Location = new Point(32, 54),
-                    Size = new Size(700, 24),
-                    Text = "Вставьте ссылку подписки или конфигурацию — формат определится автоматически.",
-                    Font = new Font("Segoe UI", 8.5F),
-                    ForeColor = HappMuted
-                };
                 var close = CreateSoraIconButton("x", () => dialog.Close());
                 close.Location = new Point(724, 14);
                 close.AccessibleName = "Закрыть";
@@ -69,7 +61,7 @@ namespace v2rayN.Forms
 
                 var inputCaption = new Label
                 {
-                    Location = new Point(32, 88),
+                    Location = new Point(32, 62),
                     Size = new Size(716, 20),
                     Text = "Ссылка или конфигурация",
                     ForeColor = HappMuted,
@@ -77,7 +69,7 @@ namespace v2rayN.Forms
                 };
                 var inputShell = new Panel
                 {
-                    Location = new Point(32, 110),
+                    Location = new Point(32, 84),
                     Size = new Size(716, 128),
                     Padding = new Padding(12, 10, 12, 10),
                     BackColor = Color.FromArgb(29, 29, 31)
@@ -103,7 +95,7 @@ namespace v2rayN.Forms
                 inputShell.Controls.Add(input);
 
                 var paste = CreateHappButton("Вставить", () => input.Text = Utils.GetClipboardData().Trim(), false);
-                paste.Location = new Point(32, 252);
+                paste.Location = new Point(32, 226);
                 paste.Size = new Size(118, 34);
                 paste.TabStop = true;
                 paste.AccessibleName = "Вставить конфигурацию из буфера обмена";
@@ -114,7 +106,7 @@ namespace v2rayN.Forms
 
                 var detected = new Label
                 {
-                    Location = new Point(166, 248),
+                    Location = new Point(166, 222),
                     Size = new Size(582, 22),
                     ForeColor = HappText,
                     Font = new Font("Segoe UI Semibold", 9F),
@@ -122,17 +114,17 @@ namespace v2rayN.Forms
                 };
                 var detail = new Label
                 {
-                    Location = new Point(166, 270),
+                    Location = new Point(166, 244),
                     Size = new Size(582, 34),
                     ForeColor = HappMuted,
                     Font = new Font("Segoe UI", 8.5F),
                     TextAlign = ContentAlignment.TopLeft
                 };
 
-                TextBox name = CreateSoraTextField(dialog, "Название — необязательно", 32, 316, 716);
+                TextBox name = CreateSoraTextField(dialog, "Название — необязательно", 32, 290, 716);
                 name.Name = "sora.subscription.name";
                 name.AccessibleName = "Название подписки";
-                Button interval = CreateSoraIntervalSelector(dialog, 32, 390, 716, 720);
+                Button interval = CreateSoraIntervalSelector(dialog, 32, 364, 716, 720);
                 interval.Name = "sora.subscription.interval";
                 SoraImportAnalysis analysis = AnalyzeSoraImport(string.Empty);
                 Button import = null;
@@ -158,7 +150,7 @@ namespace v2rayN.Forms
                     dialog.DialogResult = DialogResult.OK;
                     dialog.Close();
                 }, true);
-                import.Location = new Point(624, 492);
+                import.Location = new Point(624, 466);
                 import.Size = new Size(124, 38);
                 import.TabStop = true;
                 import.AccessibleName = "Добавить распознанную конфигурацию";
@@ -197,7 +189,7 @@ namespace v2rayN.Forms
                     }
                 };
 
-                dialog.Controls.AddRange(new Control[] { title, subtitle, close, inputCaption, inputShell, paste, detected, detail, import });
+                dialog.Controls.AddRange(new Control[] { title, close, inputCaption, inputShell, paste, detected, detail, import });
                 dialog.AcceptButton = import;
                 dialog.CancelButton = close;
                 string clipboard = Utils.GetClipboardData().Trim();
@@ -251,7 +243,7 @@ namespace v2rayN.Forms
                 {
                     Kind = SoraImportKind.XrayJson,
                     Title = "Набор конфигураций Xray",
-                    Detail = "Совместимых с Win7 x86 серверов: " + xrayConfigurationCount,
+                    Detail = "Совместимых серверов: " + xrayConfigurationCount,
                     Count = xrayConfigurationCount
                 };
             }
@@ -276,15 +268,15 @@ namespace v2rayN.Forms
             string lower = input.ToLowerInvariant();
             if (lower.Contains("proxies:") || lower.Contains("proxy-groups:") || lower.Contains("socks-port:"))
             {
-                return new SoraImportAnalysis { Kind = SoraImportKind.Unsupported, Title = "Clash/Mihomo пока не поддерживается", Detail = "Нужен совместимый x86-кор; Sora не создаст нерабочую запись." };
+                return new SoraImportAnalysis { Kind = SoraImportKind.Unsupported, Title = "Clash/Mihomo пока не поддерживается", Detail = "В сборке нет ядра для этого формата." };
             }
             if (lower.Contains("naiveproxy") || (lower.Contains("\"listen\"") && lower.Contains("\"proxy\"")))
             {
-                return new SoraImportAnalysis { Kind = SoraImportKind.Unsupported, Title = "NaiveProxy пока не поддерживается", Detail = "В сборке нет совместимого x86-ядра NaiveProxy." };
+                return new SoraImportAnalysis { Kind = SoraImportKind.Unsupported, Title = "NaiveProxy пока не поддерживается", Detail = "В сборке нет ядра NaiveProxy." };
             }
             if (lower.Contains("hysteria") || (lower.Contains("\"up\"") && lower.Contains("\"down\"") && lower.Contains("\"listen\"")))
             {
-                return new SoraImportAnalysis { Kind = SoraImportKind.Unsupported, Title = "Hysteria пока не поддерживается", Detail = "В сборке нет совместимого x86-ядра Hysteria." };
+                return new SoraImportAnalysis { Kind = SoraImportKind.Unsupported, Title = "Hysteria пока не поддерживается", Detail = "В сборке нет ядра Hysteria." };
             }
 
             return new SoraImportAnalysis { Kind = SoraImportKind.Unsupported, Title = "Формат не распознан", Detail = "Поддерживаются ссылки серверов, подписки, Base64, SIP008 и Xray JSON." };
@@ -474,7 +466,8 @@ namespace v2rayN.Forms
                     Size = new Size(680, 24),
                     Text = GetSoraProtocolName(item) + (subscription == null ? string.Empty : " — " + subscription.remarks),
                     Font = new Font("Segoe UI", 9F),
-                    ForeColor = locked ? Color.FromArgb(238, 178, 178) : HappMuted
+                    ForeColor = locked ? HappText : HappMuted,
+                    AutoEllipsis = true
                 };
                 var close = CreateSoraIconButton("x", () => dialog.Close());
                 close.Location = new Point(764, 18);
@@ -503,7 +496,7 @@ namespace v2rayN.Forms
                     {
                         Location = new Point(32, 304),
                         Size = new Size(756, 42),
-                        Text = item.coreType == ECoreType.Xray ? "Sora запускает этот файл встроенным Xray. Путь защищён от случайного изменения." : "Этот компонент не входит в x86-сборку Sora. Подключение работать не будет.",
+                        Text = item.coreType == ECoreType.Xray ? "Путь нельзя изменить: файл запускает встроенный Xray." : "Компонент не входит в сборку Sora — подключение работать не будет.",
                         ForeColor = HappMuted,
                         Font = new Font("Segoe UI", 9F)
                     };
@@ -877,7 +870,7 @@ namespace v2rayN.Forms
                 Dock = DockStyle.Fill,
                 BorderStyle = BorderStyle.None,
                 BackColor = shell.BackColor,
-                ForeColor = readOnly ? Color.FromArgb(157, 157, 163) : HappText,
+                ForeColor = HappText,
                 Font = new Font("Segoe UI", 9.5F),
                 Text = value ?? string.Empty,
                 ReadOnly = readOnly
