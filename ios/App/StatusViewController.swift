@@ -25,7 +25,6 @@ final class StatusViewController: UIViewController {
         statusLabel.textAlignment = .center
         serverLabel.font = .preferredFont(forTextStyle: .body)
         serverLabel.textAlignment = .center
-        serverLabel.textColor = .secondaryLabel
         toggleButton.titleLabel?.font = .preferredFont(forTextStyle: .headline)
         toggleButton.addTarget(self, action: #selector(toggle), for: .touchUpInside)
         let stack = UIStackView(arrangedSubviews: [statusLabel, serverLabel, toggleButton])

@@ -7,12 +7,12 @@ import SoraLegacyCore
 /// excludes the App/ original and compiles this file instead) —
 /// the main tree's file-replacement pattern for tier deltas.
 ///
-/// Delta against the original: exactly two lines, both semantic
-/// colors that exist only on iOS 13+ (`UIColor.systemBackground`,
-/// `UIColor.secondaryLabel`). Each is gated with `#available` and
-/// falls back to the pre-dark-mode equivalents (`.white` / `.gray`)
-/// — iOS 12 has no dark mode, so the fallbacks are the same colors
-/// the 13+ system colors resolve to in light mode. Everything else
+/// Delta against the original: exactly one line — the semantic
+/// color that exists only on iOS 13+ (`UIColor.systemBackground`).
+/// It is gated with `#available` and falls back to the pre-dark-mode
+/// equivalent (`.white`) — iOS 12 has no dark mode, so the fallback
+/// is the same color the 13+ system color resolves to in light
+/// mode. Everything else
 /// is byte-identical to the original; if the original changes,
 /// this file must be re-derived (TARGET-NOTES §4).
 final class StatusViewController: UIViewController {
@@ -38,11 +38,6 @@ final class StatusViewController: UIViewController {
         statusLabel.textAlignment = .center
         serverLabel.font = .preferredFont(forTextStyle: .body)
         serverLabel.textAlignment = .center
-        if #available(iOS 13.0, *) {
-            serverLabel.textColor = .secondaryLabel
-        } else {
-            serverLabel.textColor = .gray
-        }
         toggleButton.titleLabel?.font = .preferredFont(forTextStyle: .headline)
         toggleButton.addTarget(self, action: #selector(toggle), for: .touchUpInside)
         let stack = UIStackView(arrangedSubviews: [statusLabel, serverLabel, toggleButton])
