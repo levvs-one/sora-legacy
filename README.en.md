@@ -23,8 +23,9 @@ There is no finished public release yet: the installer is built from this reposi
 2. Add a subscription link or a single server link — the format is detected automatically.
 3. Pick a server and connect: system proxy mode or TUN.
 
-## Status: there is no finished release yet
+## Delivery status
 
+- **Releases are published on GitHub**: [v0.2.4](https://github.com/levvs-one/sora-legacy/releases/tag/v0.2.4) and [v0.2.3](https://github.com/levvs-one/sora-legacy/releases/tag/v0.2.3) — sources, Linux packages, Android APKs and the Windows delivery kit described below.
 - **The executable that ships today is the v2rayN-based client** (`sora_<target>.exe`, for example `sora_win7.exe`). It is the one built in CI, covered by regression checks and staged by `legacy/build/Stage-Release.ps1`.
 - **The new client** (`legacy/Client`, .NET Framework 4.8, WinForms) is built, lives in this repository and is covered by interop tests against the real core service, but it is **not in the delivery stage yet**. Switching the stage is separate work; until it is done, the new client is not shipped to users.
 - **The installer already registers `sora://` links**, but the registered handler today is the shipped v2rayN-based client, which does not handle a `sora://…` argument: a click on such a link is silently dropped for now. The handler that imports a subscription from a link is the new client; the registration takes effect unchanged when the stage switches to it.
