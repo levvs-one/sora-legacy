@@ -68,6 +68,10 @@ internal sealed class MainForm : Form
     public MainForm()
     {
         text = new Strings(settings.Language);
+        // The error line exists only while it carries a message: an
+        // empty label would leave a blank strip in the column.
+        error.TextChanged += (_, _) => error.Visible = error.Text.Length > 0;
+        error.Visible = false;
         Text = "Sora Legacy";
         Font = body;
         ForeColor = Color.FromArgb(31, 31, 33);
@@ -188,7 +192,7 @@ internal sealed class MainForm : Form
             polling = true;
             try { await ReadStatus(); }
             catch (OperationCanceledException) when (closing) { }
-            catch { coreLost = true; error.Text = text["errCore"]; retry.Visible = true; RenderStatus(); }
+            catch { coreLost = true; error.Text = ""; retry.Visible = true; RenderStatus(); }
             finally { polling = false; }
         };
         ApplyText();
@@ -204,7 +208,7 @@ internal sealed class MainForm : Form
 
     private AntdUI.Select MakeLanguageSelect()
     {
-        var select = new AntdUI.Select { Width = 240, Height = 40, Radius = 8, Font = body, BackColor = Color.White,
+        var select = new AntdUI.Select { Width = 280, Height = 44, Radius = 8, Font = body, BackColor = Color.White,
             ForeColor = ForeColor, BorderColor = Field, BorderHover = ForeColor, BorderActive = ForeColor,
             PrefixWidth = 24, MaxCount = 8 };
         var items = text.Languages.Cast<JObject>().Select(language => new AntdUI.SelectItem(
@@ -304,7 +308,7 @@ internal sealed class MainForm : Form
         poll.Stop();
         orb.Enabled = false;
         coreLost = true;
-        error.Text = text["errCore"];
+        error.Text = "";
         retry.Visible = true;
         RenderStatus();
         await logsPage.LoadAsync(null);
@@ -524,15 +528,17 @@ internal sealed class MainForm : Form
         // value the uninstaller scans), so the box opens with the
         // read-back, not with what settings last hoped was written.
         var autoRun = new CheckBox { Text = Mnemonic.Mark(text["launchAtLogin"], used, 'L', 'В', 'A'), Checked = AutoRun.IsEnabled(), AutoSize = true, Margin = tun.Margin, TabIndex = 3 };
-        var engine = new AntdUI.Select { Width = 300, Height = 44, List = true, Font = strong, BackColor = Field, ForeColor = ForeColor, Radius = 8, TabIndex = 4 };
+        var engineLabel = new Label { Text = text["engine"], AutoSize = true, Margin = new Padding(0, 8, 0, 2) };
+        var engine = new AntdUI.Select { Width = 300, Height = 44, List = true, Font = body, BackColor = Color.White, ForeColor = ForeColor, Radius = 8, TabIndex = 4, Margin = new Padding(0, 4, 0, 4) };
         engine.Items.Add(new AntdUI.SelectItem(text["engineAuto"], ""));
         foreach (var kind in new[] { "sing-box", "xray", "mihomo" }) engine.Items.Add(new AntdUI.SelectItem(kind, kind));
         engine.SelectedValue = settings.Engine;
-        var stack = new AntdUI.Select { Width = 300, Height = 44, List = true, Font = body, Radius = 8, TabIndex = 5 };
+        var stackLabel = new Label { Text = text["tunStack"], AutoSize = true, Margin = new Padding(0, 8, 0, 2) };
+        var stack = new AntdUI.Select { Width = 300, Height = 44, List = true, Font = body, BackColor = Color.White, ForeColor = ForeColor, Radius = 8, TabIndex = 5, Margin = new Padding(0, 4, 0, 4) };
         foreach (var name in new[] { "gvisor", "system", "mixed", "mips" }) stack.Items.Add(name);
         void RenderStack()
         {
-            stack.Visible = tun.Checked && (string?)engine.SelectedValue is "xray" or "mihomo";
+            stackLabel.Visible = stack.Visible = tun.Checked && (string?)engine.SelectedValue is "xray" or "mihomo";
             stack.SelectedValue = (string?)engine.SelectedValue == "xray" ? settings.XrayStack : settings.MihomoStack;
         }
         engine.SelectedValueChanged += (_, _) => RenderStack();
@@ -567,7 +573,7 @@ internal sealed class MainForm : Form
             apply.Visible = desiredConnected;
             dialog.DialogResult = DialogResult.OK;
         };
-        layout.Controls.AddRange(new FormsControl[] { tun, proxy, killSwitch, autoRun, engine, stack, save, cancel });
+        layout.Controls.AddRange(new FormsControl[] { tun, proxy, killSwitch, autoRun, engineLabel, engine, stackLabel, stack, save, cancel });
         dialog.Controls.Add(layout);
         dialog.AcceptButton = save;
         dialog.CancelButton = cancel;
@@ -582,20 +588,20 @@ internal sealed class MainForm : Form
     private async Task AddSubscription()
     {
         if (core == null) throw new InvalidOperationException("core.error.unavailable");
-        using var dialog = new Form { Text = text["addSubscription"], Font = body, BackColor = Color.White, ClientSize = new Size(460, 156),
+        using var dialog = new Form { Text = text["addSubscription"], Font = body, BackColor = Color.White, ClientSize = new Size(460, 148),
             AutoScaleMode = AutoScaleMode.Dpi,
             FormBorderStyle = FormBorderStyle.FixedDialog, StartPosition = FormStartPosition.CenterParent, MaximizeBox = false, MinimizeBox = false };
         // Anchored to the dialog edges instead of bare coordinates, so
         // the fixed layout follows the Dpi-scaled client area.
-        var input = new AntdUI.Input { Bounds = new Rectangle(20, 20, 420, 48), Anchor = AnchorStyles.Left | AnchorStyles.Top | AnchorStyles.Right,
+        var input = new AntdUI.Input { Bounds = new Rectangle(20, 20, 420, 44), Anchor = AnchorStyles.Left | AnchorStyles.Top | AnchorStyles.Right,
             PlaceholderText = text["subscriptionLink"], Font = body, Radius = 8, TabIndex = 0 };
         var confirm = MakeButton("add", 120);
-        confirm.Location = new Point(320, 88);
+        confirm.Location = new Point(320, 84);
         confirm.Anchor = AnchorStyles.Top | AnchorStyles.Right;
         confirm.TabIndex = 1;
         confirm.Click += (_, _) => dialog.DialogResult = DialogResult.OK;
         var cancel = MakeButton("cancel", 120);
-        cancel.Location = new Point(192, 88);
+        cancel.Location = new Point(192, 84);
         cancel.Anchor = AnchorStyles.Top | AnchorStyles.Right;
         cancel.TabIndex = 2;
         cancel.Click += (_, _) => dialog.DialogResult = DialogResult.Cancel;

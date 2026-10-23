@@ -105,61 +105,73 @@ internal sealed class SubscriptionCard : AntdUI.Panel
         if (!closed)
         {
             var nodes = subscription.Outbounds.Where(node => node.DisplayName.IndexOf(search, StringComparison.OrdinalIgnoreCase) >= 0).ToArray();
-            var list = new ListView
+            if (nodes.Length == 0)
             {
-                Bounds = new Rectangle(8, y, width - 16, Math.Min(520, nodes.Length * 52 + 4)),
-                View = View.Details, HeaderStyle = ColumnHeaderStyle.None, BorderStyle = System.Windows.Forms.BorderStyle.None,
-                VirtualMode = true, OwnerDraw = true, FullRowSelect = true, MultiSelect = false,
-                HideSelection = false, Font = body, BackColor = Color.White, ForeColor = ForeColor,
-                SmallImageList = rowSize, ShowItemToolTips = true, TabIndex = 5
-            };
-            list.Columns.Add("", list.ClientSize.Width - 20);
-            list.RetrieveVirtualItem += (_, e) => e.Item = new ListViewItem(nodes[e.ItemIndex].DisplayName) { ToolTipText = nodes[e.ItemIndex].DisplayName };
-            list.VirtualListSize = nodes.Length;
-            list.DrawItem += (_, e) =>
+                // A real state instead of an empty strip: the card says
+                // whether the subscription itself has no servers or the
+                // search filtered every server out.
+                Controls.Add(new Label { Bounds = new Rectangle(12, y, width - 24, 22), Font = body,
+                    Text = subscription.Outbounds.Count == 0 ? text["errSubEmpty"] : text["logsEmpty"] });
+                y += 30;
+            }
+            else
             {
-                var node = nodes[e.ItemIndex];
-                var rect = e.Bounds;
-                using var background = new SolidBrush(node.Id == selected || e.Item.Selected ? Color.FromArgb(235, 235, 240) : Color.White);
-                e.Graphics.FillRectangle(background, rect);
-                using var separator = new Pen(Color.FromArgb(215, 215, 222));
-                if (e.ItemIndex > 0) e.Graphics.DrawLine(separator, rect.Left + 4, rect.Top, rect.Right - 4, rect.Top);
-                var name = node.DisplayName;
-                var x = rect.Left + 8;
-                if (name.Length >= 4 && char.IsSurrogatePair(name, 0) && char.IsSurrogatePair(name, 2))
+                var list = new ListView
                 {
-                    var first = char.ConvertToUtf32(name, 0) - 0x1F1E6;
-                    var second = char.ConvertToUtf32(name, 2) - 0x1F1E6;
-                    if (first is >= 0 and < 26 && second is >= 0 and < 26)
+                    Bounds = new Rectangle(8, y, width - 16, Math.Min(520, nodes.Length * 52 + 4)),
+                    View = View.Details, HeaderStyle = ColumnHeaderStyle.None, BorderStyle = System.Windows.Forms.BorderStyle.None,
+                    VirtualMode = true, OwnerDraw = true, FullRowSelect = true, MultiSelect = false,
+                    HideSelection = false, Font = body, BackColor = Color.White, ForeColor = ForeColor,
+                    SmallImageList = rowSize, ShowItemToolTips = true, TabIndex = 5
+                };
+                list.Columns.Add("", list.ClientSize.Width - 20);
+                list.RetrieveVirtualItem += (_, e) => e.Item = new ListViewItem(nodes[e.ItemIndex].DisplayName) { ToolTipText = nodes[e.ItemIndex].DisplayName };
+                list.VirtualListSize = nodes.Length;
+                list.DrawItem += (_, e) =>
+                {
+                    var node = nodes[e.ItemIndex];
+                    var rect = e.Bounds;
+                    using var background = new SolidBrush(node.Id == selected || e.Item.Selected ? Color.FromArgb(235, 235, 240) : Color.White);
+                    e.Graphics.FillRectangle(background, rect);
+                    using var separator = new Pen(Color.FromArgb(215, 215, 222));
+                    if (e.ItemIndex > 0) e.Graphics.DrawLine(separator, rect.Left + 4, rect.Top, rect.Right - 4, rect.Top);
+                    var name = node.DisplayName;
+                    var x = rect.Left + 8;
+                    if (name.Length >= 4 && char.IsSurrogatePair(name, 0) && char.IsSurrogatePair(name, 2))
                     {
-                        var country = "" + (char)('a' + first) + (char)('a' + second);
-                        var resource = "flags." + country + ".png";
-                        if (text.HasResource(resource))
+                        var first = char.ConvertToUtf32(name, 0) - 0x1F1E6;
+                        var second = char.ConvertToUtf32(name, 2) - 0x1F1E6;
+                        if (first is >= 0 and < 26 && second is >= 0 and < 26)
                         {
-                            var flag = new Rectangle(x, rect.Top + 8, 24, 16);
-                            var saved = e.Graphics.Save();
-                            using var clip = AntdUI.Helper.RoundPath(flag, 3);
-                            e.Graphics.SetClip(clip);
-                            e.Graphics.DrawImage(text.Image(resource), flag);
-                            e.Graphics.Restore(saved);
-                            x += 32;
+                            var country = "" + (char)('a' + first) + (char)('a' + second);
+                            var resource = "flags." + country + ".png";
+                            if (text.HasResource(resource))
+                            {
+                                var flag = new Rectangle(x, rect.Top + 8, 24, 16);
+                                var saved = e.Graphics.Save();
+                                using var clip = AntdUI.Helper.RoundPath(flag, 3);
+                                e.Graphics.SetClip(clip);
+                                e.Graphics.DrawImage(text.Image(resource), flag);
+                                e.Graphics.Restore(saved);
+                                x += 32;
+                            }
+                            name = name.Substring(4).TrimStart();
                         }
-                        name = name.Substring(4).TrimStart();
                     }
-                }
-                const TextFormatFlags flags = TextFormatFlags.SingleLine | TextFormatFlags.EndEllipsis | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding;
-                TextRenderer.DrawText(e.Graphics, name, body, new Rectangle(x, rect.Top + 4, rect.Width - (x - rect.Left) - 68, 24), ForeColor, flags);
-                var protocol = node.DisplayProtocol.Length > 0 ? node.DisplayProtocol : node.Protocol;
-                var detail = string.Join(" | ", new[] { protocol, node.Transport, node.Security }.Where(value => value.Length > 0).Select(value => value.ToUpperInvariant()));
-                TextRenderer.DrawText(e.Graphics, detail, body, new Rectangle(rect.Left + 8, rect.Top + 28, rect.Width - 84, 20), ForeColor, flags);
-                if (pings.TryGetValue(node.Id, out var latency))
-                    TextRenderer.DrawText(e.Graphics, text["milliseconds"].Replace("{n}", latency.ToString(CultureInfo.CurrentCulture)), body,
-                        new Rectangle(rect.Right - 68, rect.Top + 8, 64, 32), ForeColor, flags | TextFormatFlags.Right);
-                if (e.Item.Focused) e.DrawFocusRectangle();
-            };
-            list.ItemSelectionChanged += async (_, e) => { if (e.IsSelected) await select(nodes[e.ItemIndex]); };
-            Controls.Add(list);
-            y += list.Height;
+                    const TextFormatFlags flags = TextFormatFlags.SingleLine | TextFormatFlags.EndEllipsis | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding;
+                    TextRenderer.DrawText(e.Graphics, name, body, new Rectangle(x, rect.Top + 4, rect.Width - (x - rect.Left) - 68, 24), ForeColor, flags);
+                    var protocol = node.DisplayProtocol.Length > 0 ? node.DisplayProtocol : node.Protocol;
+                    var detail = string.Join(" | ", new[] { protocol, node.Transport, node.Security }.Where(value => value.Length > 0).Select(value => value.ToUpperInvariant()));
+                    TextRenderer.DrawText(e.Graphics, detail, body, new Rectangle(rect.Left + 8, rect.Top + 28, rect.Width - 84, 20), ForeColor, flags);
+                    if (pings.TryGetValue(node.Id, out var latency))
+                        TextRenderer.DrawText(e.Graphics, text["milliseconds"].Replace("{n}", latency.ToString(CultureInfo.CurrentCulture)), body,
+                            new Rectangle(rect.Right - 68, rect.Top + 8, 64, 32), ForeColor, flags | TextFormatFlags.Right);
+                    if (e.Item.Focused) e.DrawFocusRectangle();
+                };
+                list.ItemSelectionChanged += async (_, e) => { if (e.IsSelected) await select(nodes[e.ItemIndex]); };
+                Controls.Add(list);
+                y += list.Height;
+            }
         }
         Height = y + 12;
     }

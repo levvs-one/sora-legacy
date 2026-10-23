@@ -42,6 +42,10 @@ internal sealed class LogsPage : UserControl
     public LogsPage(Strings text, Font body, Font strong)
     {
         this.text = text;
+        // The status line exists only while it carries a message: an
+        // empty label would leave a blank strip above the list.
+        message.TextChanged += (_, _) => message.Visible = message.Text.Length > 0;
+        message.Visible = false;
         Font = body;
         AutoScaleMode = AutoScaleMode.Dpi;
         metadata = new Font(body, FontStyle.Bold);
@@ -118,7 +122,7 @@ internal sealed class LogsPage : UserControl
 
     private Button MakeButton(string key, int width) => new()
     {
-        Tag = key, Width = width, Height = 40, Radius = 8, BorderWidth = 0,
+        Tag = key, Width = width, Height = 44, Radius = 8, BorderWidth = 0,
         BackColor = Color.White, BackHover = Color.FromArgb(235, 235, 240),
         ForeColor = ForeColor, ForeHover = ForeColor, Font = Font, WaveSize = 0,
         Margin = new Padding(0, 0, 6, 4), IconSize = new Size(20, 20)
