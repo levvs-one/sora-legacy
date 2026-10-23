@@ -17,7 +17,9 @@ func checkReport(app *App) ([]string, bool) {
 		"tunnel: " + app.local,
 		"data: " + app.opts.DataDir,
 		"platform: " + platformName(),
-		"guard: proxy and kill switch are available on this platform",
+	}
+	if runtime.GOOS == "windows" || runtime.GOOS == "linux" {
+		lines = append(lines, "guard: proxy and kill switch are available on this platform")
 	}
 	ready := true
 	if app.engines == nil || !app.engines.Usable() {
@@ -33,8 +35,7 @@ func checkReport(app *App) ([]string, bool) {
 	}
 	if runtime.GOOS != "windows" && runtime.GOOS != "linux" {
 		lines = append(lines,
-			"kill switch: not enforced on "+runtime.GOOS,
-			"  the system proxy still points at a local engine that is not running",
+			"kill switch: not enforced on "+runtime.GOOS+" — traffic is not blocked when the tunnel stops",
 		)
 	}
 	lines = append(lines, readyText(ready))

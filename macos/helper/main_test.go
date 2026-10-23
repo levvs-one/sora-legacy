@@ -203,6 +203,25 @@ func TestEngineInfoIsCatalogData(t *testing.T) {
 	}
 }
 
+// A daemon refusal reaches the user as the catalog sentence for its
+// key plus the redacted detail — never as the raw contract key.
+func TestRefusedErrorUsesCatalogSummary(t *testing.T) {
+	err := refusedError("connect", &corev1.SoraError{
+		UserMessageKey: "core.engine.start_failed",
+		DetailRedacted: "engine exited",
+	})
+	if !strings.Contains(err.Error(), "the engine process did not start") ||
+		!strings.Contains(err.Error(), "engine exited") ||
+		strings.Contains(err.Error(), "core.engine.start_failed") {
+		t.Fatalf("refusal text = %q", err.Error())
+	}
+	// An unknown key keeps its key text rather than inventing a sentence.
+	unknown := refusedError("connect", &corev1.SoraError{UserMessageKey: "core.future.key"})
+	if !strings.Contains(unknown.Error(), "core.future.key") {
+		t.Fatalf("unknown-key refusal text = %q", unknown.Error())
+	}
+}
+
 func TestUnreachableDaemonIsAnErrorNotAPanic(t *testing.T) {
 	var out, errBuf bytes.Buffer
 	code := run([]string{"--socket", filepath.Join(t.TempDir(), "absent.sock"), "status"}, &out, &errBuf)

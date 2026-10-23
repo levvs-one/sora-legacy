@@ -9,9 +9,8 @@ section: net
 priority: optional
 maintainer: Sora <levvs.one@gmail.com>
 description: |
-  Sora core service: one core over sing-box, Xray-core and mihomo that runs
-  each connection on the engine able to carry it, with a kill switch, a log
-  center and engine control that no other application can reach. Includes
+  Sora Legacy core service: runs each connection on the engine able to
+  carry it (sing-box, Xray-core or mihomo), with a kill switch. Includes
   zapret (tpws, nfqws) by bol-van for DPI bypass without a server.
 vendor: Sora
 homepage: https://github.com/levvs-one/sora-legacy

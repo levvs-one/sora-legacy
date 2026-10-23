@@ -41,6 +41,7 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 
 	corev1 "github.com/levvs-one/sora-client/core/gen/sora/core/v1"
+	"github.com/levvs-one/sora-client/core/errs"
 	"github.com/levvs-one/sora-client/core/ipc"
 	"github.com/levvs-one/sora-client/core/mobileapi"
 )
@@ -65,6 +66,12 @@ func run(args []string, stdout, stderr io.Writer) int {
 	fs.StringVar(&opts.socket, "socket", ipc.ListenAddress(), "core control socket")
 	fs.StringVar(&opts.stateDir, "state-dir", "", "helper state directory (default: user config dir / sora-legacy)")
 	fs.DurationVar(&opts.timeout, "timeout", 60*time.Second, "overall command timeout")
+	fs.Usage = func() {
+		fmt.Fprintln(stderr, "usage: sora-ctl [flags] <command>")
+		fmt.Fprintln(stderr, "commands: status, about, engineinfo, servers, import, import-url, connect, select, disconnect")
+		fmt.Fprintln(stderr, "flags:")
+		fs.PrintDefaults()
+	}
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -110,6 +117,22 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return fail(stderr, err)
 	}
 	return 0
+}
+
+// refusedError renders a daemon refusal for the user: the catalog
+// summary of the refusal's key (core/errs is the single source of
+// these sentences), plus the daemon's redacted detail when it adds
+// anything. The raw contract key itself is not a user sentence and
+// is never printed.
+func refusedError(what string, wireErr *corev1.SoraError) error {
+	text := string(wireErr.GetUserMessageKey())
+	if entry, ok := errs.Lookup(errs.Key(text)); ok {
+		text = entry.Summary
+	}
+	if detail := strings.TrimSpace(wireErr.GetDetailRedacted()); detail != "" && detail != text {
+		text += ": " + detail
+	}
+	return fmt.Errorf("sora-ctl: %s refused: %s", what, text)
 }
 
 func fail(stderr io.Writer, err error) int {
@@ -160,11 +183,14 @@ func statePath(opts *options) string { return filepath.Join(opts.stateDir, "plan
 func loadState(opts *options) (*state, error) {
 	raw, err := os.ReadFile(statePath(opts))
 	if err != nil {
-		return nil, fmt.Errorf("sora-ctl: no imported servers yet (run import first): %w", err)
+		if os.IsNotExist(err) {
+			return nil, fmt.Errorf("sora-ctl: no imported servers yet — run import first")
+		}
+		return nil, fmt.Errorf("sora-ctl: the state file cannot be read: %w", err)
 	}
 	var st state
 	if err := json.Unmarshal(raw, &st); err != nil {
-		return nil, fmt.Errorf("sora-ctl: state file is unreadable: %w", err)
+		return nil, fmt.Errorf("sora-ctl: the state file is unreadable — run import again to replace it")
 	}
 	return &st, nil
 }
@@ -172,7 +198,7 @@ func loadState(opts *options) (*state, error) {
 func (st *state) plan() (*corev1.SessionPlan, error) {
 	plan := &corev1.SessionPlan{}
 	if err := protojson.Unmarshal(st.Plan, plan); err != nil {
-		return nil, fmt.Errorf("sora-ctl: stored plan is unreadable: %w", err)
+		return nil, fmt.Errorf("sora-ctl: the stored plan is unreadable — run import again to replace it")
 	}
 	return plan, nil
 }
@@ -311,7 +337,10 @@ func cmdImport(ctx context.Context, opts *options, args []string, stdin io.Reade
 		payload, err = io.ReadAll(io.LimitReader(stdin, 16<<20))
 	}
 	if err != nil {
-		return err
+		if file != "" {
+			return fmt.Errorf("sora-ctl: cannot read the import file: %w", err)
+		}
+		return fmt.Errorf("sora-ctl: cannot read the import: %w", err)
 	}
 	if len(strings.TrimSpace(string(payload))) == 0 {
 		return fmt.Errorf("sora-ctl: import payload is empty")
@@ -348,7 +377,7 @@ func importViaDaemon(ctx context.Context, opts *options, payload []byte, stdout 
 		return err
 	}
 	if resp.GetError() != nil {
-		return fmt.Errorf("sora-ctl: import refused: %s", resp.GetError().GetUserMessageKey())
+		return refusedError("import", resp.GetError())
 	}
 	plan := resp.GetSessionPlan()
 	raw, err := protojson.Marshal(plan)
@@ -486,7 +515,7 @@ func cmdConnect(ctx context.Context, opts *options, args []string, stdout io.Wri
 		return err
 	}
 	if resp.GetError() != nil {
-		return fmt.Errorf("sora-ctl: connect refused: %s", resp.GetError().GetUserMessageKey())
+		return refusedError("connect", resp.GetError())
 	}
 	out := statusJSON(&corev1.GetStatusResponse{Status: resp.GetStatus()}, nil)
 	out["mode"] = mode
@@ -514,7 +543,7 @@ func cmdDisconnect(ctx context.Context, opts *options, stdout io.Writer) error {
 		return err
 	}
 	if resp.GetError() != nil {
-		return fmt.Errorf("sora-ctl: disconnect refused: %s", resp.GetError().GetUserMessageKey())
+		return refusedError("disconnect", resp.GetError())
 	}
 	return emit(stdout, statusJSON(&corev1.GetStatusResponse{Status: resp.GetStatus()}, nil))
 }

@@ -12,10 +12,10 @@
   <vendor>Sora</vendor>
   <vendor_url>https://github.com/levvs-one/sora-client</vendor_url>
   <action id="io.github.levvs-one.sora.control">
-    <description>Control the Sora tunnel</description>
-    <description xml:lang="ru">Управление туннелем Sora</description>
-    <message>Authentication is required to control the Sora tunnel</message>
-    <message xml:lang="ru">Для управления туннелем Sora нужна аутентификация</message>
+    <description>Control the Sora Legacy tunnel</description>
+    <description xml:lang="ru">Управление туннелем Sora Legacy</description>
+    <message>Authentication is required to control the Sora Legacy tunnel</message>
+    <message xml:lang="ru">Для управления туннелем Sora Legacy нужна аутентификация</message>
     <defaults>
       <allow_any>auth_admin</allow_any>
       <allow_inactive>auth_admin</allow_inactive>

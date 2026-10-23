@@ -8,7 +8,7 @@ import "errors"
 // process under systemd.
 func runService([]string) (bool, error) { return false, nil }
 
-var errNotWindows = errors.New("a service is registered on Windows only; on Linux the package installs a systemd unit")
+var errNotWindows = errors.New("registering a service is Windows only; Linux uses the systemd unit, macOS the LaunchDaemon")
 
 func installService([]string) error { return errNotWindows }
 

@@ -2,4 +2,4 @@
 # it through /run/sora/core.sock. Add a person to the group with:
 #   usermod -aG sora <user>
 g sora -
-u sora -:sora "Sora core service" /var/lib/sora
+u sora -:sora "Sora Legacy core service" /var/lib/sora

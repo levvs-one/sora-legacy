@@ -47,13 +47,13 @@ func main() {
 	err := run(ctx, os.Args[1:])
 	stop()
 	if err != nil {
-		// Exit codes identify failure classes for scripts; the key and
-		// detail identify the cause.
+		// Exit codes identify failure classes for scripts; the text
+		// identifies the cause.
 		code := 1
 		if errs.CodeOf(err) == errs.CodeInvalidArgument {
 			code = 2
 		}
-		fmt.Fprintf(os.Stderr, "sora-core: %s: %s\n", errs.KeyOf(err), errs.Detail(err))
+		fmt.Fprintf(os.Stderr, "sora-core: %s\n", problemText(err))
 		os.Exit(code)
 	}
 }
@@ -76,8 +76,8 @@ func run(ctx context.Context, arguments []string) error {
 	set.BoolVar(&f.uninstall, "uninstall-service", false, "Windows: stop and remove the SoraLegacyCore service and exit")
 	set.BoolVar(&f.showToken, "print-token", false, "print the control plane token and exit")
 	set.BoolVar(&f.legacyControl, "legacy-control", true, "serve JSON-RPC for the .NET Framework legacy client")
-	set.BoolVar(&f.allowEnvBin, "allow-env-bin", false, "honor $SORA_SINGBOX_BIN/$SORA_XRAY_BIN/$SORA_MIHOMO_BIN overrides when discovering engines; off by default because an inherited variable could substitute an arbitrary executable")
-	set.BoolVar(&f.allowUnverifiedEngines, "allow-unverified-engines", false, "run engines without digest verification when the engines directory has no readable SHA256SUMS manifest; off by default because a deleted or corrupted manifest must not be enough to run an arbitrary engine binary")
+	set.BoolVar(&f.allowEnvBin, "allow-env-bin", false, "honor $SORA_*_BIN engine overrides; off by default — an inherited variable could substitute an arbitrary executable")
+	set.BoolVar(&f.allowUnverifiedEngines, "allow-unverified-engines", false, "run engines without digest verification when no readable SHA256SUMS manifest exists; off by default — a missing manifest must not be enough to run an arbitrary binary")
 	if err := set.Parse(arguments); err != nil {
 		return errs.Wrap(err, errs.CodeInvalidArgument, errs.KeyInvalidRequest)
 	}
@@ -159,8 +159,8 @@ func run(ctx context.Context, arguments []string) error {
 		if f.check {
 			// A readiness check must report build failures even on
 			// a broken installation.
-			fmt.Println("result: the core cannot be built on this machine")
-			fmt.Println("problem: " + string(errs.KeyOf(err)) + ": " + errs.Detail(err))
+			fmt.Println("result: the core cannot start on this machine")
+			fmt.Println("problem: " + problemText(err))
 			return nil
 		}
 		return err
@@ -184,6 +184,20 @@ func run(ctx context.Context, arguments []string) error {
 		return nil
 	}
 	return app.Serve(ctx)
+}
+
+// problemText renders an error for the operator: its detail, or the
+// catalog summary of its key when it carries no detail. The raw
+// contract key itself is not a user sentence and is printed only
+// when the catalog has neither.
+func problemText(err error) string {
+	if detail := errs.Detail(err); detail != "" {
+		return detail
+	}
+	if entry, ok := errs.Lookup(errs.KeyOf(err)); ok {
+		return entry.Summary
+	}
+	return string(errs.KeyOf(err))
 }
 
 // buildVersion is set at build time; unstamped builds report "dev".

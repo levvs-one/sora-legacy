@@ -14,8 +14,6 @@ import (
 	"golang.org/x/sys/windows/svc"
 	"golang.org/x/sys/windows/svc/eventlog"
 	"golang.org/x/sys/windows/svc/mgr"
-
-	"github.com/levvs-one/sora-client/core/errs"
 )
 
 // serviceName is the installed Windows service name.
@@ -37,7 +35,7 @@ func runService(arguments []string) (bool, error) {
 		// Services have no console, so startup failures go to the
 		// Windows event log.
 		if log, lerr := eventlog.Open(serviceName); lerr == nil {
-			_ = log.Error(1, "Sora core stopped: "+string(errs.KeyOf(err))+": "+errs.Detail(err))
+			_ = log.Error(1, "Sora core stopped: "+problemText(err))
 			_ = log.Close()
 		}
 	}
@@ -109,7 +107,7 @@ func installService(arguments []string) error {
 	defer func() { _ = m.Disconnect() }()
 	config := mgr.Config{
 		DisplayName:  "Sora Legacy core",
-		Description:  "Runs the Sora Legacy connection engines separately from the modern Sora client.",
+		Description:  "Runs the Sora Legacy connection engines.",
 		StartType:    mgr.StartAutomatic,
 		ErrorControl: mgr.ErrorNormal,
 	}

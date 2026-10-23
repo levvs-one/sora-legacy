@@ -32,7 +32,7 @@ LOGDIR=/Library/Logs/SoraLegacy
 PLIST=/Library/LaunchDaemons/$LABEL.plist
 
 if [ "$(id -u)" != "0" ]; then
-    echo "install.sh: run with sudo (the daemon needs root for TUN/routes)" >&2
+    echo "install.sh: run with sudo" >&2
     exit 1
 fi
 
@@ -75,7 +75,7 @@ if ! dseditgroup -o read sora >/dev/null 2>&1; then
 fi
 if ! dseditgroup -o checkmember -m "$CONSOLE_USER" sora >/dev/null 2>&1; then
     dseditgroup -o edit -a "$CONSOLE_USER" -t user sora
-    echo "install.sh: added $CONSOLE_USER to group sora (takes effect at next login for group checks)"
+    echo "install.sh: added $CONSOLE_USER to group sora (applies at next login)"
 fi
 
 install -d -o root -g wheel -m 0755 "$LIBDIR" "$LIBDIR/engines"
@@ -95,5 +95,4 @@ install -o root -g wheel -m 0644 "$SCRIPT_DIR/$LABEL.plist" "$PLIST"
 launchctl bootout system "$PLIST" 2>/dev/null || true
 launchctl bootstrap system "$PLIST"
 launchctl enable "system/$LABEL" || true
-echo "install.sh: $LABEL bootstrapped; socket: /var/run/sora/core.sock"
-echo "install.sh: check with: $LIBDIR/sora-ctl status"
+echo "install.sh: service installed and started — check with: $LIBDIR/sora-ctl status"

@@ -69,7 +69,7 @@ func dial(ctx context.Context, socket string) (*client, error) {
 	}
 	if resp.GetError() != nil {
 		_ = c.rpc.Close()
-		return nil, fmt.Errorf("sora-ctl: handshake refused: %s", resp.GetError().GetUserMessageKey())
+		return nil, refusedError("handshake", resp.GetError())
 	}
 	if len(resp.GetControlAuthenticator()) == 0 {
 		_ = c.rpc.Close()
