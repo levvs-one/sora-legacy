@@ -29,6 +29,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -133,6 +134,29 @@ func refusedError(what string, wireErr *corev1.SoraError) error {
 		text += ": " + detail
 	}
 	return fmt.Errorf("sora-ctl: %s refused: %s", what, text)
+}
+
+// errorText renders an error from the core packages the same way
+// refusedError renders a daemon refusal: the catalog summary of its
+// key (core/errs is the single source of these sentences), plus its
+// detail when it adds anything. The code and raw contract key that
+// errs.Error prints are not user sentences and are never printed.
+// An unknown key keeps its key text rather than inventing a
+// sentence, and an error without catalog metadata keeps its own
+// text (OS and transport diagnostics).
+func errorText(err error) string {
+	var catalogErr *errs.Error
+	if !errors.As(err, &catalogErr) {
+		return err.Error()
+	}
+	text := string(catalogErr.Key())
+	if entry, ok := errs.Lookup(catalogErr.Key()); ok {
+		text = entry.Summary
+	}
+	if detail := strings.TrimSpace(catalogErr.Detail()); detail != "" && detail != text {
+		text += ": " + detail
+	}
+	return text
 }
 
 func fail(stderr io.Writer, err error) int {

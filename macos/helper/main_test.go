@@ -20,6 +20,7 @@ import (
 
 	"github.com/levvs-one/sora-client/core/control"
 	"github.com/levvs-one/sora-client/core/engine"
+	"github.com/levvs-one/sora-client/core/errs"
 	corev1 "github.com/levvs-one/sora-client/core/gen/sora/core/v1"
 	"github.com/levvs-one/sora-client/core/ipc"
 	"github.com/levvs-one/sora-client/core/legacycontrol"
@@ -222,10 +223,46 @@ func TestRefusedErrorUsesCatalogSummary(t *testing.T) {
 	}
 }
 
+// An error from the core packages reaches the user the same way as
+// a daemon refusal: the catalog sentence for its key plus its
+// detail — never the code and raw contract key its Error prints.
+func TestErrorTextUsesCatalogSummary(t *testing.T) {
+	text := errorText(errs.New(errs.CodeNotFound, errs.KeyNotFound,
+		errors.New("dial unix /run/sora/core.sock: connect: no such file or directory")))
+	if !strings.Contains(text, "the requested object does not exist") ||
+		!strings.Contains(text, "dial unix /run/sora/core.sock") ||
+		strings.Contains(text, "core.generic.not_found") ||
+		strings.Contains(text, "not_found") {
+		t.Fatalf("error text = %q", text)
+	}
+	// An unknown key keeps its key text rather than inventing a sentence.
+	unknown := errorText(errs.New(errs.CodeInternal, errs.Key("core.future.key"), nil))
+	if !strings.Contains(unknown, "core.future.key") {
+		t.Fatalf("unknown-key error text = %q", unknown)
+	}
+	// An error without catalog metadata keeps its own text.
+	if plain := errorText(errors.New("dial unix: connect: connection refused")); plain != "dial unix: connect: connection refused" {
+		t.Fatalf("plain error text = %q", plain)
+	}
+}
+
 func TestUnreachableDaemonIsAnErrorNotAPanic(t *testing.T) {
 	var out, errBuf bytes.Buffer
 	code := run([]string{"--socket", filepath.Join(t.TempDir(), "absent.sock"), "status"}, &out, &errBuf)
 	if code != 1 || !strings.Contains(errBuf.String(), "not reachable") {
 		t.Fatalf("code %d, stderr %s", code, errBuf.String())
+	}
+	// The most common refusal — no daemon — is a catalog sentence
+	// plus the OS diagnostic, never the code and raw contract key
+	// the catalog error prints.
+	if strings.Contains(errBuf.String(), "core.generic.not_found") ||
+		strings.Contains(errBuf.String(), "not_found") {
+		t.Fatalf("unreachable error leaks the raw key: %s", errBuf.String())
+	}
+	if !strings.Contains(errBuf.String(), "the requested object does not exist") {
+		t.Fatalf("unreachable error has no catalog sentence: %s", errBuf.String())
+	}
+	if !strings.Contains(errBuf.String(), "no such file or directory") {
+		t.Fatalf("unreachable error lost the OS diagnostic: %s", errBuf.String())
 	}
 }

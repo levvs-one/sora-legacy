@@ -59,7 +59,7 @@ type client struct {
 func dial(ctx context.Context, socket string) (*client, error) {
 	conn, err := ipc.Dial(ctx, socket)
 	if err != nil {
-		return nil, fmt.Errorf("sora-ctl: the core service is not reachable at %s: %w", socket, err)
+		return nil, fmt.Errorf("sora-ctl: the core service is not reachable at %s: %s", socket, errorText(err))
 	}
 	c := &client{rpc: jrpc2.NewClient(channel.Line(conn, conn), nil)}
 	resp := &corev1.HandshakeResponse{}
@@ -91,10 +91,10 @@ func (c *client) call(ctx context.Context, method string, request, response prot
 	}
 	var result string
 	if err := c.rpc.CallResult(ctx, method, rpcParams{Payload: string(payload)}, &result); err != nil {
-		return fmt.Errorf("sora-ctl: %s: %w", method, err)
+		return fmt.Errorf("sora-ctl: %s: %s", method, errorText(err))
 	}
 	if err := protojson.Unmarshal([]byte(result), response); err != nil {
-		return fmt.Errorf("sora-ctl: %s: unreadable response: %w", method, err)
+		return fmt.Errorf("sora-ctl: %s: unreadable response: %s", method, errorText(err))
 	}
 	return nil
 }
