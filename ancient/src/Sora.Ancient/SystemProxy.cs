@@ -32,7 +32,7 @@ namespace Sora.Ancient
         {
             using (RegistryKey key = Registry.CurrentUser.OpenSubKey(KeyPath, true))
             {
-                if (key == null) throw new InvalidOperationException("Internet Settings registry key is unavailable.");
+                if (key == null) throw new InvalidOperationException("Windows proxy settings are unavailable.");
                 if (!File.Exists(snapshotPath)) SaveSnapshot(snapshotPath, key);
                 key.SetValue("ProxyEnable", 1, RegistryValueKind.DWord);
                 key.SetValue("ProxyServer", "socks=127.0.0.1:" + socksPort, RegistryValueKind.String);
@@ -46,11 +46,11 @@ namespace Sora.Ancient
             if (!File.Exists(snapshotPath)) return;
             Dictionary<string, object> map;
             try { map = JsonMini.Parse(File.ReadAllText(snapshotPath)) as Dictionary<string, object>; }
-            catch (FormatException) { throw new InvalidOperationException("Proxy snapshot is damaged; system proxy was left unchanged."); }
-            if (map == null) throw new InvalidOperationException("Proxy snapshot is damaged; system proxy was left unchanged.");
+            catch (FormatException) { throw new InvalidOperationException("Your saved proxy settings are damaged, so the proxy was left unchanged."); }
+            if (map == null) throw new InvalidOperationException("Your saved proxy settings are damaged, so the proxy was left unchanged.");
             using (RegistryKey key = Registry.CurrentUser.OpenSubKey(KeyPath, true))
             {
-                if (key == null) throw new InvalidOperationException("Internet Settings registry key is unavailable.");
+                if (key == null) throw new InvalidOperationException("Windows proxy settings are unavailable.");
                 RestoreValue(key, map, "ProxyEnable", true);
                 RestoreValue(key, map, "ProxyServer", false);
                 RestoreValue(key, map, "ProxyOverride", false);

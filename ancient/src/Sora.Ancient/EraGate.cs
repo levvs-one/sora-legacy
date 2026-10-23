@@ -30,7 +30,7 @@ namespace Sora.Ancient
 
         public static void Refuse(string feature, string reason)
         {
-            throw new FormatException("Not available in the ancient (2018 engine) track: " + feature + ". " + reason);
+            throw new FormatException("Not supported in Sora Ancient: " + feature + ". " + reason);
         }
 
         public static void CheckScheme(string scheme)
@@ -42,25 +42,25 @@ namespace Sora.Ancient
                 case "socks":
                     return;
                 case "vless":
-                    Refuse("VLESS", "VLESS was introduced years after this engine (v2ray-core 4.34-era / Xray); it has no VLESS code at all.");
+                    Refuse("VLESS", "It appeared years after this engine.");
                     return;
                 case "trojan":
-                    Refuse("Trojan", "The Trojan protocol postdates this engine; its binary contains no Trojan implementation.");
+                    Refuse("Trojan", "It appeared years after this engine.");
                     return;
                 case "hysteria":
                 case "hysteria2":
                 case "hy2":
-                    Refuse("Hysteria", "Hysteria postdates this engine by years.");
+                    Refuse("Hysteria", "It appeared years after this engine.");
                     return;
                 case "tuic":
-                    Refuse("TUIC", "TUIC postdates this engine by years.");
+                    Refuse("TUIC", "It appeared years after this engine.");
                     return;
                 case "wireguard":
                 case "wg":
-                    Refuse("WireGuard outbound", "This engine has no WireGuard implementation.");
+                    Refuse("WireGuard outbound", "It appeared years after this engine.");
                     return;
                 default:
-                    Refuse("scheme '" + scheme + "'", "Only vmess://, ss:// and socks:// links belong to this engine's era.");
+                    Refuse("scheme '" + scheme + "'", "Only vmess://, ss:// and socks:// links are supported.");
                     return;
             }
         }
@@ -68,23 +68,23 @@ namespace Sora.Ancient
         public static void CheckServer(ServerEntry e)
         {
             if (Array.IndexOf(Protocols, e.Protocol) < 0)
-                Refuse("protocol '" + e.Protocol + "'", "Era protocols: vmess, shadowsocks, socks.");
+                Refuse("protocol '" + e.Protocol + "'", "Only VMess, Shadowsocks and SOCKS are supported.");
             if (e.Protocol == "vmess")
             {
                 Guid g;
                 if (!Guid.TryParse(e.Uuid, out g))
-                    throw new FormatException("VMess user ID is not a valid UUID.");
+                    throw new FormatException("VMess user ID is invalid.");
                 if (Array.IndexOf(Networks, e.Network) < 0)
-                    Refuse("transport '" + e.Network + "'", "Era transports proven on the pinned engine: tcp, ws, kcp, h2. QUIC is not in this engine (its config loader rejects it by name), XHTTP did not exist.");
+                    Refuse("transport '" + e.Network + "'", "Only TCP, WebSocket, KCP and HTTP/2 are supported here.");
                 if (Array.IndexOf(VmessSecurities, e.Security) < 0)
-                    Refuse("VMess security '" + e.Security + "'", "Era values: auto, none, aes-128-gcm, chacha20-poly1305.");
+                    Refuse("VMess security '" + e.Security + "'", "Supported values are auto, none, aes-128-gcm and chacha20-poly1305.");
                 if (e.AlterId < 0 || e.AlterId > 65535)
                     throw new FormatException("VMess alterId is out of range.");
             }
             if (e.Protocol == "shadowsocks")
             {
                 if (Array.IndexOf(ShadowsocksMethods, e.Method) < 0)
-                    Refuse("Shadowsocks method '" + e.Method + "'", "It is not in the pinned engine (proven by config test). SS-2022 methods in particular did not exist in 2018.");
+                    Refuse("Shadowsocks method '" + e.Method + "'", "It is not supported by this engine.");
                 if (string.IsNullOrEmpty(e.Password))
                     throw new FormatException("Shadowsocks password is empty.");
             }

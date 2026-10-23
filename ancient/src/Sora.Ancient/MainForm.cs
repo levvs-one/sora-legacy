@@ -42,7 +42,7 @@ namespace Sora.Ancient
 
             var bottom = new FlowLayoutPanel();
             bottom.Dock = DockStyle.Bottom;
-            bottom.Height = 72;
+            bottom.Height = 34;
             _connect.Text = "Connect";
             _connect.Width = 110;
             _connect.Click += delegate { Connect(); };
@@ -53,16 +53,30 @@ namespace Sora.Ancient
             _useSystemProxy.Text = "Set system proxy while connected";
             _useSystemProxy.Checked = true;
             _useSystemProxy.AutoSize = true;
-            _status.AutoSize = true;
-            _status.Text = "Idle. Engine: checking…";
             bottom.Controls.Add(_connect);
             bottom.Controls.Add(_disconnect);
             bottom.Controls.Add(_useSystemProxy);
-            bottom.Controls.Add(_status);
 
+            // The status line gets its own full-width row under the
+            // buttons. Inside the wrapping button panel the longer
+            // states (the connected line names both local ports) were
+            // clipped at the form's minimum width; on its own row the
+            // text has the whole width, and AutoEllipsis ends it
+            // cleanly instead of cutting a glyph in half.
+            _status.Dock = DockStyle.Bottom;
+            _status.Height = 22;
+            _status.AutoEllipsis = true;
+            _status.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
+            _status.Padding = new Padding(4, 0, 0, 0);
+            _status.Text = "Not connected.";
+
+            // Docking fills in reverse add order: the status row is
+            // added last, so it takes the bottom edge and the button
+            // panel stacks directly above it.
             Controls.Add(_servers);
             Controls.Add(top);
             Controls.Add(bottom);
+            Controls.Add(_status);
 
             FormClosing += delegate { Disconnect(false); };
 
@@ -71,8 +85,8 @@ namespace Sora.Ancient
             RefreshList();
             string engine = EngineRunner.FindEngine(AppDomain.CurrentDomain.BaseDirectory);
             _status.Text = engine == null
-                ? "Idle. Era engine not staged yet (see stage-engines script)."
-                : "Idle. Engine: v2ray-core v3.36 (pinned, digest-verified at staging).";
+                ? "Not connected. The connection engine is missing."
+                : "Not connected.";
         }
 
         private static Button MakeButton(string text, EventHandler onClick)
@@ -122,7 +136,9 @@ namespace Sora.Ancient
                 _entries.AddRange(parsed);
                 ServerStore.Save(_entries);
                 RefreshList();
-                _status.Text = "Subscription imported: " + parsed.Count + " era server(s).";
+                _status.Text = parsed.Count == 1
+                    ? "Subscription imported: 1 server."
+                    : "Subscription imported: " + parsed.Count + " servers.";
             }
             catch (WebException) { ShowError("Subscription download failed (network or TLS). Nothing was imported."); }
             catch (FormatException ex) { ShowError(ex.Message); }
@@ -152,12 +168,12 @@ namespace Sora.Ancient
                 _connected = true;
                 _connect.Enabled = false;
                 _disconnect.Enabled = true;
-                _status.Text = "Connected via SOCKS 127.0.0.1:" + ConfigBuilder.DefaultSocksPort +
-                               " / HTTP 127.0.0.1:" + ConfigBuilder.DefaultHttpPort + " (proxy mode; TUN is not part of this track).";
+                _status.Text = "Connected: SOCKS 127.0.0.1:" + ConfigBuilder.DefaultSocksPort +
+                               ", HTTP 127.0.0.1:" + ConfigBuilder.DefaultHttpPort + ". Proxy mode — no TUN.";
             }
             catch (FormatException ex) { ShowError(ex.Message); }
             catch (InvalidOperationException ex) { ShowError(ex.Message); }
-            catch (IOException) { ShowError("Could not write the runtime config file."); }
+            catch (IOException) { ShowError("Could not save the file needed to connect."); }
         }
 
         private void Disconnect(bool updateUi)
@@ -170,7 +186,7 @@ namespace Sora.Ancient
             {
                 _connect.Enabled = true;
                 _disconnect.Enabled = false;
-                _status.Text = "Disconnected. System proxy restored.";
+                _status.Text = "Disconnected.";
             }
         }
 
@@ -195,21 +211,50 @@ namespace Sora.Ancient
             {
                 form.Text = title;
                 form.Width = 520;
-                form.Height = 150;
+                form.Height = 156;
                 form.StartPosition = FormStartPosition.CenterParent;
+                // A fixed input dialog: not resizable, no min/max boxes.
+                form.FormBorderStyle = FormBorderStyle.FixedDialog;
+                form.MaximizeBox = false;
+                form.MinimizeBox = false;
                 var text = new TextBox();
                 text.Dock = DockStyle.Top;
                 var caption = new Label();
                 caption.Text = label;
                 caption.Dock = DockStyle.Top;
+                caption.AutoSize = true;
+                caption.Padding = new Padding(4, 6, 0, 2);
+                // Standard era dialog buttons: OK / Cancel at the usual
+                // 75 px, bottom right (in the old full-width bottom bar
+                // OK stretched across the whole dialog). Cancel also
+                // gives the dialog its Esc key.
+                var buttons = new FlowLayoutPanel();
+                buttons.Dock = DockStyle.Bottom;
+                buttons.Height = 37;
+                buttons.FlowDirection = FlowDirection.RightToLeft;
+                buttons.Padding = new Padding(6);
                 var ok = new Button();
                 ok.Text = "OK";
+                ok.Width = 75;
                 ok.DialogResult = DialogResult.OK;
-                ok.Dock = DockStyle.Bottom;
+                var cancel = new Button();
+                cancel.Text = "Cancel";
+                cancel.Width = 75;
+                cancel.DialogResult = DialogResult.Cancel;
+                // Right-to-left flow: the first control added sits at
+                // the right edge, so Cancel goes in first and OK ends
+                // up directly left of it.
+                buttons.Controls.Add(cancel);
+                buttons.Controls.Add(ok);
+                // Docking fills in reverse add order: the button panel
+                // is added last, so it takes the bottom edge, the
+                // caption takes the top, and the text box sits under
+                // the caption.
                 form.Controls.Add(text);
                 form.Controls.Add(caption);
-                form.Controls.Add(ok);
+                form.Controls.Add(buttons);
                 form.AcceptButton = ok;
+                form.CancelButton = cancel;
                 return form.ShowDialog() == DialogResult.OK && text.Text.Trim().Length > 0 ? text.Text : null;
             }
         }

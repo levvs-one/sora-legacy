@@ -28,7 +28,7 @@ namespace Sora.Ancient
         {
             Stop();
             if (enginePath == null || !File.Exists(enginePath))
-                throw new InvalidOperationException("Era engine (v2ray.exe) not found. Stage it with stage-engines.sh / stage-engines.ps1 first.");
+                throw new InvalidOperationException("The connection engine is missing, so Sora cannot connect.");
             var psi = new ProcessStartInfo();
             psi.FileName = enginePath;
             psi.Arguments = "-config " + Quote(configPath);
@@ -38,16 +38,15 @@ namespace Sora.Ancient
             psi.RedirectStandardOutput = true;
             psi.RedirectStandardError = true;
             try { _process = Process.Start(psi); }
-            catch (Exception) { throw new InvalidOperationException("Era engine failed to start."); }
-            if (_process == null) throw new InvalidOperationException("Era engine failed to start.");
+            catch (Exception) { throw new InvalidOperationException("The connection engine failed to start."); }
+            if (_process == null) throw new InvalidOperationException("The connection engine failed to start.");
             _process.BeginOutputReadLine();
             _process.BeginErrorReadLine();
             System.Threading.Thread.Sleep(600);
             if (_process.HasExited)
             {
-                int code = _process.ExitCode;
                 _process = null;
-                throw new InvalidOperationException("Era engine exited immediately (code " + code + "). Check config and engine log.");
+                throw new InvalidOperationException("The connection engine stopped right after starting.");
             }
         }
 

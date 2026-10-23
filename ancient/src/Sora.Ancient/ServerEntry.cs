@@ -32,7 +32,7 @@ namespace Sora.Ancient
             get
             {
                 string n = string.IsNullOrEmpty(Name) ? Address : Name;
-                return n + "  [" + Protocol + " " + Address + ":" + Port + "]";
+                return n + " [" + Protocol + " " + Address + ":" + Port + "]";
             }
         }
 

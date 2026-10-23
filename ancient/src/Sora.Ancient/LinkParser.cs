@@ -32,11 +32,11 @@ namespace Sora.Ancient
         //  "net":..,"type":..,"host":..,"path":..,"tls":..,"sni":..}
         private static ServerEntry ParseVmess(string payload)
         {
-            string json = DecodeBase64(payload, "VMess link payload is not valid base64.");
+            string json = DecodeBase64(payload, "This VMess link is damaged and cannot be read.");
             Dictionary<string, object> map;
             try { map = JsonMini.Parse(json) as Dictionary<string, object>; }
-            catch (FormatException) { throw new FormatException("VMess link payload is not a JSON object."); }
-            if (map == null) throw new FormatException("VMess link payload is not a JSON object.");
+            catch (FormatException) { throw new FormatException("This VMess link is damaged and cannot be read."); }
+            if (map == null) throw new FormatException("This VMess link is damaged and cannot be read.");
             var e = new ServerEntry();
             e.Protocol = "vmess";
             e.Name = JsonMini.GetString(map, "ps", "");
@@ -54,7 +54,7 @@ namespace Sora.Ancient
             e.Sni = JsonMini.GetString(map, "sni", "");
             string streamSecurity = JsonMini.GetString(map, "tls", "").ToLowerInvariant();
             if (streamSecurity == "reality" || streamSecurity == "xtls")
-                EraGate.Refuse(streamSecurity.ToUpperInvariant(), "It postdates this engine; the pinned binary contains no such code (verified by binary scan, not just config test).");
+                EraGate.Refuse(streamSecurity.ToUpperInvariant(), "It appeared years after this engine.");
             e.Validate();
             return e;
         }
@@ -78,7 +78,7 @@ namespace Sora.Ancient
             if (at >= 0 && body.IndexOf('@') == at && IsBase64ish(body.Substring(0, at)) && body.Substring(at + 1).IndexOf(':') > 0 && !body.Substring(0, at).Contains(":"))
             {
                 // SIP002
-                string creds = DecodeBase64(Uri.UnescapeDataString(body.Substring(0, at)), "Shadowsocks link is malformed.");
+                string creds = DecodeBase64(Uri.UnescapeDataString(body.Substring(0, at)), "This Shadowsocks link is damaged and cannot be read.");
                 SplitCreds(creds, out method, out password);
                 // The query (?plugin=...) sits AFTER host:port in a SIP002
                 // link, so it must be separated BEFORE SplitHostPort:
@@ -91,14 +91,14 @@ namespace Sora.Ancient
                 if (q >= 0) { query = hostPort.Substring(q + 1); hostPort = hostPort.Substring(0, q); }
                 hostPort = hostPort.TrimEnd('/');
                 if (query.IndexOf("plugin=", StringComparison.OrdinalIgnoreCase) >= 0)
-                    EraGate.Refuse("Shadowsocks plugins", "The pinned engine has no SIP003 plugin runtime; a plugin link would not behave as its author intended.");
+                    EraGate.Refuse("Shadowsocks plugins", "Plugins are not supported by this engine.");
                 SplitHostPort(hostPort, out host, out port);
             }
             else
             {
-                string decoded = DecodeBase64(body, "Shadowsocks link is malformed.");
+                string decoded = DecodeBase64(body, "This Shadowsocks link is damaged and cannot be read.");
                 int credEnd = decoded.LastIndexOf('@');
-                if (credEnd < 0) throw new FormatException("Shadowsocks link is malformed.");
+                if (credEnd < 0) throw new FormatException("This Shadowsocks link is damaged and cannot be read.");
                 SplitCreds(decoded.Substring(0, credEnd), out method, out password);
                 SplitHostPort(decoded.Substring(credEnd + 1), out host, out port);
             }
@@ -142,13 +142,13 @@ namespace Sora.Ancient
 
         public static List<ServerEntry> ParseSubscriptionBody(string body)
         {
-            if (body == null) throw new FormatException("Subscription body is empty.");
+            if (body == null) throw new FormatException("The subscription is empty.");
             string text = body.Trim();
             // Era subscriptions are a base64 document of newline-separated
             // links; a plain-text list is accepted too.
             if (!text.Contains("://"))
             {
-                text = DecodeBase64(text, "Subscription body is not valid base64.");
+                text = DecodeBase64(text, "This subscription could not be read.");
             }
             var result = new List<ServerEntry>();
             var errors = new List<string>();
@@ -161,8 +161,8 @@ namespace Sora.Ancient
             }
             if (result.Count == 0)
                 throw new FormatException(errors.Count > 0
-                    ? "No usable era servers in subscription. First refusal: " + errors[0]
-                    : "No servers in subscription.");
+                    ? "No supported servers in the subscription. " + errors[0]
+                    : "No servers in the subscription.");
             return result;
         }
 
@@ -185,7 +185,7 @@ namespace Sora.Ancient
         private static void SplitCreds(string creds, out string method, out string password)
         {
             int colon = creds.IndexOf(':');
-            if (colon < 0) throw new FormatException("Credentials are malformed (no ':' separator).");
+            if (colon < 0) throw new FormatException("The link's login details are incomplete.");
             method = creds.Substring(0, colon);
             password = creds.Substring(colon + 1);
         }
