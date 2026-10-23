@@ -81,7 +81,7 @@ namespace Sora.Ancient
             FormClosing += delegate { Disconnect(false); };
 
             try { _entries = ServerStore.Load(); }
-            catch (FormatException ex) { _status.Text = ex.Message; }
+            catch (FormatException) { /* Damaged store: start with the empty list. */ }
             RefreshList();
             string engine = EngineRunner.FindEngine(AppDomain.CurrentDomain.BaseDirectory);
             _status.Text = engine == null
