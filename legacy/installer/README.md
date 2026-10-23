@@ -11,7 +11,7 @@
 ## Профили и версия
 
 - Целевая система задаётся профилем сборки: `WindowsTarget` — `win7` (по умолчанию, отображение «Windows 7 SP1»), `win8`, `win10`, `win11`; вместе с ней меняются `WindowsDisplayName` и `MinimumWindowsVersion`.
-- Версия продукта задаётся одним местом: `#define MyAppVersion` в начале `Sora.iss`. Текущая версия — 0.2.3; то же значение стоит во всех build-источниках репозитория: корневой CHANGELOG, `v2rayN.csproj` (`Version`/`AssemblyVersion`/`FileVersion`), примеры команд упаковки Linux и CI Linux-пакетов (`.github/workflows/legacy.yml`, `SORA_VERSION`). Android следует версии продукта: `versionName` равен ей (0.2.3), а `versionCode` производен от неё как major*10000+minor*100+patch (203) и задаётся в `android/app/build.gradle.kts` и `android/tools/build-manual.sh`. Apple `MARKETING_VERSION` — счётчик со своей конвенцией, версией продукта не является.
+- Версия продукта задаётся одним местом: `#define MyAppVersion` в начале `Sora.iss`. Текущая версия — 0.2.4; то же значение стоит во всех build-источниках репозитория: корневой CHANGELOG, `v2rayN.csproj` (`Version`/`AssemblyVersion`/`FileVersion`), примеры команд упаковки Linux и CI Linux-пакетов (`.github/workflows/legacy.yml`, `SORA_VERSION`). Android следует версии продукта: `versionName` равен ей (0.2.4), а `versionCode` производен от неё как major*10000+minor*100+patch (204) и задаётся в `android/app/build.gradle.kts` и `android/tools/build-manual.sh`. Apple `MARKETING_VERSION` — счётчик со своей конвенцией, версией продукта не является.
 - Иконка установщика — `sora.ico` из комплекта (семейный знак, 7 образов 16–256).
 
 ## Оформление мастера

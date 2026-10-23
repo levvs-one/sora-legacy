@@ -6,11 +6,11 @@ plugins {
 // Product version, aligned with the repository release. This is the
 // single source for the app version: versionName takes it verbatim
 // and versionCode is computed from it as
-// major*10000 + minor*100 + patch (0.2.3 -> 203), so the code grows
+// major*10000 + minor*100 + patch (0.2.4 -> 204), so the code grows
 // monotonically with every release. tools/build-manual.sh reads
 // productVersionName from this file and applies the same rule —
 // neither pipeline carries a second version literal.
-val productVersionName = "0.2.3"
+val productVersionName = "0.2.4"
 val productVersionCode = productVersionName.split(".").let { parts ->
     parts[0].toInt() * 10000 + parts[1].toInt() * 100 + parts[2].toInt()
 }

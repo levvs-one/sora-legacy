@@ -1,5 +1,5 @@
 #define MyAppName "Sora"
-#define MyAppVersion "0.2.3"
+#define MyAppVersion "0.2.4"
 #ifndef WindowsTarget
   #define WindowsTarget "win7"
 #endif
