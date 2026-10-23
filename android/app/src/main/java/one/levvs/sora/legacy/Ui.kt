@@ -7,18 +7,40 @@ import android.view.ViewGroup
 import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 
 /** Small framework-View helpers: the whole UI is built in code, so
  *  there are no layout XML files and no view-binding/AAPT layout
- *  surface beyond strings and the theme. */
-fun Activity.contentColumn(): LinearLayout {
-    val column = LinearLayout(this).apply {
+ *  surface beyond strings and the theme.
+ *
+ *  One spacing scale for the whole client: padding and margins are
+ *  8 or 16 dp, nothing in between; text sizes use the framework
+ *  steps 12 / 14 / 16 / 20 / 24 sp at the call sites. */
+private fun Activity.newColumn(): LinearLayout =
+    LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL
         setPadding(dp(16), dp(16), dp(16), dp(16))
     }
+
+fun Activity.contentColumn(): LinearLayout {
+    val column = newColumn()
     setContentView(column)
+    return column
+}
+
+/** Same column inside a ScrollView: screens whose content height is
+ *  not bounded by a flexible child (status + log, settings + engine
+ *  summary) must stay reachable on short viewports — landscape,
+ *  split-screen, large font scale — instead of clipping the tail. */
+fun Activity.scrollableContentColumn(): LinearLayout {
+    val column = newColumn()
+    val scroll = ScrollView(this).apply {
+        addView(column, ViewGroup.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+    }
+    setContentView(scroll)
     return column
 }
 
@@ -28,7 +50,7 @@ fun LinearLayout.label(text: String, sizeSp: Float = 16f): TextView {
     val view = TextView(context).apply {
         this.text = text
         textSize = sizeSp
-        setPadding(0, context.dp(6), 0, context.dp(6))
+        setPadding(0, context.dp(8), 0, context.dp(8))
     }
     addView(view, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
     return view
@@ -40,7 +62,7 @@ fun LinearLayout.button(text: String, onClick: (View) -> Unit): Button {
         setOnClickListener(onClick)
     }
     val params = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
-    params.topMargin = context.dp(6)
+    params.topMargin = context.dp(8)
     addView(view, params)
     return view
 }

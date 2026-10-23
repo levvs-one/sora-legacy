@@ -27,8 +27,8 @@ class MainActivity : Activity() {
         go.Seq.setContext(applicationContext)
         store = ServerStore(this)
 
-        val column = contentColumn()
-        column.label(getString(R.string.app_name), 22f)
+        val column = scrollableContentColumn()
+        column.label(getString(R.string.app_name), 24f)
         // Real initial state, not a symbol placeholder: the client
         // starts STOPPED, and refresh() recomputes both labels from
         // the store and VpnState on every resume.

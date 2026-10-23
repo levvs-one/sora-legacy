@@ -31,7 +31,7 @@ class SettingsActivity : Activity() {
         go.Seq.setContext(applicationContext)
         store = ServerStore(this)
 
-        val column = contentColumn()
+        val column = scrollableContentColumn()
         column.label(getString(R.string.local_port_label), 14f)
         portInput = column.input("", number = true)
         portInput.setText(store.localPort().toString())
@@ -43,13 +43,18 @@ class SettingsActivity : Activity() {
         strictSwitch = Switch(this).apply {
             text = getString(R.string.strict_route_label)
             isChecked = store.strictRoute()
+            setPadding(0, context.dp(8), 0, context.dp(8))
         }
-        column.addView(strictSwitch)
+        // Same row geometry as every builder-made row (full width),
+        // not the default wrap_content the raw addView used to get.
+        column.addView(strictSwitch, android.widget.LinearLayout.LayoutParams(
+            android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+            android.view.ViewGroup.LayoutParams.WRAP_CONTENT))
 
         column.button(getString(R.string.save_button)) { save() }
 
-        column.label(getString(R.string.engine_label), 18f)
-        val engineView: TextView = column.label("", 13f)
+        column.label(getString(R.string.engine_label), 20f)
+        val engineView: TextView = column.label("", 14f)
         engineView.text = engineSummary()
     }
 
@@ -93,7 +98,8 @@ class SettingsActivity : Activity() {
             }
             val preference = info.optJSONArray("default_preference")
             if (preference != null) {
-                out.append(getString(R.string.engine_default_preference, joinArray(preference)))
+                out.append('\n')
+                    .append(getString(R.string.engine_default_preference, joinArray(preference)))
             }
         } catch (e: Exception) {
             Log.w(TAG, "engine catalog unavailable", e)

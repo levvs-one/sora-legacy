@@ -27,7 +27,7 @@
     <!-- Servers screen -->
     <string name="imported_servers_hint">Imported servers (tap to select, long-press to delete)</string>
     <string name="import_text_label">Import links or subscription text</string>
-    <string name="import_input_hint">Paste vless://… / trojan://… links, a subscription body, a Clash or sing-box document</string>
+    <string name="import_input_hint">vless://… / trojan://…</string>
     <string name="import_links_button">Import links</string>
     <string name="import_subscription_button">Import as subscription document</string>
     <string name="subscription_url_label">Subscription URL</string>
@@ -44,9 +44,12 @@
     <string name="subscription_failed_toast">Subscription failed. Check the URL and try again.</string>
 
     <!-- Settings screen -->
-    <string name="local_port_label">Local proxy port (plan local_port, 1–65535)</string>
-    <string name="tun_mtu_label">TUN MTU (tun inbound mtu, 576–9000)</string>
-    <string name="strict_route_label">Strict route (tun inbound strict_route)</string>
+    <!-- Field labels carry the human name and the allowed range
+         only; the mapping to plan / tun-inbound fields is documented
+         in SettingsActivity's header comment, not in the UI. -->
+    <string name="local_port_label">Local proxy port (1–65535)</string>
+    <string name="tun_mtu_label">TUN MTU (576–9000)</string>
+    <string name="strict_route_label">Strict route</string>
     <string name="save_button">Save (applies on next connect)</string>
     <string name="engine_label">Engine</string>
     <string name="local_port_invalid_toast">Local port must be a number in 1–65535.</string>
@@ -55,9 +58,9 @@
     <string name="engine_libbox_line">sing-box (libbox): %1$s</string>
     <string name="engine_libbox_unavailable">sing-box (libbox): unavailable</string>
     <string name="engine_min_version"> ≥ %1$s</string>
-    <string name="engine_protocols_line">  protocols: %1$s</string>
-    <string name="engine_features_line">  features: %1$s</string>
-    <string name="engine_default_preference">\ndefault preference: %1$s</string>
+    <string name="engine_protocols_line">protocols: %1$s</string>
+    <string name="engine_features_line">features: %1$s</string>
+    <string name="engine_default_preference">default preference: %1$s</string>
     <string name="engine_catalog_unavailable">core catalog unavailable.</string>
 
     <!-- VPN service -->
