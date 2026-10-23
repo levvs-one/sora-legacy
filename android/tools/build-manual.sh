@@ -94,7 +94,7 @@ MOBILE_JAR="$WORK/mobileapi-classes.jar"
     --manifest "$MANIFEST" \
     --java "$WORK/gen" \
     --min-sdk-version "$MIN_SDK" --target-sdk-version 34 \
-    --version-code 1 --version-name 0.1.0 \
+    --version-code 203 --version-name 0.2.3 \
     -o "$WORK/base.apk" "$WORK/res.zip"
 
 # --- 3. Kotlin -> classes ----------------------------------------------

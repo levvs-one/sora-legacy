@@ -16,8 +16,14 @@ android {
         // See README.md ("Why minSdk 21").
         minSdk = 21
         targetSdk = 34
-        versionCode = 1
-        versionName = "0.1.0"
+        // Product version, aligned with the repository release (0.2.3).
+        // versionCode is derived from the version as
+        // major*10000 + minor*100 + patch (0.2.3 -> 203), so it grows
+        // monotonically with every release. The API 19 tier is built by
+        // the same manual pipeline with the same values (only minSdk,
+        // AARs and ABIs differ), so both tiers carry this one code.
+        versionCode = 203
+        versionName = "0.2.3"
         ndk {
             // Both AARs ship exactly these four ABIs.
             abiFilters += listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
