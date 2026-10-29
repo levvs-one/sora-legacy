@@ -114,8 +114,8 @@ jobs:
           nfpm --version
       - name: Build the core service
         run: |
-          cd core && CGO_ENABLED=0 GOARCH=amd64 go build -trimpath -ldflags '-s -w' -o ../dist/sora-core ./cmd/sora-core
-          cd macos/helper && CGO_ENABLED=0 GOARCH=amd64 go build -trimpath -ldflags '-s -w' -o ../../dist/sora-ctl .
+          cd core && CGO_ENABLED=0 GOARCH=amd64 go build -trimpath -ldflags '-s -w' -o ../dist/sora-core ./cmd/sora-core && cd ..
+          cd macos/helper && CGO_ENABLED=0 GOARCH=amd64 go build -trimpath -ldflags '-s -w' -o ../../dist/sora-ctl . && cd ../..
       - name: Fetch engines and build zapret
         run: |
           packaging/engines/fetch.sh amd64 dist/engines
