@@ -41,13 +41,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-      - uses: google/osv-scanner-action/osv-scanner-action@375a0e8ebdc98e99b02ac4338a724f5750f21213 # v2.3.1
+      # The action image brings the Go toolchain for osv-scanner's call
+      # analysis (govulncheck), and it has to be at least the go line of
+      # core/go.mod: v2.3.1 shipped Go 1.25.5, could not load the module,
+      # and failed the job even on advisories the core never reaches.
+      # v2.7.0 runs on Go 1.27.1.
+      - uses: google/osv-scanner-action/osv-scanner-action@b1d267aea5211fa648d9d442fa64b90dbdcbdd36 # v2.7.0
         with:
           # osv-scanner 2 reads Go dependencies from go.mod; go.sum alone has no
-          # extractor, and --skip-gitignore no longer exists. core/osv-scanner.toml
-          # lists the advisories that do not apply, each with a reason and expiry.
+          # extractor, and --skip-gitignore no longer exists.
           scan-args: |-
-            --config=core/osv-scanner.toml
             --lockfile=go.mod:core/go.mod
 
   codeql:
