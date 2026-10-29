@@ -44,8 +44,10 @@ jobs:
       - uses: google/osv-scanner-action/osv-scanner-action@375a0e8ebdc98e99b02ac4338a724f5750f21213 # v2.3.1
         with:
           # osv-scanner 2 reads Go dependencies from go.mod; go.sum alone has no
-          # extractor, and --skip-gitignore no longer exists.
+          # extractor, and --skip-gitignore no longer exists. core/osv-scanner.toml
+          # lists the advisories that do not apply, each with a reason and expiry.
           scan-args: |-
+            --config=core/osv-scanner.toml
             --lockfile=go.mod:core/go.mod
 
   codeql:

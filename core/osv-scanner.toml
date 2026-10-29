@@ -1,0 +1,14 @@
+# Exceptions for the Advisory database job (.github/workflows/security.yml).
+# Each entry names the advisory, why it does not apply to this module, and an
+# expiry date after which the job fails again and the exception is re-checked.
+
+# golang.org/x/crypto/openpgp is deprecated as a whole package, so the advisory
+# covers every x/crypto version and has no fixed release. x/crypto comes in
+# through github.com/refraction-networking/utls, which uses chacha20poly1305,
+# hkdf, sha3 and cryptobyte only; no package of the core imports openpgp on any
+# GOOS (go list -deps -test ./... | grep x/crypto/openpgp is empty), and
+# govulncheck, which checks reachable symbols, does not report it.
+[[IgnoredVulns]]
+id = "GO-2026-5932"
+ignoreUntil = 2027-04-30
+reason = "x/crypto/openpgp is never imported; the advisory has no fixed x/crypto version"
