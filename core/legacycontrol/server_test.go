@@ -1,11 +1,13 @@
 package legacycontrol
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/json"
 	"errors"
+	"io"
 	"net"
 	"testing"
 	"time"
@@ -68,7 +70,11 @@ func testClient(t *testing.T, notify func(*jrpc2.Request)) *jrpc2.Client {
 	t.Cleanup(func() {
 		_ = client.Close()
 		select {
-		case <-finished:
+		case err := <-finished:
+			// The pipe closing under a pending read is a clean end too.
+			if err != nil && !errors.Is(err, io.ErrClosedPipe) {
+				t.Errorf("serveConnection() = %v after the client closed", err)
+			}
 		case <-time.After(2 * time.Second):
 			t.Error("server retained the disconnected client")
 		}
@@ -191,7 +197,10 @@ func TestOversizedFrameClosesConnection(t *testing.T) {
 	_ = client.SetWriteDeadline(time.Now().Add(2 * time.Second))
 	_, _ = client.Write(bytes.Repeat([]byte{'x'}, requestLimit+1))
 	select {
-	case <-finished:
+	case err := <-finished:
+		if !errors.Is(err, bufio.ErrTooLong) {
+			t.Errorf("serveConnection() = %v, want the frame limit", err)
+		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("oversized request retained its connection")
 	}
@@ -230,12 +239,20 @@ func TestServiceCancellationClosesActiveConnection(t *testing.T) {
 	}
 	cancel()
 	select {
-	case <-finished:
+	case err := <-finished:
+		// Cancellation closes the pipe under the pending read.
+		if err != nil && !errors.Is(err, io.ErrClosedPipe) {
+			t.Errorf("serveConnection() = %v after the service stopped", err)
+		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("service cancellation retained the connection")
 	}
 	select {
-	case <-watch:
+	case err := <-watch:
+		// The watch either ends cleanly or reports the cancellation.
+		if err != nil && !errors.Is(err, context.Canceled) {
+			t.Errorf("WatchLogs() = %v after the service stopped", err)
+		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("service cancellation retained the watch")
 	}

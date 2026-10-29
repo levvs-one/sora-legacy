@@ -542,7 +542,7 @@ func TestImportedHeaderNullValuesAreAbsent(t *testing.T) {
 			name: "ws-opts headers: null among valid values",
 			spec: parser.OutboundSpec{Protocol: "vless", Host: "edge.example.com", Port: 443, UUID: sp6bUUID,
 				Options: map[string]string{"ws-opts": `{"path":"/ws-path","headers":{"Host":"cdn.example.com","X-Custom":null}}`}},
-			check: func(t *testing.T, resolved parser.OutboundSpec, headers map[string]string) {
+			check: func(t *testing.T, _ parser.OutboundSpec, headers map[string]string) {
 				if len(headers) != 1 || headers["Host"] != "cdn.example.com" {
 					t.Errorf("headers = %v, want only the valid Host header", headers)
 				}
@@ -555,7 +555,7 @@ func TestImportedHeaderNullValuesAreAbsent(t *testing.T) {
 			name: "h2-opts headers: null among valid values",
 			spec: parser.OutboundSpec{Protocol: "vless", Host: "edge.example.com", Port: 443, UUID: sp6bUUID,
 				Options: map[string]string{"h2-opts": `{"path":"/h2-path","headers":{"X-Custom":null,"X-Trace":"trace-1"}}`}},
-			check: func(t *testing.T, resolved parser.OutboundSpec, headers map[string]string) {
+			check: func(t *testing.T, _ parser.OutboundSpec, headers map[string]string) {
 				if len(headers) != 1 || headers["X-Trace"] != "trace-1" {
 					t.Errorf("headers = %v, want only the valid header", headers)
 				}

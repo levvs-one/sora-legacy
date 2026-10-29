@@ -9,24 +9,25 @@ import (
 	"time"
 )
 
-// newJitterRand returns a rand source seeded from crypto/rand, falling back
-// to a time-based seed if the OS RNG is unavailable (it never is on the
-// platforms Sora targets, but jitter must never break a connection).
+// newJitterRand returns a ChaCha8 stream seeded from crypto/rand, falling
+// back to a time-based seed if the OS RNG is unavailable (it never is on the
+// platforms Sora targets, but jitter must never break a connection). ChaCha8
+// is a CSPRNG, so an observer of the write timing cannot predict the next
+// delay from the previous ones.
 func newJitterRand() *rand.Rand {
 	var seed [32]byte
 	if _, err := crand.Read(seed[:]); err != nil {
 		binary.LittleEndian.PutUint64(seed[:8], uint64(time.Now().UnixNano()))
 	}
-	pcg1, pcg2 := binary.LittleEndian.Uint64(seed[:8]), binary.LittleEndian.Uint64(seed[8:16])
-	return rand.New(rand.NewPCG(pcg1, pcg2))
+	return rand.New(rand.NewChaCha8(seed)) //nolint:gosec // ChaCha8 from a crypto/rand seed is a CSPRNG; G404 flags every math/rand source
 }
 
-// jitterDelay draws a uniform delay in [0, max].
-func jitterDelay(rng *rand.Rand, max time.Duration) time.Duration {
-	if max <= 0 {
+// jitterDelay draws a uniform delay in [0, limit].
+func jitterDelay(rng *rand.Rand, limit time.Duration) time.Duration {
+	if limit <= 0 {
 		return 0
 	}
-	return time.Duration(rng.Int64N(int64(max) + 1))
+	return time.Duration(rng.Int64N(int64(limit) + 1))
 }
 
 // jitterConn is a net.Conn wrapper that sleeps a random uniform [0, max]

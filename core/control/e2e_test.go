@@ -3,6 +3,7 @@ package control_test
 import (
 	"bytes"
 	"context"
+	"errors"
 	"net"
 	"path/filepath"
 	"strings"
@@ -234,7 +235,11 @@ func TestClientTalksToTheCoreOverTheTransport(t *testing.T) {
 
 	cancel()
 	select {
-	case <-served:
+	case err := <-served:
+		// Cancellation closes the endpoint under grpc.Serve's Accept.
+		if !errors.Is(err, net.ErrClosed) {
+			t.Errorf("grpc.Serve() = %v, want the closed endpoint", err)
+		}
 	case <-time.After(5 * time.Second):
 		t.Error("the transport did not stop when the service did")
 	}

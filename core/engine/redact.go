@@ -227,8 +227,8 @@ func derivedForms(v string) []string {
 	plain := true
 	for i := 0; i < len(v); i++ {
 		c := v[i]
-		if !('a' <= c && c <= 'z' || 'A' <= c && c <= 'Z' || '0' <= c && c <= '9' ||
-			c == '-' || c == '_' || c == '.' || c == '~') {
+		if (c < 'a' || 'z' < c) && (c < 'A' || 'Z' < c) && (c < '0' || '9' < c) &&
+			c != '-' && c != '_' && c != '.' && c != '~' {
 			plain = false
 			break
 		}
@@ -352,7 +352,7 @@ func unicodeEscapeAll(v string, digits string) string {
 // writeUnicodeEscape writes one rune as \uXXXX in the given digit
 // case, or a surrogate pair for runes above U+FFFF.
 func writeUnicodeEscape(b *strings.Builder, r rune, digits string) {
-	put := func(u uint16) {
+	put := func(u rune) {
 		b.WriteString(`\u`)
 		for shift := 12; shift >= 0; shift -= 4 {
 			b.WriteByte(digits[(u>>uint(shift))&0x0f])
@@ -360,11 +360,11 @@ func writeUnicodeEscape(b *strings.Builder, r rune, digits string) {
 	}
 	if r > 0xffff {
 		r -= 0x10000
-		put(uint16(0xd800 + (r >> 10)))
-		put(uint16(0xdc00 + (r & 0x3ff)))
+		put(0xd800 + (r >> 10))
+		put(0xdc00 + (r & 0x3ff))
 		return
 	}
-	put(uint16(r))
+	put(r)
 }
 
 // upperUnicodeHexDigits uppercases the four hex digits of every
@@ -395,7 +395,7 @@ func upperUnicodeHexDigits(s string) string {
 		ok := true
 		for j := i + 2; j <= i+5; j++ {
 			c := b[j]
-			if !('0' <= c && c <= '9' || 'a' <= c && c <= 'f' || 'A' <= c && c <= 'F') {
+			if (c < '0' || '9' < c) && (c < 'a' || 'f' < c) && (c < 'A' || 'F' < c) {
 				ok = false
 				break
 			}

@@ -140,7 +140,7 @@ func (pr Prober) Discover(ctx context.Context, enginesDir string) (Binary, error
 				lastErr = fmt.Errorf("%s: not listed in %s", candidate, digestManifestName)
 				continue
 			}
-			raw, err := os.ReadFile(candidate)
+			raw, err := os.ReadFile(candidate) //nolint:gosec // candidates are the Sora engines dir or an operator-set env var
 			if err != nil {
 				lastErr = fmt.Errorf("%s: read binary: %w", candidate, err)
 				continue
@@ -166,7 +166,7 @@ func (pr Prober) Discover(ctx context.Context, enginesDir string) (Binary, error
 // file name) from dir. It returns the name-to-digest map, or an error when
 // the manifest is missing or malformed.
 func LoadDigests(dir string) (map[string]string, error) {
-	raw, err := os.ReadFile(filepath.Join(dir, digestManifestName))
+	raw, err := os.ReadFile(filepath.Join(dir, digestManifestName)) //nolint:gosec // a fixed manifest name inside the engines directory
 	if err != nil {
 		return nil, err
 	}

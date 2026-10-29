@@ -218,7 +218,7 @@ func TestImportedBlobsSurviveToThePlan(t *testing.T) {
 				"  - name: clash-grpc\n    type: vless\n    server: grpc.example.com\n    port: 443\n" +
 				"    uuid: " + uuid + "\n    network: grpc\n    tls: true\n    servername: grpc.example.com\n" +
 				"    grpc-opts: {grpc-service-name: grpc-service}\n",
-			check: func(t *testing.T, wire *corev1.OutboundSpec, o engine.Outbound) {
+			check: func(t *testing.T, _ *corev1.OutboundSpec, o engine.Outbound) {
 				t.Helper()
 				if o.Transport.Type != "grpc" || o.Transport.Service != "grpc-service" {
 					t.Errorf("grpc transport lost on the way to the engine: %+v", o.Transport)
@@ -234,7 +234,7 @@ func TestImportedBlobsSurviveToThePlan(t *testing.T) {
 				"  - name: clash-trojan\n    type: trojan\n    server: tj.example.com\n    port: 443\n" +
 				"    password: secret-pass\n    network: ws\n    sni: sni.example.com\n" +
 				"    ws-opts: {path: /tj, headers: {Host: tjcdn.example.com}}\n",
-			check: func(t *testing.T, wire *corev1.OutboundSpec, o engine.Outbound) {
+			check: func(t *testing.T, _ *corev1.OutboundSpec, o engine.Outbound) {
 				t.Helper()
 				if o.Password != "secret-pass" {
 					t.Errorf("password = %q", o.Password)
