@@ -25,13 +25,15 @@ param(
 $ErrorActionPreference = 'Stop'
 
 $SdkArchiveUrl = 'https://github.com/XTLS/go-win7/releases/download/current/go-win7-win6-1.26.zip'
-$SdkArchiveSha256 = '4a8ea74640bcdf608fbe351b3eaa5715685b18ec0b0d27e8d59608ade86c8397'
+$SdkArchiveSha256 = '661a35da1e2ba6f9f9e281af98a29a203166115b6da74825938a6d2b101982b1'
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $coreDir = Join-Path $repoRoot 'core'
 
 # The SDK VERSION must equal the toolchain core/go.mod asks for; CI
-# pins the same pair (this archive carries go1.26.9, go.mod says so).
+# pins the same pair (this archive carries go1.26.10, go.mod says so).
+# Upstream replaces the `current` asset on every Go point release, so a
+# SHA-256 mismatch means the pair has to move forward together.
 $goModVersion = $null
 foreach ($line in Get-Content (Join-Path $coreDir 'go.mod')) {
     if ($line -match '^go\s+(\d+\.\d+\.\d+)\s*$') { $goModVersion = $Matches[1]; break }

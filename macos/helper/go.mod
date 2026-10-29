@@ -1,6 +1,6 @@
 module github.com/levvs-one/sora-client/macos/helper
 
-go 1.26.9
+go 1.26.10
 
 require (
 	github.com/creachadair/jrpc2 v1.3.5
