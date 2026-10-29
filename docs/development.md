@@ -172,7 +172,7 @@ AGP 8.5.2 + Kotlin 2.0.21, Gradle 8.7 (wrapper properties в `gradle/wrapper/`; 
 bash android/tools/build-manual.sh
 ```
 
-Скрипт: kotlinc 2.0.21 (zip скачивается curl'ом, SHA-256 `0352c0a45bd22f80f6b26e485cd04da8047baa5de54865281fb9f89a4a7bcf2a` закреплён в скрипте и перепроверяется на каждом запуске) компилирует Kotlin + сгенерированный `R.java` против `android.jar` (34) и classes.jar обоих AAR; дальше aapt2 compile+link, d8 (с дедупом `go/**`: остаётся копия libbox), zip из dex + ресурсов + `lib/<abi>/*.so`, zipalign, apksigner debug-ключом. Результат этой среды: APK 279 213 197 байт, SHA-256 `81f55b9fee04d778ff5daa305c19a8fb7f6f42f7b131f6ea430491c474dcaa7c`, `apksigner verify` — v1/v2/v3 true. Известный след пайплайна: d8 из build-tools 34 печатает `malformed kotlin.Metadata` по классам Kotlin 2.0 — dex при этом валиден, AGP-сборка этого предупреждения не имеет. На устройстве сборка не проверялась (verify-on-device — `android/README.md`).
+Скрипт: kotlinc 2.0.21 (zip скачивается curl'ом, SHA-256 `0352c0a45bd22f80f6b26e485cd04da8047baa5de54865281fb9f89a4a7bcf2a` закреплён в скрипте и перепроверяется на каждом запуске) компилирует Kotlin + сгенерированный `R.java` против `android.jar` (34) и classes.jar обоих AAR; дальше aapt2 compile+link, d8 (с дедупом `go/**`: остаётся копия libbox), zip из dex + ресурсов + `lib/<abi>/*.so`, zipalign, apksigner debug-ключом. Размеры и хеши опубликованных APK — в `SHA256SUMS` каждого релиза; `apksigner verify` — v1/v2/v3 true. Известный след пайплайна: d8 из build-tools 34 печатает `malformed kotlin.Metadata` по классам Kotlin 2.0 — dex при этом валиден, AGP-сборка этого предупреждения не имеет. На устройстве сборка не проверялась (verify-on-device — `android/README.md`).
 
 ## macOS
 

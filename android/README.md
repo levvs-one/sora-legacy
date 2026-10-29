@@ -1,6 +1,6 @@
 # Sora Legacy — Android client
 
-> Part of [Sora Legacy](../README.md). This tree is the Android client; it is not a shipped release — the verify-on-device status is stated below and in [platforms](../legacy/docs/platforms.md). Full documentation index: [docs/README.md](../docs/README.md).
+> Part of [Sora Legacy](../README.md). This tree is the Android client. Its APKs are published in [GitHub releases](https://github.com/levvs-one/sora-legacy/releases) since 0.2.3, but no build has been installed or run on a device yet — see "Not verified" below and [platforms](../legacy/docs/platforms.md). Full documentation index: [docs/README.md](../docs/README.md).
 
 A full Android client for the sora-legacy core, in one tree:
 
@@ -253,8 +253,8 @@ classes. Dexing still succeeds and the app uses no Kotlin
 reflection; AGP builds on a dev machine (newer R8 via AGP 8.5) do
 not have this warning.
 
-The universal APK is large (279,213,197 bytes, ~266 MiB — the exact
-size and SHA-256 are in `docs/install.md`): both engines' `.so` for
+The universal APK is large (264,259,543 bytes in 0.2.4; every
+release lists exact sizes and hashes in its `SHA256SUMS`): both engines' `.so` for
 all four ABIs, stored uncompressed for direct mmap loading. Per-ABI
 splits are a packaging step for distribution, not a client concern.
 
