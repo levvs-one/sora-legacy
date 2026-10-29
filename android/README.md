@@ -124,8 +124,7 @@ The stock build above stays `minSdk 21`. Beside it there is an
 additive **API 19 tier** for KitKat devices, produced by a separate
 bind profile — `tools/bind-api19.sh` — plus a manual-pipeline
 variant (see "Building"). It exists because the floor was re-tested
-by building, not by arguing (full protocol:
-`reports/LEGACY-FULL-5-ANDROID.md`):
+by building, not by arguing:
 
 - `gomobile` accepts `-androidapi` down to 16, but the NDK is the
   real gate: NDK r27/r26 declare a floor of 21
@@ -158,10 +157,9 @@ by building, not by arguing (full protocol:
   the Go core does its own TLS (uTLS fingerprints, REALITY), so the
   tunnel protocols do not depend on the platform stack, but
   anything platform-TLS-shaped on a 4.4 device is what it is.
-- Nothing about the tier is device-verified: no emulator or device
-  exists in the authoring sandbox (no `/dev/kvm`; see the report).
-  The tier's "Not verified" list is this file's list, plus first
-  launch on a real API 19/20 device.
+- Nothing about the tier is device-verified: it has been built but
+  never run on an emulator or device. The tier's "Not verified" list
+  is this file's list, plus first launch on a real API 19/20 device.
 
 ## Why no AndroidX / Compose
 
@@ -169,7 +167,7 @@ Dependencies are Kotlin stdlib + the framework Android API +
 `org.json` (in `android.jar`), full stop. This is deliberate:
 
 - minSdk 21 plus fully offline builds: every AndroidX artifact is
-  one more network fetch that this tree's sandbox cannot make and a
+  one more download that an offline build cannot make and a
   2014-era device does not need.
 - The UI is three small screens of status/lists/forms; framework
   Views express them completely. Compose would add a compiler
@@ -188,24 +186,13 @@ cp /path/to/mobileapi.aar /path/to/libbox.aar app/libs/
 AGP 8.5.2 + Kotlin 2.0.21, Gradle 8.7 (wrapper properties in
 `gradle/wrapper/`). The AARs are git-ignored and never committed.
 
-In this sandbox Gradle cannot run at all: the Gradle daemon talks
-to its client over a loopback TCP socket, and this sandbox
-intercepts Java TCP (the toolchain department proved raw Java TCP is
-answered by the sandbox proxy, see
-`reports/LEGACY-PLAT-ANDROID-TOOLCHAIN.md`). Three attempts
-(daemon, `--offline`, `--no-daemon` with a single-use daemon) all
-fail identically before any plugin resolution:
+The published APKs are built with the manual pipeline below instead.
+In the offline build environment used so far, Java's loopback TCP is
+intercepted, so the Gradle daemon never reaches its client and every
+attempt (daemon, `--offline`, `--no-daemon`) fails before plugin
+resolution with `Could not receive a message from the daemon`.
 
-```
-FAILURE: Build failed with an exception.
-* What went wrong:
-Could not receive a message from the daemon.
-```
-
-Plugin resolution would be the next wall for the same reason (JVM
-HTTPS is intercepted), which is why the manual pipeline exists.
-
-### API 19 tier (sandbox, manual pipeline variant)
+### API 19 tier (manual pipeline variant)
 
 ```sh
 bash tools/bind-api19.sh   # NDK r25c + both AARs at -androidapi 19
@@ -228,7 +215,7 @@ Verified output of exactly this recipe: `sdkVersion:'19'`,
 All overrides default to the stock API 21 values; with no overrides
 `tools/build-manual.sh` builds exactly the stock APK.
 
-### This sandbox (manual pipeline)
+### Manual pipeline
 
 ```sh
 bash tools/build-manual.sh
@@ -260,8 +247,8 @@ splits are a packaging step for distribution, not a client concern.
 
 ## Not verified (verify on device)
 
-No device or emulator exists in this sandbox; the APK was never
-installed or run. Before trusting a build, verify on real hardware:
+The APK has never been installed or run on a device or emulator.
+Before trusting a build, verify on real hardware:
 
 1. Install + first launch; VPN consent flow (`VpnService.prepare`
    dialog -> `RESULT_OK` -> service start).
@@ -279,8 +266,8 @@ installed or run. Before trusting a build, verify on real hardware:
    below (below 33 exclusions are dropped — see code).
 7. Foreground-service behaviour on API 34 (specialUse type +
    subtype property + `FOREGROUND_SERVICE_SPECIAL_USE`).
-8. Subscription fetch over the device network (the sandbox's JVM
-   network is dead; this code path is compile-checked only), incl.
+8. Subscription fetch over the device network (this code path is
+   compile-checked only), incl.
    the honest failure for `http://` URLs (`usesCleartextTraffic`
    is `false`).
 9. `findConnectionOwner`-driven process rules on API 29+, and the
@@ -311,6 +298,6 @@ app/src/main/java/one/levvs/sora/legacy/
   VpnState.kt          process-local state + engine log ring
   Ui.kt                framework-View builders (UI is code, no layouts)
 app/src/main/res/values/                  strings + framework theme
-tools/build-manual.sh                     the sandbox pipeline above
+tools/build-manual.sh                     the manual pipeline above
 tools/bind-api19.sh                       API 19 tier bind profile (above)
 ```

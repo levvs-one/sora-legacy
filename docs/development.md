@@ -112,7 +112,7 @@ packaging/engines/fetch.sh amd64 dist/engines
 
 `fetch.sh` скачивает архивы по HTTPS и останавливается, если сумма хоть одного не совпала; базы geoip/geosite берутся из архива Xray той же версии. После раскладки пишется `SHA256SUMS` с дайджестами извлечённых бинарей — по нему служба сверяет движки при запуске (fail-closed).
 
-Для Windows-комплекта движки берутся не из lock, а из compat payload, и `Stage-Release.ps1` сверяет `xray.exe`, `sing-box.exe` и файлы `tun2proxy` с SHA-256, закреплёнными прямо в скрипте. Payload-Xray — тот же выпуск, что и пол каталога ядра: `Xray-win7-32` v26.3.27 (поднят с 25.9.11, который не несёт Hysteria-аутбаунд каталога; доказательства бинарями и Win7-PE — LEGACY-FULL-2-XRAY). Windows-вариант sing-box в payload — lx-форк (см. `legacy/PLANS.md`); Linux-lock держит upstream 1.14.3. Возможности, существующие только в lx (например, REALITY KeyShare), ядро заявляет только при обнаружении lx-сборки.
+Для Windows-комплекта движки берутся не из lock, а из compat payload, и `Stage-Release.ps1` сверяет `xray.exe`, `sing-box.exe` и файлы `tun2proxy` с SHA-256, закреплёнными прямо в скрипте. Payload-Xray — тот же выпуск, что и пол каталога ядра: `Xray-win7-32` v26.3.27 (поднят с 25.9.11, который не несёт Hysteria-аутбаунд каталога; доказательства бинарями и Win7-PE). Windows-вариант sing-box в payload — lx-форк (см. `legacy/PLANS.md`); Linux-lock держит upstream 1.14.3. Возможности, существующие только в lx (например, REALITY KeyShare), ядро заявляет только при обнаружении lx-сборки.
 
 ## Zapret (шаг сборки Linux-пакета)
 
@@ -151,7 +151,7 @@ iscc legacy\installer\Sora.iss
 
 ## Мобильное ядро (mobileapi)
 
-Общий фундамент Android и iOS. Пакет `core/mobileapi` собирается как обычный пакет ядра (кросс-сборки `GOOS=darwin` amd64/arm64 и `GOOS=android` arm64 — exit 0), тесты — в составе `go test ./...` из `core/`. Настоящий `gomobile bind` в сам репозиторий не делается: современный gomobile требует `golang.org/x/mobile` в графе модуля, поэтому bind выполняется из копии `core/` с добавленной tool-директивой (`go get -tool golang.org/x/mobile/cmd/gobind@…`) — исходники в копии не меняются. Версии, которыми строились AAR/xcframework в этой работе: официальный gomobile `golang.org/x/mobile v0.0.0-20261011034528-197770444867` (хост-Go 1.24.7, тулчейн модуля — 1.26.9 по `core/go.mod`); для libbox — sagernet gomobile v0.1.8 из `go.mod` пина sing-box 1.12.12. Детали Android-тулчейна (JDK, SDK, NDK, хэши пакетов и диагноз песочницы) — в `android/README.md` и отчётах отдела; спека iOS-bind — `ios/BUILD-MAC.md` §2.
+Общий фундамент Android и iOS. Пакет `core/mobileapi` собирается как обычный пакет ядра (кросс-сборки `GOOS=darwin` amd64/arm64 и `GOOS=android` arm64 — exit 0), тесты — в составе `go test ./...` из `core/`. Настоящий `gomobile bind` в сам репозиторий не делается: современный gomobile требует `golang.org/x/mobile` в графе модуля, поэтому bind выполняется из копии `core/` с добавленной tool-директивой (`go get -tool golang.org/x/mobile/cmd/gobind@…`) — исходники в копии не меняются. Версии, которыми строились AAR/xcframework в этой работе: официальный gomobile `golang.org/x/mobile v0.0.0-20261011034528-197770444867` (хост-Go 1.24.7, тулчейн модуля — 1.26.9 по `core/go.mod`); для libbox — sagernet gomobile v0.1.8 из `go.mod` пина sing-box 1.12.12. Детали Android-тулчейна (JDK, SDK, NDK, хэши пакетов) — в `android/README.md`; спека iOS-bind — `ios/BUILD-MAC.md` §2.
 
 ## Android
 
@@ -164,9 +164,9 @@ cp /path/to/mobileapi.aar /path/to/libbox.aar android/app/libs/
 cd android && ./gradlew assembleDebug
 ```
 
-AGP 8.5.2 + Kotlin 2.0.21, Gradle 8.7 (wrapper properties в `gradle/wrapper/`; сам wrapper jar в песочнице сгенерировать нечем — на dev-машине это `gradle wrapper` одной командой).
+AGP 8.5.2 + Kotlin 2.0.21, Gradle 8.7 (wrapper properties в `gradle/wrapper/`; сам wrapper jar в репозитории не хранится — на dev-машине это `gradle wrapper` одной командой).
 
-Ручной пайплайн (песочница): Gradle в этой среде невозможен — демон общается по loopback-TCP, который песочница перехватывает у Java-процессов (`Could not receive a message from the daemon` до резолва плагинов). Замена на официальных инструментах:
+Ручной пайплайн: опубликованные APK собраны им, потому что в офлайн-среде сборки loopback-TCP у Java-процессов перехвачен и демон Gradle не связывается с клиентом (`Could not receive a message from the daemon` до резолва плагинов). Замена на официальных инструментах:
 
 ```sh
 bash android/tools/build-manual.sh
