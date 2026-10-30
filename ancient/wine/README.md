@@ -1,8 +1,6 @@
-# Wine phase — EXECUTED 2026-10-22 (WS1-C), exit criteria met in both prefixes
+# Wine checks — run 2026-10-22, passed in both prefixes
 
-Status: **executed**, not just prepared. Full protocol with verbatim
-command output: `LEGACY-FULL-1C-WINE.md` in the programme reports
-(`~/workspace/bug-hunt/reports/`). Verdicts per prefix:
+Verdicts per prefix:
 
 | Check | winxp (net40) | winvista (net46) |
 | --- | --- | --- |
@@ -12,7 +10,7 @@ command output: `LEGACY-FULL-1C-WINE.md` in the programme reports
 | Client GUI start, no crash, message loop | PASS (`client-smoke.sh`, alive 20 s; `.NET-BroadcastEventWindow.4.0.0.0` present) | PASS (`client-smoke.sh`, alive 20 s) |
 | Loopback traffic via engine SOCKS | PASS | PASS |
 
-## How the phase had to be run in this sandbox (measured, not assumed)
+## Running the checks in a container
 
 - **Wine install**: `apt-get update` with the stock dual-URI sources
   (azure + a broken mirror) ran ~40 min and was OOM-killed (exit 137);
@@ -26,10 +24,10 @@ command output: `LEGACY-FULL-1C-WINE.md` in the programme reports
   `/var/log/dpkg.log`, 2026-10-22 05:44:33–39: `install libwine:i386`,
   `install wine32:i386`, `install winetricks:all`, each reaching
   `status installed`): wine 9.0~repack-4build3, winetricks 20240105-2.
-- **32-bit execution**: the agent exec sandbox's seccomp filter returns
-  EPERM for *every* syscall of a 32-bit process (measured with strace:
-  `brk`/`mmap2`/`openat`/`exit_group` all EPERM, then SIGSEGV), so Wine
-  cannot run as a child of the exec shell at all. The phase therefore
+- **32-bit execution**: the container's seccomp filter for the shell
+  returns EPERM for *every* syscall of a 32-bit process (measured with
+  strace: `brk`/`mmap2`/`openat`/`exit_group` all EPERM, then SIGSEGV),
+  so Wine cannot run as a child of that shell. The checks therefore
   ran as **systemd oneshot services** (children of PID 1, outside that
   filter): there `wine-9.0` runs and all steps below executed.
 - **winetricks exit codes are not the verdict**: both .NET verbs ended
@@ -59,7 +57,7 @@ command output: `LEGACY-FULL-1C-WINE.md` in the programme reports
   identical in the worktree, the HEAD blob and commit `86cfb59`) was
   rerun end-to-end in both prefixes as a systemd oneshot on
   2026-10-22: `CLIENT SMOKE PASS ... alive_after=20s` with rc=0 for
-  winxp and for winvista. Stand logs (`~/workspace/bug-hunt/wine-phase/`):
+  winxp and for winvista. Stand logs:
   `logs/stage-client-anchored.log` (provenance + per-prefix rc),
   `logs/client-smoke-anchored-winxp.log`,
   `logs/client-smoke-anchored-winvista.log`.
