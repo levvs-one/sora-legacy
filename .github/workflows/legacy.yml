@@ -82,10 +82,31 @@ jobs:
         # Local equivalent:
         #   tools/bench-baseline.sh
         run: tools/bench-baseline.sh
-      - uses: golangci/golangci-lint-action@4afd733a84b1f43292c63897423277bb7f4313a9 # v8
+      # A build-tagged file is linted only for the GOOS it builds on, so the
+      # core is linted once per platform it ships on. The later runs reuse the
+      # first run's cache and leave saving it to that run. Local equivalent:
+      #   cd core && GOOS=windows golangci-lint run
+      - name: Lint the core (linux)
+        uses: golangci/golangci-lint-action@4afd733a84b1f43292c63897423277bb7f4313a9 # v8
         with:
           version: v2.15.0
           working-directory: core
+      - name: Lint the core (windows)
+        uses: golangci/golangci-lint-action@4afd733a84b1f43292c63897423277bb7f4313a9 # v8
+        env:
+          GOOS: windows
+        with:
+          version: v2.15.0
+          working-directory: core
+          skip-save-cache: true
+      - name: Lint the core (darwin)
+        uses: golangci/golangci-lint-action@4afd733a84b1f43292c63897423277bb7f4313a9 # v8
+        env:
+          GOOS: darwin
+        with:
+          version: v2.15.0
+          working-directory: core
+          skip-save-cache: true
 
   linux-packages:
     name: Legacy Linux packages
