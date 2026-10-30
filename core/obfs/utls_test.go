@@ -57,13 +57,6 @@ func TestNewUTLSConnRejectsBadInput(t *testing.T) {
 	if _, err := (Profile{}).NewUTLSConn(nil, nil); !errors.Is(err, ErrUTLSDisabled) {
 		t.Errorf("NewUTLSConn disabled = %v, want ErrUTLSDisabled", err)
 	}
-	ln, _ := net.Listen("tcp", "127.0.0.1:0")
-	defer ln.Close()
-	conn, err := net.Dial("tcp", ln.Addr().String())
-	if err != nil {
-		t.Skipf("no loopback: %v", err)
-	}
-	defer conn.Close()
 	if _, err := (Profile{UTLS: UTLSChrome}).NewUTLSConn(nil, nil); err == nil {
 		t.Error("NewUTLSConn(nil conn) = nil, want error")
 	}
@@ -76,7 +69,7 @@ func TestDialerRejectsBadInput(t *testing.T) {
 		t.Error("nil RawDial accepted")
 	}
 	d.RawDial = func(ctx context.Context, network, address string) (net.Conn, error) {
-		return net.Dial("tcp", address)
+		return (&net.Dialer{}).DialContext(ctx, network, address)
 	}
 	d.Profile = Profile{FragSizes: []int{}}
 	if _, err := d.DialTLS(ctx, "tcp", "127.0.0.1:1", "example.com", nil); err == nil {
@@ -98,11 +91,11 @@ func TestDialerHandshake(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			cert := testCertificate(t)
-			ln, err := net.Listen("tcp", "127.0.0.1:0")
+			ln, err := (&net.ListenConfig{}).Listen(t.Context(), "tcp", "127.0.0.1:0")
 			if err != nil {
 				t.Skipf("no loopback: %v", err)
 			}
-			defer ln.Close()
+			defer func() { _ = ln.Close() }()
 			serverErr := make(chan error, 1)
 			go func() {
 				raw, err := ln.Accept()
@@ -110,10 +103,10 @@ func TestDialerHandshake(t *testing.T) {
 					serverErr <- err
 					return
 				}
-				defer raw.Close()
+				defer func() { _ = raw.Close() }()
 				srv := tls.Server(raw, &tls.Config{Certificates: []tls.Certificate{cert}})
-				defer srv.Close()
-				if err := srv.Handshake(); err != nil {
+				defer func() { _ = srv.Close() }()
+				if err := srv.HandshakeContext(t.Context()); err != nil {
 					serverErr <- err
 					return
 				}
@@ -139,7 +132,7 @@ func TestDialerHandshake(t *testing.T) {
 			if err != nil {
 				t.Fatalf("DialTLS() = %v", err)
 			}
-			defer conn.Close()
+			defer func() { _ = conn.Close() }()
 			if _, err := conn.Write([]byte("ping")); err != nil {
 				t.Fatalf("Write() = %v", err)
 			}

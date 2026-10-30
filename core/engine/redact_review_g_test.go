@@ -141,7 +141,7 @@ func soraUpperUnicodeHexDigits(s string) string {
 		ok := true
 		for j := i + 2; j <= i+5; j++ {
 			c := b[j]
-			if !('0' <= c && c <= '9' || 'a' <= c && c <= 'f' || 'A' <= c && c <= 'F') {
+			if (c < '0' || '9' < c) && (c < 'a' || 'f' < c) && (c < 'A' || 'F' < c) {
 				ok = false
 				break
 			}

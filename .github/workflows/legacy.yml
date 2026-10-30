@@ -114,8 +114,8 @@ jobs:
           nfpm --version
       - name: Build the core service
         run: |
-          cd core && CGO_ENABLED=0 GOARCH=amd64 go build -trimpath -ldflags '-s -w' -o ../dist/sora-core ./cmd/sora-core
-          cd macos/helper && CGO_ENABLED=0 GOARCH=amd64 go build -trimpath -ldflags '-s -w' -o ../../dist/sora-ctl .
+          cd core && CGO_ENABLED=0 GOARCH=amd64 go build -trimpath -ldflags '-s -w' -o ../dist/sora-core ./cmd/sora-core && cd ..
+          cd macos/helper && CGO_ENABLED=0 GOARCH=amd64 go build -trimpath -ldflags '-s -w' -o ../../dist/sora-ctl . && cd ../..
       - name: Fetch engines and build zapret
         run: |
           packaging/engines/fetch.sh amd64 dist/engines
@@ -178,15 +178,19 @@ jobs:
           [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path 'legacy/build/Build-CoreWin7.ps1').Path, [ref]$null, [ref]$parseErrors) | Out-Null
           if ($parseErrors.Count) { $parseErrors | Out-String | Write-Error; exit 1 }
       - name: Build verified Windows 7 SDK
+        # XTLS/go-win7 replaces the go-win7-win6-1.26.zip asset of its
+        # `current` release on every Go point release, so a hash mismatch
+        # here means upstream moved on: bump core/go.mod, this hash and
+        # VERSION together with legacy/build/Build-CoreWin7.ps1.
         shell: pwsh
         run: |
           $env:GOROOT_BOOTSTRAP = go env GOROOT
-          $sdk = Join-Path $env:RUNNER_TEMP 'go-win7-1.26.9'
+          $sdk = Join-Path $env:RUNNER_TEMP 'go-win7-1.26.10'
           $archive = Join-Path $env:RUNNER_TEMP 'go-win7.zip'
           Invoke-WebRequest 'https://github.com/XTLS/go-win7/releases/download/current/go-win7-win6-1.26.zip' -OutFile $archive
-          if ((Get-FileHash $archive -Algorithm SHA256).Hash.ToLowerInvariant() -ne '4a8ea74640bcdf608fbe351b3eaa5715685b18ec0b0d27e8d59608ade86c8397') { throw 'Unverified Go SDK source' }
+          if ((Get-FileHash $archive -Algorithm SHA256).Hash.ToLowerInvariant() -ne '661a35da1e2ba6f9f9e281af98a29a203166115b6da74825938a6d2b101982b1') { throw 'Unverified Go SDK source' }
           Expand-Archive $archive $sdk
-          if ((Get-Content "$sdk\VERSION" -First 1) -ne 'go1.26.9') { throw 'Unexpected Go SDK version' }
+          if ((Get-Content "$sdk\VERSION" -First 1) -ne 'go1.26.10') { throw 'Unexpected Go SDK version' }
           $env:CGO_ENABLED = '0'
           $env:GOTOOLCHAIN = 'local'
           Push-Location "$sdk\src"

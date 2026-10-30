@@ -2,6 +2,7 @@ package legacycontrol
 
 import (
 	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -39,7 +40,10 @@ func TestStreamJsonRpcInterop(t *testing.T) {
 	t.Log(string(output))
 	cancel()
 	select {
-	case <-finished:
+	case err := <-finished:
+		if !errors.Is(err, context.Canceled) {
+			t.Errorf("Serve() = %v, want the cancellation", err)
+		}
 	case <-time.After(2 * time.Second):
 		t.Error("legacy listener did not release its resources")
 	}

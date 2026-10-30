@@ -320,7 +320,7 @@ func (s *Store) read() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	path := filepath.Join(s.dir, vaultFile)
-	file, err := os.Open(path)
+	file, err := os.Open(path) //nolint:gosec // a fixed file name inside the store directory
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			return nil

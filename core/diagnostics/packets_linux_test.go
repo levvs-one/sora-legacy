@@ -4,6 +4,7 @@ package diagnostics_test
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net"
 	"os"
@@ -98,7 +99,10 @@ func TestNativeLinuxOwnedTunCapture(t *testing.T) {
 	<-sent
 	_ = file.Close()
 	select {
-	case <-reader:
+	case err := <-reader:
+		if err != nil && !errors.Is(err, os.ErrClosed) {
+			t.Errorf("TUN reader stopped with %v, want the closed file", err)
+		}
 	case <-time.After(time.Second):
 		t.Fatal("TUN reader did not release")
 	}

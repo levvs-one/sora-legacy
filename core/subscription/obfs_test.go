@@ -33,7 +33,7 @@ func dialLocal(t *testing.T, f *Fetcher, ln net.Listener) (client, server net.Co
 	}
 	sc, err := ln.Accept()
 	if err != nil {
-		cc.Close()
+		_ = cc.Close()
 		t.Fatalf("Accept() = %v", err)
 	}
 	return cc, sc
@@ -41,11 +41,11 @@ func dialLocal(t *testing.T, f *Fetcher, ln net.Listener) (client, server net.Co
 
 func listenLocal(t *testing.T) net.Listener {
 	t.Helper()
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	ln, err := (&net.ListenConfig{}).Listen(t.Context(), "tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Skipf("no loopback: %v", err)
 	}
-	t.Cleanup(func() { ln.Close() })
+	t.Cleanup(func() { _ = ln.Close() })
 	return ln
 }
 
@@ -58,8 +58,8 @@ func TestObfsFragmentsClientHello(t *testing.T) {
 	f := New(Options{Obfs: &profile})
 	ln := listenLocal(t)
 	cc, sc := dialLocal(t, f, ln)
-	defer cc.Close()
-	defer sc.Close()
+	defer func() { _ = cc.Close() }()
+	defer func() { _ = sc.Close() }()
 
 	rec := helloRecord(50) // 55 bytes: chunks of 10 and 45
 	go func() { _, _ = cc.Write(rec) }()
@@ -101,8 +101,8 @@ func TestObfsDisabledByDefault(t *testing.T) {
 	f := New(Options{})
 	ln := listenLocal(t)
 	cc, sc := dialLocal(t, f, ln)
-	defer cc.Close()
-	defer sc.Close()
+	defer func() { _ = cc.Close() }()
+	defer func() { _ = sc.Close() }()
 
 	rec := helloRecord(50)
 	go func() { _, _ = cc.Write(rec) }()
@@ -121,8 +121,8 @@ func TestObfsInvalidProfileIgnored(t *testing.T) {
 	f := New(Options{Obfs: &obfs.Profile{FragSizes: []int{}}})
 	ln := listenLocal(t)
 	cc, sc := dialLocal(t, f, ln)
-	defer cc.Close()
-	defer sc.Close()
+	defer func() { _ = cc.Close() }()
+	defer func() { _ = sc.Close() }()
 
 	rec := helloRecord(50)
 	go func() { _, _ = cc.Write(rec) }()

@@ -39,7 +39,7 @@ func TestIdentifiersCoverTransportHostAndService(t *testing.T) {
 	name := slices.Index(ids, "O")
 	host := slices.Index(ids, "secret-cdn-host.example.com")
 	service := slices.Index(ids, "secret-grpc-service")
-	if !(name >= 0 && name < host && host < service) {
+	if name < 0 || name >= host || host >= service {
 		t.Errorf("Identifiers() order = %v, want name < host < service", ids)
 	}
 }

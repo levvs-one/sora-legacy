@@ -8,11 +8,11 @@ import (
 
 func TestJitterDelayBounds(t *testing.T) {
 	rng := newJitterRand()
-	const max = 50 * time.Millisecond
+	const limit = 50 * time.Millisecond
 	for i := 0; i < 2000; i++ {
-		d := jitterDelay(rng, max)
-		if d < 0 || d > max {
-			t.Fatalf("jitterDelay = %s, out of [0, %s]", d, max)
+		d := jitterDelay(rng, limit)
+		if d < 0 || d > limit {
+			t.Fatalf("jitterDelay = %s, out of [0, %s]", d, limit)
 		}
 	}
 	if d := jitterDelay(rng, 0); d != 0 {
@@ -25,8 +25,8 @@ func TestJitterDelayBounds(t *testing.T) {
 
 func TestJitterConnPassthrough(t *testing.T) {
 	client, server := net.Pipe()
-	defer client.Close()
-	defer server.Close()
+	defer func() { _ = client.Close() }()
+	defer func() { _ = server.Close() }()
 
 	wrapped := &jitterConn{Conn: client, max: 0, rng: newJitterRand()}
 	done := make(chan struct{})
@@ -46,20 +46,20 @@ func TestJitterConnPassthrough(t *testing.T) {
 
 func TestJitterConnDelay(t *testing.T) {
 	client, server := net.Pipe()
-	defer client.Close()
-	defer server.Close()
+	defer func() { _ = client.Close() }()
+	defer func() { _ = server.Close() }()
 
-	const max = 30 * time.Millisecond
-	wrapped := &jitterConn{Conn: client, max: max, rng: newJitterRand()}
+	const limit = 30 * time.Millisecond
+	wrapped := &jitterConn{Conn: client, max: limit, rng: newJitterRand()}
 	go func() {
-		server.Read(make([]byte, 1))
-		server.Close()
+		_, _ = server.Read(make([]byte, 1))
+		_ = server.Close()
 	}()
 	start := time.Now()
 	if _, err := wrapped.Write([]byte("x")); err != nil {
 		t.Fatalf("Write: %v", err)
 	}
-	if elapsed := time.Since(start); elapsed > 10*max {
-		t.Fatalf("jittered write took %s, want <= %s", elapsed, 10*max)
+	if elapsed := time.Since(start); elapsed > 10*limit {
+		t.Fatalf("jittered write took %s, want <= %s", elapsed, 10*limit)
 	}
 }

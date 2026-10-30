@@ -117,7 +117,7 @@ func (s *OverrideStore) Load(id string) (*Override, error) {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	raw, err := os.ReadFile(path)
+	raw, err := os.ReadFile(path) //nolint:gosec // validOverrideID allows 16 hex digits only, so path stays under <dir>/overrides
 	if err != nil {
 		if os.IsNotExist(err) {
 			return &Override{}, nil

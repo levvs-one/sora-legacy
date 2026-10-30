@@ -42,18 +42,19 @@ func RewriteClientHelloSNI(record []byte, fake string) ([]byte, error) {
 	}
 
 	// Build the replacement extension: list(2) + type(1) + len(2) + name.
+	nameLen := uint16(len(fake)) //nolint:gosec // validHostname caps fake at 253 bytes
 	newData := make([]byte, 0, 5+len(fake))
 	newData = append(newData, 0, 0) // list length placeholder
 	newData = append(newData, 0)    // host_name
 	var tmp [2]byte
-	binary.BigEndian.PutUint16(tmp[:], uint16(len(fake)))
+	binary.BigEndian.PutUint16(tmp[:], nameLen)
 	newData = append(newData, tmp[:]...)
 	newData = append(newData, fake...)
-	binary.BigEndian.PutUint16(newData[0:2], uint16(3+len(fake)))
+	binary.BigEndian.PutUint16(newData[0:2], 3+nameLen)
 
 	newExt := make([]byte, 0, 4+len(newData))
 	newExt = append(newExt, 0, byte(extServerName))
-	binary.BigEndian.PutUint16(tmp[:], uint16(len(newData)))
+	binary.BigEndian.PutUint16(tmp[:], 5+nameLen)
 	newExt = append(newExt, tmp[:]...)
 	newExt = append(newExt, newData...)
 
@@ -63,15 +64,20 @@ func RewriteClientHelloSNI(record []byte, fake string) ([]byte, error) {
 	out = append(out, newExt...)
 	out = append(out, record[recordHeaderLen+4+extOff+4+extLen:]...)
 
-	// Fix the enclosing lengths.
-	extTotal := int(binary.BigEndian.Uint16(out[recordHeaderLen+4+extLenOff:]))
-	binary.BigEndian.PutUint16(out[recordHeaderLen+4+extLenOff:], uint16(extTotal+delta))
+	// Fix the enclosing lengths. A longer fake name grows them, so a record
+	// already near the 16-bit limit is refused rather than wrapped into a
+	// malformed one.
+	extTotal := int(binary.BigEndian.Uint16(out[recordHeaderLen+4+extLenOff:])) + delta
+	recLen := len(out) - recordHeaderLen
+	if extTotal < 0 || extTotal > 0xffff || recLen < 0 || recLen > 0xffff {
+		return nil, errors.New("obfs: the rewritten ClientHello no longer fits one TLS record")
+	}
+	binary.BigEndian.PutUint16(out[recordHeaderLen+4+extLenOff:], uint16(extTotal))
 	hsLen := int(out[recordHeaderLen+1])<<16 | int(out[recordHeaderLen+2])<<8 | int(out[recordHeaderLen+3])
 	hsLen += delta
-	out[recordHeaderLen+1] = byte(hsLen >> 16)
-	out[recordHeaderLen+2] = byte(hsLen >> 8)
-	out[recordHeaderLen+3] = byte(hsLen)
-	recLen := len(out) - recordHeaderLen
+	out[recordHeaderLen+1] = byte(hsLen >> 16 & 0xff)
+	out[recordHeaderLen+2] = byte(hsLen >> 8 & 0xff)
+	out[recordHeaderLen+3] = byte(hsLen & 0xff)
 	binary.BigEndian.PutUint16(out[3:5], uint16(recLen))
 	return out, nil
 }

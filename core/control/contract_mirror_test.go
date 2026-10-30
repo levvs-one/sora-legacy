@@ -348,23 +348,23 @@ func TestContractMirrorVersionSpellings(t *testing.T) {
 		return out[0], out[1], out[2]
 	}
 	// The core itself: core/cmd/sora-core/main.go.
-	maj, min, minSup := parse("core/cmd/sora-core/main.go",
+	maj, minor, minSup := parse("core/cmd/sora-core/main.go",
 		`Version\s*=\s*control\.Version\{Major:\s*(\d+),\s*Minor:\s*(\d+),\s*MinSupportedMinor:\s*(\d+)\}`)
-	if maj != 1 || min != 7 || minSup != 1 {
-		t.Errorf("core serves contract %d.%d (min %d), want 1.7 (min 1)", maj, min, minSup)
+	if maj != 1 || minor != 7 || minSup != 1 {
+		t.Errorf("core serves contract %d.%d (min %d), want 1.7 (min 1)", maj, minor, minSup)
 	}
 	// The macOS helper client: macos/helper/client.go.
-	maj, min, minSup = parse("macos/helper/client.go",
+	maj, minor, minSup = parse("macos/helper/client.go",
 		`ApiVersion\{Major:\s*(\d+),\s*Minor:\s*(\d+),\s*MinSupportedMinor:\s*(\d+)\}`)
-	if maj != 1 || min != 7 || minSup != 1 {
-		t.Errorf("macOS helper speaks contract %d.%d (min %d), want 1.7 (min 1)", maj, min, minSup)
+	if maj != 1 || minor != 7 || minSup != 1 {
+		t.Errorf("macOS helper speaks contract %d.%d (min %d), want 1.7 (min 1)", maj, minor, minSup)
 	}
 	// The C# client: legacy/Control/CoreConnection.cs. Its floor is
 	// deliberately stricter (min 7: the client refuses older cores);
 	// the pin records the asymmetry instead of flattening it.
-	maj, min, minSup = parse("legacy/Control/CoreConnection.cs",
+	maj, minor, minSup = parse("legacy/Control/CoreConnection.cs",
 		`ApiVersion\s*\{\s*Major\s*=\s*(\d+),\s*Minor\s*=\s*(\d+),\s*MinSupportedMinor\s*=\s*(\d+)\s*\}`)
-	if maj != 1 || min != 7 || minSup != 7 {
-		t.Errorf("C# client speaks contract %d.%d (min %d), want the recorded 1.7 (min 7)", maj, min, minSup)
+	if maj != 1 || minor != 7 || minSup != 7 {
+		t.Errorf("C# client speaks contract %d.%d (min %d), want the recorded 1.7 (min 7)", maj, minor, minSup)
 	}
 }

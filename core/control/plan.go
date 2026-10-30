@@ -1432,7 +1432,7 @@ func applyCredential(outbound *engine.Outbound, values map[string]string) error 
 	// address rides the credential document; the port is bounded again
 	// here so a forged document cannot smuggle an invalid one.
 	xhttp.DownloadAddress = values["download_address"]
-	if port := atoiNonNegative(values["download_port"]); port <= 65535 {
+	if port := atoiNonNegative(values["download_port"]); port >= 0 && port <= 65535 {
 		xhttp.DownloadPort = uint16(port)
 	}
 	// XHTTP padding and xmux tuning from the same extra= data;
@@ -1451,7 +1451,7 @@ func applyCredential(outbound *engine.Outbound, values map[string]string) error 
 		// document below: silently dropping headers would change
 		// the handshake the server expects.
 		if err := json.Unmarshal([]byte(raw), &outbound.Transport.Headers); err != nil {
-			return fmt.Errorf("control: a stored transport headers document is unreadable: %v", err)
+			return fmt.Errorf("control: a stored transport headers document is unreadable: %w", err)
 		}
 	}
 	// WireGuard material, boxed only when the document carries any
@@ -1466,7 +1466,7 @@ func applyCredential(outbound *engine.Outbound, values map[string]string) error 
 			// amneziawg above: silently dropping peers would leave the
 			// WireGuard outbound without its endpoints.
 			if err := json.Unmarshal([]byte(peers), &outbound.WireGuardBox().Peers); err != nil {
-				return fmt.Errorf("control: a stored peers document is unreadable: %v", err)
+				return fmt.Errorf("control: a stored peers document is unreadable: %w", err)
 			}
 		}
 	}
