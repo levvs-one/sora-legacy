@@ -40,7 +40,7 @@ func ExportWindowsEvents(ctx context.Context) ([]byte, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	file, err := os.Open(path)
+	file, err := os.Open(path) //nolint:gosec // a fixed file name inside the temporary directory created above
 	if err != nil {
 		return nil, err
 	}

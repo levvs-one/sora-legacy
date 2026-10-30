@@ -15,7 +15,7 @@ import (
 // must come back kernel-verified with this process's own UID.
 func TestPeerOfDarwin(t *testing.T) {
 	address := filepath.Join(t.TempDir(), "peer.sock")
-	listener, err := net.Listen("unix", address)
+	listener, err := (&net.ListenConfig{}).Listen(t.Context(), "unix", address)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -27,7 +27,7 @@ func TestPeerOfDarwin(t *testing.T) {
 			accepted <- connection
 		}
 	}()
-	client, err := net.Dial("unix", address)
+	client, err := (&net.Dialer{}).DialContext(t.Context(), "unix", address)
 	if err != nil {
 		t.Fatal(err)
 	}
