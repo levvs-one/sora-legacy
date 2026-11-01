@@ -1,4 +1,4 @@
-# macOS tiers below the service floor — TARGET-NOTES (LEGACY-FULL WS3)
+# macOS tiers below the service floor — TARGET-NOTES
 
 Measured 2026-10-22 on this Linux machine (cross-builds only; nothing
 here has run on a Mac — every runtime statement is a Mach-O load
@@ -289,7 +289,7 @@ independent measurement in `apple/Legacy/ENGINES.md` §7:
 
 - The sing-box-1.14-only fields — `hop_interval_max`, `bbr_profile`,
   Hysteria2 obfs `gecko` — are gated by the catalog
-  (LEGACY-FULL-GATES-FIX): on the §3.2/§3.3 self-built engines
+ : on the §3.2/§3.3 self-built engines
   (1.13.21/1.11.15) plans setting them are refused by SelectEngine
   by name, not at engine config load. They are listed here as tier
   gates.

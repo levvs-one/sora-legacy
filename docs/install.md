@@ -75,9 +75,16 @@
 
 ## Android
 
-Готового публичного релиза для Android нет. То, что существует и проверено в песочнице, — debug-APK, собранный ручным пайплайном (см. [development.md](development.md), раздел «Android»): пакет `one.levvs.sora.legacy`, versionCode 1 / versionName 0.1.0, `minSdk 21` / `targetSdk 34`, размер 279 213 197 байт, SHA-256 `81f55b9fee04d778ff5daa305c19a8fb7f6f42f7b131f6ea430491c474dcaa7c`. Подпись — debug-ключ, сгенерированный пайплайном (алиас `androiddebugkey`): это не релизная идентичность, обновить такой APK поверх будущего релизного нельзя.
+APK публикуются в [релизах](https://github.com/levvs-one/sora-legacy/releases) начиная с 0.2.3. В 0.2.4 их два, оба собраны ручным пайплайном (см. [development.md](development.md), раздел «Android»):
 
-Установка в этом виде — только вручную на устройство (sideload): разрешить установку из выбранного источника, открыть APK, при первом подключении подтвердить системный VPN consent-диалог (`VpnService.prepare`). **На устройстве эта сборка не проверялась вообще**: установка, consent-флоу, трафик через туннель, DNS, disconnect/reconnect и always-on — пункты verify-on-device из `android/README.md` (11 пунктов). Не выдавайте debug-APK за проверенный продукт. Удаление — стандартное, средствами Android; данные клиента лежат в app-private `filesDir` (`servers.json` с кредами внутри, `config.json`), `allowBackup=false` — в резервные копии они не попадают и удаляются вместе с приложением.
+| Файл | Android | ABI | Размер |
+| --- | --- | --- | ---: |
+| `sora-legacy-0.2.4-android.apk` | 5.0 и новее (API 21) | `arm64-v8a`, `armeabi-v7a`, `x86_64`, `x86` | 264 259 543 байт |
+| `sora-legacy-0.2.4-android-api19.apk` | 4.4 (API 19) | только 32-битные `armeabi-v7a` и `x86` | 128 239 205 байт |
+
+Пакет `one.levvs.sora.legacy`, versionName 0.2.4, versionCode 204, `targetSdk 34`. Хеши — в `SHA256SUMS` того же релиза. Оба APK подписаны debug-ключом, сгенерированным пайплайном (алиас `androiddebugkey`): это не релизная идентичность, и будущий APK с релизной подписью поверх такого не встанет, только после удаления.
+
+Установка — только вручную на устройство (sideload): разрешить установку из выбранного источника, открыть APK, при первом подключении подтвердить системный VPN consent-диалог (`VpnService.prepare`). **На устройстве эти сборки не проверялись вообще**: установка, consent-флоу, трафик через туннель, DNS, disconnect/reconnect и always-on — пункты verify-on-device из `android/README.md` (11 пунктов). Не выдавайте debug-APK за проверенный продукт. Удаление — стандартное, средствами Android; данные клиента лежат в app-private `filesDir` (`servers.json` с кредами внутри, `config.json`), `allowBackup=false` — в резервные копии они не попадают и удаляются вместе с приложением.
 
 ## macOS
 

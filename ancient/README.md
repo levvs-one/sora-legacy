@@ -141,7 +141,7 @@ snapshot/restore following the shipped client's contract
 (record before first change → replay exactly → delete snapshot;
 damaged snapshot = named error, proxy untouched).
 
-Build (Linux, as with the toolchain department's net48 precedent):
+Build (Linux, the same way as the net48 client):
 
 ```bash
 ~/workspace/dotnet/dotnet build ancient/src/Sora.Ancient/Sora.Ancient.csproj
@@ -154,8 +154,7 @@ Build (Linux, as with the toolchain department's net48 precedent):
 Client and engine are **built and proven at build/config level**
 (client: both TFMs compile; parser/config: ParserCheck green; engine:
 config probes + Linux loopback run), and **runtime under Wine is now
-proven** (phase WS1-C, 2026-10-22, report `LEGACY-FULL-1C-WINE.md` in
-the programme reports): in both prefixes (winxp + net40, winvista +
+proven** (checked 2026-10-22): in both prefixes (winxp + net40, winvista +
 net46) the pinned engine answers `-version` and passes `-test`, the
 client starts without crashing and enters its message loop, vmess
 import + era config generation executed on the prefixes' own era

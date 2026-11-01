@@ -9,7 +9,7 @@
 [![Downloads](https://img.shields.io/github/downloads/levvs-one/sora-legacy/total)](https://github.com/levvs-one/sora-legacy/releases)
 [![License](https://img.shields.io/github/license/levvs-one/sora-legacy)](LICENSE)
 
-The Sora client for older Windows: Windows 7 SP1, 8.1, 10 and 11 on x86 (on x64 it runs through WoW64). A separate repository and a separate generation; the regular client for current systems is [sora](https://github.com/levvs-one/sora).
+The Sora client for older systems: Windows 7 SP1, 8.1, 10 and 11 on x86 (on x64 it runs through WoW64), Android 4.4 and newer, and on Linux the core service with the `sora-ctl` console client. A separate repository and a separate generation; the regular client for current systems is [sora](https://github.com/levvs-one/sora).
 
 ## Installation
 
@@ -29,6 +29,7 @@ Finished builds are in the [GitHub releases](https://github.com/levvs-one/sora-l
 - **The executable that ships today is the v2rayN-based client** (`sora_<target>.exe`, for example `sora_win7.exe`). It is the one built in CI, covered by regression checks and staged by `legacy/build/Stage-Release.ps1`.
 - **The new client** (`legacy/Client`, .NET Framework 4.8, WinForms) is built, lives in this repository and is covered by interop tests against the real core service, but it is **not in the delivery stage yet**. Switching the stage is separate work; until it is done, the new client is not shipped to users.
 - **The installer already registers `sora://` links**, but the registered handler today is the shipped v2rayN-based client, which does not handle a `sora://…` argument: a click on such a link is silently dropped for now. The handler that imports a subscription from a link is the new client; the registration takes effect unchanged when the stage switches to it.
+- **The Android APKs have never been run on a device** and are signed with a debug key, so a future release-signed version will install only after this one is removed. What is left to verify is listed in [docs/install.md](docs/install.md#android) (in Russian).
 - Compatibility with Windows 7 SP1 and 8.1 **has not been verified by running on those systems yet**. Support is by construction (.NET Framework 4.8 client, Windows 7 engine builds, core built with the Windows 7 Go SDK); all checks ran on Linux and on modern Windows in CI.
 
 - [Current checks and builds](https://github.com/levvs-one/sora-legacy/actions/workflows/legacy.yml)
